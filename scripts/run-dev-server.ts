@@ -14,21 +14,25 @@
 import {
   existsSync, readFileSync, writeFileSync, readdirSync, statSync,
 } from "node:fs";
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { connect } from "node:net";
 import { constants } from "node:os";
-import { join, dirname } from "node:path";
+import { join, dirname, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "jsonc-parser";
 import { resolveBinEntry } from "./bin-entry.ts";
 import { getDevServerConfig } from "./dev-server-config.ts";
 import { killProcessTree } from "./kill-process-tree.ts";
 import { pnpmCommand } from "./pnpm-command.ts";
-import type { ServiceBinding, WranglerBuild } from "./release/manifest-lib.ts";
+import type { D1BindingDecl, ServiceBinding, WranglerBuild } from "./release/manifest-lib.ts";
 import { vpRunEnv } from "./vp/concurrency.ts";
 
 const SCRIPTS_DIR = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(SCRIPTS_DIR, "..");
+// Wrangler resolves local persistence relative to each config for one-off D1 commands, while the
+// multi-config dev process persists at the repository root. Pass the same absolute directory to
+// both commands so migrations and the running worker cannot diverge.
+const LOCAL_PERSISTENCE_DIR = join(ROOT, ".wrangler", "state");
 const PACKAGES_DIR = join(ROOT, "packages");
 const WORKSHOP_BACKEND_DIR = join(PACKAGES_DIR, "workshop-backend");
 
@@ -38,6 +42,14 @@ interface Gatekeeper {
   name: string;
   /** Absolute path to the package directory. */
   dir: string;
+}
+
+/** A local D1 binding whose platform migrations must precede the dev worker. */
+interface LocalD1Migration {
+  /** Binding name passed to Wrangler. */
+  binding: string;
+  /** Generated Wrangler config that defines the local D1 database. */
+  configPath: string;
 }
 
 // Load a root `.dev.vars` file (KEY=VALUE lines) into process.env for local development. Existing
@@ -100,6 +112,7 @@ function findGatekeepers(parentDir: string): Gatekeeper[] {
 }
 
 const gatekeepers = findGatekeepers(PACKAGES_DIR);
+const localD1Migrations: LocalD1Migration[] = [];
 
 // The Context Library (packages/gatekeeper-context) is discovered by findGatekeepers and bound
 // like any other gatekeeper (GATEKEEPER_CONTEXT -> GatekeeperVendor). Its describe() reports
@@ -517,6 +530,14 @@ for (const gk of gatekeepers) {
   const outPath = join(gk.dir, "wrangler.dev.jsonc");
   writeFileSync(outPath, JSON.stringify(config, null, 2) + "\n");
   console.log(`generated: ${outPath}`);
+
+  for (const database of (config.d1_databases ?? []) as D1BindingDecl[]) {
+    // A D1 binding without migrations needs no preparation. The migration directory is part of
+    // the checked-in worker config, so Wrangler resolves it relative to this generated config.
+    if (database.binding && database.migrations_dir) {
+      localD1Migrations.push({ binding: database.binding, configPath: outPath });
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -603,6 +624,7 @@ const configs = [
 ];
 
 const args = configs.flatMap(c => ["-c", c]);
+args.push("--persist-to", LOCAL_PERSISTENCE_DIR);
 if (wranglerPort) {
   args.push("--port", wranglerPort);
 } else {
@@ -615,6 +637,28 @@ console.log(`\nStarting: wrangler dev ${args.join(" ")}\n`);
 // Reached directly for the same reason the generated custom builds are; falls back to `pnpm exec` if
 // it cannot be resolved.
 const wranglerEntry = resolveBinEntry(ROOT, "wrangler");
+
+// Run every declared platform migration against the exact persistence tree used by the
+// multi-worker dev server before Wrangler starts.
+for (const migration of localD1Migrations) {
+  const migrationArgs = [
+    "d1", "migrations", "apply", migration.binding, "--local", "--config",
+    relative(ROOT, migration.configPath), "--persist-to", LOCAL_PERSISTENCE_DIR,
+  ];
+  const [migrationCommand, migrationArgv]: [string, string[]] = wranglerEntry
+    ? [process.execPath, [wranglerEntry, ...migrationArgs]]
+    : pnpmCommand(["exec", "wrangler", ...migrationArgs]);
+  console.log(`applying local D1 migrations: ${migration.binding}`);
+  const result = spawnSync(migrationCommand, migrationArgv, { stdio: "inherit", cwd: ROOT });
+  if (result.error) {
+    console.error(`could not apply local D1 migrations: ${result.error.message}`);
+    process.exit(1);
+  }
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1);
+  }
+}
+
 const [wranglerCommand, wranglerArgv]: [string, string[]] = wranglerEntry
   ? [process.execPath, [wranglerEntry, "dev", ...args]]
   : pnpmCommand(["exec", "wrangler", "dev", ...args]);

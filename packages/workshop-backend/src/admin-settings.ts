@@ -24,6 +24,9 @@ function makeAdminSettingsStorage(storage: DurableObjectStorage) {
       featuredBlueprints: collection<BlueprintPublicInfo>()({
         primaryKey: 'id',
       }),
+      reviewActions: collection<{id: string; workspaceId: string; actionId: number}>()({
+        primaryKey: 'id',
+      }),
     },
     singletons: {
       // Authoritative deployment admin config. Mirrored to BLUEPRINTS KV (ADMIN_CONFIG_KEY) so the
@@ -73,6 +76,22 @@ export class AdminSettings extends DurableObject<Cloudflare.Env> {
     this.storage = makeAdminSettingsStorage(ctx.storage);
     this.users = this.ctx.exports.UserDurableObject;
     this.vendors = buildGatekeeperVendorMap(env);
+  }
+
+  /** Records the workspace action addressed by one management-app review key. */
+  async registerReviewAction(appId: string, key: string, workspaceId: string, actionId: number): Promise<void> {
+    this.storage.reviewActions.put({id: `${appId}:${key}`, workspaceId, actionId});
+  }
+
+  /** Resolves an opaque management-app review key without exposing workspace internals. */
+  async getReviewAction(appId: string, key: string): Promise<{workspaceId: string; actionId: number} | null> {
+    let record = this.storage.reviewActions.get(`${appId}:${key}`);
+    return record ? {workspaceId: record.workspaceId, actionId: record.actionId} : null;
+  }
+
+  /** Removes an action index entry after its workspace has resolved it. */
+  async removeReviewAction(appId: string, key: string): Promise<void> {
+    this.storage.reviewActions.delete(`${appId}:${key}`);
   }
 
   /**

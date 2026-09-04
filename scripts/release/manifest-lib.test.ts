@@ -13,7 +13,7 @@ import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { collectAssets, collectModules, stableStringify } from "./hash-lib.ts";
 import {
-  generateManifest, readDeployablePackages, readDeployInputs, releaseShortName,
+  generateManifest, readDeployablePackages, readDeployInputs, readD1Migrations, releaseShortName,
 } from "./manifest-lib.ts";
 
 const RELEASE = dirname(fileURLToPath(import.meta.url));
@@ -23,7 +23,7 @@ const GOLDEN_PATH = join(TESTDATA, "golden-manifest.json");
 
 // Placeholder syntax the deploy-side renderer understands. Closed list — see manifest-lib.ts.
 const PLACEHOLDER_RE =
-    /^\$(ACCOUNT_ID|PUBLIC_BASE_URL|KV_[A-Z0-9_]+_ID|R2_[A-Z0-9_]+_NAME|WORKER_NAME\([a-z0-9-]+\)|SECRET\([A-Z0-9_]+\))/;
+    /^\$(ACCOUNT_ID|PUBLIC_BASE_URL|KV_[A-Z0-9_]+_ID|R2_[A-Z0-9_]+_NAME|D1_[A-Z0-9_]+_ID|WORKER_NAME\([a-z0-9-]+\)|SECRET\([A-Z0-9_]+\))/;
 
 function readTestWorkerBuilds() {
   return readDeployablePackages(join(ROOT, "packages")).map((pkg) => {
@@ -38,6 +38,7 @@ function readTestWorkerBuilds() {
       mainModule,
       modules,
       deployInputs: readDeployInputs(pkg.dir),
+      d1Migrations: readD1Migrations(pkg.dir, pkg.config),
     };
   });
 }
@@ -118,6 +119,21 @@ test("worker entries carry the deploy contract", () => {
   // Full ordered migration history, verbatim from wrangler.jsonc.
   assert.equal(backend.migrations[0].tag, "v0");
   assert.ok(backend.migrations[0].new_sqlite_classes?.includes("UserDurableObject"));
+
+  const database = workers["gatekeeper-database"];
+  assert.equal(database.preinstall, true);
+  assert.equal(database.singleton, true);
+  assert.deepEqual(database.inputs, []);
+  assert.deepEqual(
+      database.bindings.find((binding) => binding.name === "DATABASE"),
+      { type: "d1", name: "DATABASE", id: "$D1_DATABASE_ID" });
+  assert.equal(database.bindings.find((binding) => binding.name === "AI"), undefined);
+  assert.deepEqual(
+      database.bindings.find((binding) => binding.name === "CONTEXT"),
+      { type: "service", name: "CONTEXT", service: "$WORKER_NAME(gatekeeper-context)",
+        entrypoint: "PublicContextReader", props: {sharingDomain: "$PUBLIC_BASE_URL"} });
+  assert.deepEqual(database.d1Migrations?.map(migration => migration.name),
+      ["0001_platform.sql"]);
 
   // Router: serves the access asset variant, binds the backend by templated worker name.
   const router = workers["router"];

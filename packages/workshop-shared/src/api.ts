@@ -695,6 +695,13 @@ export interface AuthenticatedApi extends RpcTarget {
    */
   getGatekeeperApp(id: string): Promise<GatekeeperUiFrame | null>;
 
+  /**
+   * Approves or rejects a pending action delegated to a gatekeeper management app. The Workshop
+   * verifies deployment-admin authority; sandboxed apps cannot choose the app id supplied here.
+   */
+  resolveGatekeeperAppReview(appId: string, key: string,
+      decision: "approve" | "reject"): Promise<void>;
+
   // --- Deployment admin ---
 
   /**

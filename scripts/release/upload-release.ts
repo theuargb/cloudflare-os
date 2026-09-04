@@ -64,6 +64,10 @@ async function main() {
       key: assetR2Key(hash),
       path: join(args.release, "assets", hash),
     })),
+    ...readdirSync(join(args.release, "migrations")).map((sha256) => ({
+      key: `blobs/migrations/${sha256}`,
+      path: join(args.release, "migrations", sha256),
+    })),
   ];
 
   let uploaded = 0;

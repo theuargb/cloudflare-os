@@ -4883,7 +4883,9 @@ function ChatInterface({
           }
         : undefined;
 
-    const actionControls = isPending ? (
+    const actionControls = isPending && log.description.reviewApp ? (
+      <a className="text-[12px] text-kumo-accent hover:underline" href={`/gatekeepers/${log.description.reviewApp.appId}`}>Review in app</a>
+    ) : isPending ? (
       <>
         {autoApproveTarget &&
           !isTagAutoApproved(autoApproveTarget.gatekeeperId, autoApproveTarget.actionKind.tag) && (

@@ -33,19 +33,26 @@ vi.mock("./errorReporting", () => ({
 
 const WORKSPACE_ID = "a".repeat(64);
 
-const listGadgets = vi.fn<() => Promise<{ id: string; title: string }[]>>(async () => [
-  { id: WORKSPACE_ID, title: "Daily Brief" },
-]);
-const authenticatedApi = { listGadgets };
+const listGadgets = vi.fn<() => Promise<{ id: string; title: string }[]>>(
+  async () => [{ id: WORKSPACE_ID, title: "Daily Brief" }],
+);
+const resolveGatekeeperAppReview = vi.fn<
+  (appId: string, key: string, decision: "approve" | "reject") => Promise<void>
+>(async () => {});
+const authenticatedApi = { listGadgets, resolveGatekeeperAppReview };
 
 vi.mock("./AuthContext", () => ({
   useAuthenticatedApi: () => ({ authenticatedApi }),
 }));
 
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
 interface TestHost extends RpcTarget {
-  subscribeTheme(receiver: GatekeeperAppThemeReceiver): Promise<GatekeeperAppTheme>;
+  subscribeTheme(
+    receiver: GatekeeperAppThemeReceiver,
+  ): Promise<GatekeeperAppTheme>;
   setPresenting(active: boolean): Promise<{
     rect: { left: number; top: number; width: number; height: number } | null;
     willResize: boolean;
@@ -53,11 +60,15 @@ interface TestHost extends RpcTarget {
   openWorkspace(workspaceId: string, gadgetId?: number): Promise<void>;
   resolveWorkspaceTitles(ids: string[]): Promise<(string | null)[]>;
   openPrompt(prompt: string): Promise<void>;
+  resolveReview(key: string, decision: "approve" | "reject"): Promise<void>;
 }
 
 class EmptyUi extends RpcTarget {}
 
-class TestThemeReceiver extends RpcTarget implements GatekeeperAppThemeReceiver {
+class TestThemeReceiver
+  extends RpcTarget
+  implements GatekeeperAppThemeReceiver
+{
   setTheme(_theme: GatekeeperAppTheme): void {}
 }
 
@@ -68,6 +79,7 @@ describe("SandboxedGatekeeperApp navigation", () => {
 
   beforeEach(() => {
     listGadgets.mockClear();
+    resolveGatekeeperAppReview.mockClear();
   });
 
   afterEach(async () => {
@@ -83,9 +95,14 @@ describe("SandboxedGatekeeperApp navigation", () => {
       ui: new RpcStub(new EmptyUi()),
     } as unknown as GatekeeperUiFrame;
     const rootRoute = createRootRoute({
-      component: () => <SandboxedGatekeeperApp frame={frame} gatekeeperVendorId="scheduler" />,
+      component: () => (
+        <SandboxedGatekeeperApp frame={frame} gatekeeperVendorId="scheduler" />
+      ),
     });
-    const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: "/" });
+    const indexRoute = createRoute({
+      getParentRoute: () => rootRoute,
+      path: "/",
+    });
     const gadgetRoute = createRoute({
       getParentRoute: () => rootRoute,
       path: "/workspace/$id",
@@ -124,8 +141,12 @@ describe("SandboxedGatekeeperApp navigation", () => {
       await host!.setPresenting(true);
     });
     expect(iframe.style.position).toBe("fixed");
-    expect(iframe.style.top).toBe("calc(var(--app-top) + env(safe-area-inset-top))");
-    expect(iframe.style.bottom).toBe("calc(var(--app-bottom) + env(safe-area-inset-bottom))");
+    expect(iframe.style.top).toBe(
+      "calc(var(--app-top) + env(safe-area-inset-top))",
+    );
+    expect(iframe.style.bottom).toBe(
+      "calc(var(--app-bottom) + env(safe-area-inset-bottom))",
+    );
     expect(iframe.style.width).toBe(
       "calc(100vw - (env(safe-area-inset-left) + env(safe-area-inset-right)))",
     );
@@ -143,7 +164,9 @@ describe("SandboxedGatekeeperApp navigation", () => {
     await act(async () => {
       await host!.openWorkspace(WORKSPACE_ID, 2);
       await vi.waitFor(() =>
-        expect(router.state.location.pathname).toBe(`/workspace/${WORKSPACE_ID}`),
+        expect(router.state.location.pathname).toBe(
+          `/workspace/${WORKSPACE_ID}`,
+        ),
       );
     });
     expect(router.state.location.search).toEqual({ w: 2 });
@@ -160,11 +183,15 @@ describe("SandboxedGatekeeperApp navigation", () => {
         host.resolveWorkspaceTitles([WORKSPACE_ID]),
       ]),
     ).resolves.toEqual([["Daily Brief", null], ["Daily Brief"]]);
-    await expect(host.resolveWorkspaceTitles([WORKSPACE_ID])).resolves.toEqual(["Daily Brief"]);
+    await expect(host.resolveWorkspaceTitles([WORKSPACE_ID])).resolves.toEqual([
+      "Daily Brief",
+    ]);
     expect(listGadgets).toHaveBeenCalledTimes(1);
 
     now.mockReturnValue(30_000);
-    await expect(host.resolveWorkspaceTitles([WORKSPACE_ID])).resolves.toEqual(["Renamed Brief"]);
+    await expect(host.resolveWorkspaceTitles([WORKSPACE_ID])).resolves.toEqual([
+      "Renamed Brief",
+    ]);
     expect(listGadgets).toHaveBeenCalledTimes(2);
 
     await expect(host.openWorkspace("../evil")).rejects.toThrow(
@@ -176,6 +203,15 @@ describe("SandboxedGatekeeperApp navigation", () => {
       await host!.openPrompt("  Create a daily brief.  ");
       await vi.waitFor(() => expect(router.state.location.pathname).toBe("/"));
     });
-    expect(router.state.location.search).toEqual({ prompt: "Create a daily brief." });
+    expect(router.state.location.search).toEqual({
+      prompt: "Create a daily brief.",
+    });
+
+    await host.resolveReview("proposal-1", "approve");
+    expect(resolveGatekeeperAppReview).toHaveBeenCalledWith(
+      "scheduler",
+      "proposal-1",
+      "approve",
+    );
   });
 });

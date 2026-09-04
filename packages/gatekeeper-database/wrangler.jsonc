@@ -1,0 +1,31 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "gatekeeper-database",
+  "main": ".wrangler/validate/src/worker.ts",
+  "build": {
+    "command": "pnpm exec capnweb-validate build --out .wrangler/validate",
+    "watch_dir": "src"
+  },
+  "compatibility_date": "2026-09-04",
+  // DatabaseAccount stubs are stored in the Workshop user's Durable Object.
+  "compatibility_flags": ["allow_irrevocable_stub_storage", "nodejs_als"],
+  "d1_databases": [
+    {
+      "binding": "DATABASE",
+      "database_name": "cloudflare-os-database",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["DatabaseDataGatekeeper", "DatabaseSchemaGatekeeper"]
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1,
+    "logs": { "invocation_logs": false }
+  }
+}

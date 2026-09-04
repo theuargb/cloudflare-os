@@ -643,11 +643,11 @@ function ReviewRequest({
           </p>
         </div>
         <div className="ml-auto flex flex-shrink-0 items-center gap-0.5">
-          {onAlwaysApprove && (
-            <AlwaysApproveButton onClick={onAlwaysApprove} disabled={processing} />
-          )}
-          <ResolveButton tone="deny" onClick={onReject} disabled={processing} />
-          <ResolveButton tone="approve" onClick={onApprove} disabled={processing} />
+          {"reviewApp" in record.description && record.description.reviewApp ? <a className="text-[12px] text-kumo-accent hover:underline" href={`/gatekeepers/${record.description.reviewApp.appId}`}>Review in app</a> : <>
+            {onAlwaysApprove && <AlwaysApproveButton onClick={onAlwaysApprove} disabled={processing} />}
+            <ResolveButton tone="deny" onClick={onReject} disabled={processing} />
+            <ResolveButton tone="approve" onClick={onApprove} disabled={processing} />
+          </>}
         </div>
       </div>
 

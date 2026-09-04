@@ -1334,11 +1334,19 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
     let config = await readAdminConfig(this.env);
     let result: ProvidedAccountInfo[] = [];
     for (let rec of this.#connectedAccountRecords()) {
-      if (!rec.description.singleton && !rec.description.providesUi) continue;
+      // Account declarations can change across a gatekeeper upgrade. Re-read them before deciding
+      // whether to provision an ambient capsule or surface a management UI; otherwise an old
+      // singleton declaration can keep minting capabilities the current account no longer offers.
+      let description = await rec.account.describe();
+      if (JSON.stringify(description) !== JSON.stringify(rec.description)) {
+        rec.description = description;
+        this.storage.connectedAccounts.put(rec);
+      }
+      if (!description.singleton && !description.providesUi) continue;
       // A "disabled" ambient gatekeeper's account stays dormant: don't surface its singleton capsule
       // or management UI. (Its data is preserved, so re-enabling restores it.)
       if (rec.autoProvisioned && ambientGatekeeperMode(config, rec.vendorId) === "disabled") continue;
-      result.push({ accountId: rec.id, vendorId: rec.vendorId, description: rec.description });
+      result.push({ accountId: rec.id, vendorId: rec.vendorId, description });
     }
     return result;
   }
