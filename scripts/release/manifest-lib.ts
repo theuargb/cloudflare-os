@@ -19,33 +19,15 @@
 import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { parse } from "jsonc-parser";
-import { sha256Hex, type AssetManifestEntry, type CollectedAssets, type CollectedModule } from "./hash-lib.ts";
+import type { AssetManifestEntry, CollectedAssets, CollectedModule } from "./hash-lib.ts";
 
 /** Manifest version the deploy-side renderer must agree with (see header comment). */
-export const MANIFEST_VERSION = 2;
+export const MANIFEST_VERSION = 1;
 
 /** A `{ binding: "NAME" }`-shaped wrangler binding declaration. */
 export interface BindingDecl {
   binding: string;
 }
-
-/** A D1 binding whose account-specific database id is supplied by the deploy service. */
-export interface D1BindingDecl extends BindingDecl {
-  /** Source directory containing ordered platform migrations. */
-  migrations_dir?: string;
-}
-
-/** Content-addressed D1 migration before its bytes are stripped from the manifest. */
-export type D1MigrationArtifact = {
-  /** File name whose lexical ordering defines application order. */
-  name: string;
-  /** Full SHA-256 content address. */
-  sha256: string;
-  /** Byte length. */
-  size: number;
-  /** SQL bytes, omitted from the release manifest. */
-  bytes: Buffer;
-};
 
 /** A service binding declaration in a wrangler config. */
 export interface ServiceBinding {
@@ -126,10 +108,6 @@ export interface WranglerConfig {
   kv_namespaces?: BindingDecl[];
   /** R2 bucket bindings; names become `$R2_<BINDING>_NAME` placeholders. */
   r2_buckets?: BindingDecl[];
-  /** D1 bindings; ids become `$D1_<BINDING>_ID` placeholders. */
-  d1_databases?: D1BindingDecl[];
-  /** Workers AI binding. */
-  ai?: BindingDecl;
   /** Worker Loader bindings (the Gadget sandbox). */
   worker_loaders?: BindingDecl[];
   /** Service bindings; targets become `$WORKER_NAME(<pkg>)` placeholders. */
@@ -208,8 +186,6 @@ export interface WorkerEntry {
   compatibilityFlags: string[];
   /** Full ordered migration history, verbatim from wrangler.jsonc. */
   migrations: DurableObjectMigration[];
-  /** Ordered content-addressed D1 platform migrations applied before worker activation. */
-  d1Migrations?: { name: string; sha256: string; size: number; r2Key: string }[];
   /** Binding templates for the deploy-side renderer. */
   bindings: ManifestBinding[];
   /** Plain-text vars, including the per-kind templated ones. */
@@ -261,16 +237,13 @@ export interface WorkerBuild {
   modules: CollectedModule[];
   /** Contents of the package's `deploy-inputs.json`, if it has one. */
   deployInputs?: DeployInput[];
-  /** Ordered D1 migration artifacts read from the configured migration directory. */
-  d1Migrations?: { name: string; sha256: string; size: number }[];
 }
 
 // wrangler.jsonc keys this generator understands. Anything else fails closed — a new config key
 // on a deployable worker needs an explicit decision about how customer instances get it.
 const HANDLED_CONFIG_KEYS = new Set([
   "$schema", "name", "main", "build", "compatibility_date", "compatibility_flags", "rules",
-  "migrations", "observability", "kv_namespaces", "r2_buckets", "d1_databases", "ai",
-  "worker_loaders", "services",
+  "migrations", "observability", "kv_namespaces", "r2_buckets", "worker_loaders", "services",
   "assets", "vars",
   // Browser Rendering (Gadget PDF exports). Unlike artifacts it is generally available, so it
   // passes through to customer instances as a placeholder-free binding, like the AI binding.
@@ -413,19 +386,6 @@ export function readDeployInputs(pkgDir: string): DeployInput[] | undefined {
   return JSON.parse(readFileSync(path, "utf8")) as DeployInput[];
 }
 
-/** Reads and hashes the ordered SQL migrations declared by a deployable package. */
-export function readD1Migrations(pkgDir: string, config: WranglerConfig): D1MigrationArtifact[] {
-  let directories = [...new Set((config.d1_databases ?? [])
-    .map(binding => binding.migrations_dir).filter((value): value is string => !!value))];
-  if (directories.length > 1) throw new Error("All D1 bindings in one worker must share migrations_dir.");
-  if (directories.length === 0) return [];
-  let directory = join(pkgDir, directories[0]);
-  return readdirSync(directory).filter(name => name.endsWith(".sql")).toSorted().map(name => {
-    let bytes = readFileSync(join(directory, name));
-    return { name, bytes, size: bytes.length, sha256: sha256Hex(bytes) };
-  });
-}
-
 function workerKind(pkgName: string): WorkerEntry["kind"] {
   if (pkgName === "workshop-backend") return "backend";
   if (pkgName === "router") return "router";
@@ -438,7 +398,7 @@ function workerKind(pkgName: string): WorkerEntry["kind"] {
  * `modules` entries are { name, type, sha256, size } (bytes stripped by the caller).
  */
 export function buildWorkerEntry(
-  { pkgName, config, mainModule, modules, deployInputs, d1Migrations }: WorkerBuild,
+  { pkgName, config, mainModule, modules, deployInputs }: WorkerBuild,
 ): WorkerEntry {
   const kind = workerKind(pkgName);
   const unknownKeys = Object.keys(config).filter((k) => !HANDLED_CONFIG_KEYS.has(k));
@@ -468,14 +428,6 @@ export function buildWorkerEntry(
       bucket_name: `$R2_${r2.binding}_NAME`,
     });
   }
-  for (const d1 of config.d1_databases ?? []) {
-    bindings.push({
-      type: "d1",
-      name: d1.binding,
-      id: `$D1_${d1.binding}_ID`,
-    });
-  }
-  if (config.ai) bindings.push({ type: "ai", name: config.ai.binding });
   if (config.browser) {
     // `remote` is dev-only wrangler behavior; the deployed binding is just { type, name }.
     bindings.push({ type: "browser", name: config.browser.binding });
@@ -489,7 +441,6 @@ export function buildWorkerEntry(
       name: svc.binding,
       service: `$WORKER_NAME(${svc.service})`,
       ...(svc.entrypoint ? { entrypoint: svc.entrypoint } : {}),
-      ...(svc.props ? { props: svc.props } : {}),
     });
   }
 
@@ -575,11 +526,6 @@ export function buildWorkerEntry(
     // Full ordered history, verbatim: fresh installs replay it as migration steps, and the
     // final tag is what re-PUTs of an existing worker must present as their current tag.
     migrations: config.migrations ?? [],
-    ...(d1Migrations?.length ? {
-      d1Migrations: d1Migrations.map(migration => ({
-        ...migration, r2Key: `blobs/migrations/${migration.sha256}`,
-      })),
-    } : {}),
     bindings,
     vars,
     observability: config.observability ?? { enabled: false },

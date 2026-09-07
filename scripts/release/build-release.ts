@@ -33,7 +33,7 @@ import {
 } from "./hash-lib.ts";
 import {
   generateManifest, readDeployablePackages, readDeployInputs,
-  readD1Migrations, type DeployablePackage, type WorkerBuild,
+  type DeployablePackage, type WorkerBuild,
 } from "./manifest-lib.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -357,7 +357,6 @@ async function main() {
   rmSync(args.out, { recursive: true, force: true });
   mkdirSync(join(args.out, "modules"), { recursive: true });
   mkdirSync(join(args.out, "assets"), { recursive: true });
-  mkdirSync(join(args.out, "migrations"), { recursive: true });
 
   const packages = readDeployablePackages(PACKAGES_DIR);
 
@@ -378,17 +377,12 @@ async function main() {
     for (const mod of modules) {
       writeFileSync(join(args.out, "modules", mod.sha256), mod.bytes);
     }
-    let d1Migrations = readD1Migrations(pkg.dir, pkg.config);
-    for (let migration of d1Migrations) {
-      writeFileSync(join(args.out, "migrations", migration.sha256), migration.bytes);
-    }
     return {
       pkgName: pkg.name,
       config: pkg.config,
       mainModule,
       modules,
       deployInputs: readDeployInputs(pkg.dir),
-      d1Migrations,
     };
   });
 
