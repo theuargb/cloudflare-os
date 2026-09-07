@@ -39,16 +39,14 @@ type GatewayMetadata = {
   source?: GatewayMetadataContext["source"];
   gadgetId?: string;
   chatId?: number;
-  appId?: string;
   // Distinguishes gadget-initiated model calls from interactive user calls.
   automated?: true;
 };
 
 type GatewayMetadataContext = {
-  source: "chat" | "thread-title" | "gadget-title" | "model-binding" | "management-app";
+  source: "chat" | "thread-title" | "gadget-title" | "model-binding";
   gadgetId?: string;
   chatId?: number;
-  appId?: string;
 };
 
 type ModelRoutingOptions = {
@@ -111,7 +109,6 @@ function buildMetadata(initiator: AiChatAuthorInfo, context?: GatewayMetadataCon
     metadata.source = context.source;
     if (context.gadgetId) metadata.gadgetId = context.gadgetId;
     if (context.chatId !== undefined) metadata.chatId = context.chatId;
-    if (context.appId) metadata.appId = context.appId;
   }
   if (initiator.type === "gadget") metadata.automated = true;
   return metadata;

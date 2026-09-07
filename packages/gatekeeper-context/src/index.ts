@@ -4,7 +4,6 @@
 export { ContextCollectionDurableObject } from "./context-collection.js";
 export { UserLibraryDurableObject } from "./user-library.js";
 export { LibraryRegistryDurableObject } from "./registry-do.js";
-export { PublicContextReader } from "./public-reader.js";
 export {
   GatekeeperVendor, ContextAccount, ContextVerifier, ContextGatekeeper,
 } from "./library-gatekeeper.js";
