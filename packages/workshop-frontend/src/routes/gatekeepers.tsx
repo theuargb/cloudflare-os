@@ -663,12 +663,13 @@ function ConnectorsPage() {
     })
   }, [accounts, vendors, searchLower])
 
-  // Connectable vendors = OAuth/resource gatekeepers plus opt-in ambient ones, rendered identically.
-  // An ambient vendor is recognized by `description.autoProvisionsAccount`, which routes the connect
-  // action to a direct (no-OAuth) add instead.
+  // listGatekeeperVendors() also includes ambient vendors with grantable resources so resource
+  // pickers can discover them. On this page, optional ambient vendors instead come exclusively
+  // from listAddableGatekeepers(); otherwise Database (unlike Context/Scheduler, which advertise
+  // no resources) appears twice.
   const availableVendors = useMemo<VendorEntry[]>(
     () => [
-      ...vendors,
+      ...vendors.filter((vendor) => !vendor.description.autoProvisionsAccount),
       ...addable,
     ],
     [vendors, addable],

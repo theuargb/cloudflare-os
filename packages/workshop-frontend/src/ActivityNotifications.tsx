@@ -102,16 +102,14 @@ export default function ActivityNotifications({
                       </span>
                     </button>
                     <div className="ml-auto flex flex-shrink-0 items-center gap-0.5">
-                      <ResolveButton
-                        tone="deny"
-                        disabled={isProcessing}
-                        onClick={() => void resolveAction(action.id, 'deny')}
-                      />
-                      <ResolveButton
-                        tone="approve"
-                        disabled={isProcessing}
-                        onClick={() => void resolveAction(action.id, 'approve')}
-                      />
+                      {"reviewApp" in action.description && action.description.reviewApp ? (
+                        <a className="text-[12px] text-kumo-accent hover:underline" href={`/gatekeepers/${action.description.reviewApp.appId}`}>
+                          Review in app
+                        </a>
+                      ) : <>
+                        <ResolveButton tone="deny" disabled={isProcessing} onClick={() => void resolveAction(action.id, 'deny')} />
+                        <ResolveButton tone="approve" disabled={isProcessing} onClick={() => void resolveAction(action.id, 'approve')} />
+                      </>}
                     </div>
                   </div>
                 </div>

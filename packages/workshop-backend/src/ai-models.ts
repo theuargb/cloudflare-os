@@ -113,7 +113,6 @@ function buildMetadata(initiator: AiChatAuthorInfo, context?: GatewayMetadataCon
   if (initiator.type === "gadget") metadata.automated = true;
   return metadata;
 }
-
 // The pi API implementations we route through, keyed by `Model.api`. Import per-module (never
 // `providers/all`, which drags ~30 providers into the bundle).
 const API_STREAMS: Record<string, StreamFunction<Api, SimpleStreamOptions>> = {

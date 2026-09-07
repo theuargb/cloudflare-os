@@ -76,6 +76,10 @@ let CODE_MODE_HARNESS =
 `import { WorkerEntrypoint, restore } from "cloudflare:workers";
 import agent from "agent.js";
 
+const SIGNATURE_ERROR = "executeCode default export must have the signature " +
+    "\`export default async function(self, env, ctx)\`. The first argument is \`self\`; " +
+    "use the second argument for env bindings.";
+
 export default class extends WorkerEntrypoint {
   verify() {}
   async run(self, callbackResolvers, restoreForger) {
@@ -105,6 +109,9 @@ export default class extends WorkerEntrypoint {
           });
         }
       }
+    }
+    if (typeof agent !== "function" || agent.length < 2) {
+      throw new TypeError(SIGNATURE_ERROR);
     }
     let result = await agent(self, env, this.ctx);
     if (result !== undefined) console.log("Return value:", result);
@@ -5257,6 +5264,19 @@ class OverseerImpl implements AgentHooks {
     });
   }
 
+  /** Rejects one pending action through the common gatekeeper and durable-state path. */
+  async rejectPendingAction(record: ActionRecord & {type: "action"},
+                            resolvedBy: AiChatAuthorInfo): Promise<void> {
+    await this.getGatekeeperFacet(record.gatekeeperId).rejectAction(record.action);
+    record.state = "rejected";
+    record.appliedAt = new Date();
+    record.resolvedBy = resolvedBy;
+    this.storage.transaction(() => {
+      this.gitCache.clearPushMarks(record.id);
+      this.storage.actions.put(record);
+    });
+  }
+
   // Apply all currently-eligible pending actions of the given gatekeeper, in ascending id order.
   // Stops at the first pending action that is NOT auto-eligible (i.e. a manual gate) or that throws
   // while applying -- it is never skipped ahead of. This preserves in-order application and the
@@ -5824,6 +5844,10 @@ class OverseerImpl implements AgentHooks {
       }
       this.storage.actions.put(record);
     });
+    if (description.reviewApp) {
+      await this.ctx.exports.AdminSettings.getByName("").registerReviewAction(
+          description.reviewApp.appId, description.reviewApp.key, this.ctx.id.toString(), actionId);
+    }
     this.#associateAction(caller, actionId);
 
     // Same auto-approval gate as before, named because awaitDecision uses it too. The drain is
@@ -5840,6 +5864,42 @@ class OverseerImpl implements AgentHooks {
     if (willAutoApprove) {
       this.ctx.waitUntil(this.drainAutoApprovals(gatekeeperId));
     }
+  }
+
+  /** Resumes an agent only when every awaited action in its current turn was approved. */
+  async resumeAfterReviewedAction(chatId: number, author: AiChatAuthorInfo,
+      resolvingUserId: string): Promise<void> {
+    let awaited: (ActionRecord & {type: "action"})[] = [];
+    for (let message of this.storage.chats.list({prefix: `${keyString(chatId)}.`, reverse: true})) {
+      if (message.type === "agentCallback" || (message.type === "message" && (message.author.type === "user" || message.author.type === "gadget"))) break;
+      if (message.type === "action") {
+        let record = this.storage.actions.get(message.actionId);
+        if (record?.type === "action" && record.caller.from === "agent" && record.description.awaitDecision) awaited.push(record);
+      }
+    }
+    if (!awaited.length || awaited.some(record => record.state !== "approved")) return;
+    this.addChatMessages(chatId, author, [{type: "message", message: "The changes you submitted have been approved and applied. Reads now reflect them."}]);
+    await this.resumeReviewedAgent(chatId, resolvingUserId);
+  }
+
+  /** Starts a suspended agent again under the administrator who resolved its review action. */
+  async resumeReviewedAgent(chatId: number, userId: string): Promise<void> {
+    await this.waitForChatMessagePreparation(chatId);
+    let meta = this.storage.chatMeta.get(chatId);
+    if (!meta || meta.activeAgent) return;
+    let modelId: string | null = null;
+    for (let message of this.storage.chats.list({prefix: `${keyString(chatId)}.`, reverse: true})) {
+      if (message.author.type === "agent") { modelId = message.author.id; break; }
+    }
+    let user = this.users.get(this.users.idFromString(userId));
+    let userMeta = await retryOnDoReset(() => user.getChatContext(modelId), this.logger);
+    if (!userMeta.aiModel) return;
+    meta = this.storage.chatMeta.get(chatId);
+    if (!meta || meta.activeAgent) return;
+    meta.activeAgent = userMeta.aiModel.profile;
+    meta.lastActive = this.getChatTimestamp();
+    this.storage.chatMeta.put(meta);
+    this.startAgent(chatId, userMeta.aiModel, userMeta.profile, user.id.toString());
   }
 
   async bindHook<Hook extends RpcTarget>(
@@ -9731,6 +9791,39 @@ export class OverseerDurableObject extends DurableObject<Cloudflare.Env> {
     return this.impl.outputsSnapshot();
   }
 
+  /** Applies a management-app decision after matching its app id and opaque key to this action. */
+  async resolveManagementReview(appId: string, key: string, actionId: number,
+      decision: "approve" | "reject", author: AiChatAuthorInfo,
+      resolvingUserId: string): Promise<void> {
+    let record = this.impl.storage.actions.get(actionId);
+    if (record?.type !== "action" ||
+        record.description.reviewApp?.appId !== appId || record.description.reviewApp.key !== key) {
+      throw new Error("The management review action is no longer pending.");
+    }
+    // Activation is durable before the awaited chat is resumed. If resume failed after activation
+    // (for example because an older caller supplied the wrong User DO id), retry only that tail.
+    if (record.state === "approved" && decision === "approve") {
+      if (record.caller.from === "agent" && record.description.awaitDecision) {
+        await this.impl.resumeAfterReviewedAction(
+            record.caller.chatId, author, resolvingUserId);
+      }
+      return;
+    }
+    if (record.state !== "pending") {
+      throw new Error("The management review action is no longer pending.");
+    }
+    if (decision === "approve") {
+      await this.impl.applyPendingAction(record, author, false);
+      if (record.caller.from === "agent" && record.description.awaitDecision) {
+        await this.impl.resumeAfterReviewedAction(
+            record.caller.chatId, author, resolvingUserId);
+      }
+      this.impl.ctx.waitUntil(this.impl.drainAutoApprovals(record.gatekeeperId));
+      return;
+    }
+    await this.impl.rejectPendingAction(record, author);
+  }
+
   /**
    * `notifyClosed` should be invoked when the return `Overseer` stub is disposed, which is used
    * by AuthenticatedApiImpl.#openGadgetInternal() to detect Durable Object disconnects.
@@ -11220,23 +11313,11 @@ class OverseerClientInterface extends RpcTarget implements Overseer {
       throw new Error(`Can't reject an observation: ${id}`);
     }
 
-    let gatekeeper = this.impl.getGatekeeperFacet(action.gatekeeperId);
-
     // Resolve the rejecter's identity before notifying the gatekeeper, so a failed profile fetch
     // can't leave the action rejected with the gatekeeper but still "pending" in storage.
     let profile = await this.#getClientProfile();
 
-    await gatekeeper.rejectAction(action.action);
-
-    action.state = "rejected";
-    action.appliedAt = new Date();
-    action.resolvedBy = profile;
-    // A rejected push's pending-push marks are removed in the same durable step as the state
-    // change (nothing was transmitted, so nothing became proven). No-op for pushless actions.
-    this.impl.storage.transaction(() => {
-      this.impl.gitCache.clearPushMarks(action.id);
-      this.impl.storage.actions.put(action);
-    });
+    await this.impl.rejectPendingAction(action, profile);
 
     // Deny leaves the turn ended, like denyConnectionRequest. The rejected record also prevents a
     // sibling approval from resuming this turn.

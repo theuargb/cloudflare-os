@@ -29,7 +29,6 @@ import type { WorkerEntrypoint, DurableObject, RpcTarget, RpcStub } from "cloudf
 export interface Cursor<T> {
   next(): Promise<T[] | null>;
 }
-
 /** A small image used to identify a vendor, account, or resource type in the UI. */
 export type AvatarImage = {
   url: string;
@@ -84,6 +83,11 @@ export type VendorDescription = {
  * each time rather than baked into the account, since a user's admin status can change over time.
  */
 export type AppUiContext = {
+  /** Opaque authenticated actor id used to attribute shared management activity. */
+  actorId: string;
+  /** Current display data used to identify the actor in shared management activity. */
+  actor: { displayName: string; avatar?: AvatarImage };
+  /** Whether the actor is currently a deployment administrator. */
   isAdmin: boolean;
 }
 
@@ -179,7 +183,12 @@ export type AccountDescription = {
    * If set, this account has a full-page management UI (see GatekeeperUser.startAppUi). The Workshop
    * surfaces it as a nav entry / page using this title.
    */
-  providesUi?: { title: string; icon?: AvatarImage };
+  providesUi?: {
+    /** Navigation title for the management application. */
+    title: string;
+    /** Optional navigation icon for the management application. */
+    icon?: AvatarImage;
+  };
 }
 
 /** Describes metadata about a specific instance of a resource. Returned by Gatekeeper.describe(). */
@@ -1226,6 +1235,12 @@ export type ActionDescription = {
    * to revert cleanly.
    */
   implementsRevert: boolean;
+
+  /**
+   * Routes review of this action to a gatekeeper management app. The opaque key is meaningful
+   * only to that app; ordinary activity controls must not approve or reject this action.
+   */
+  reviewApp?: {appId: string; key: string};
 
   /**
    * Hint that an agent should not keep working until this action has been approved or denied.

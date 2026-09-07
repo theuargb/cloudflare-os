@@ -43,7 +43,6 @@ function publicBlueprintInfo(id: string, metadata: BlueprintPublicInfo['metadata
     screenshotUrl: blueprintScreenshotUrl(id, metadata),
   };
 }
-
 // Re-export entrypoint types from ai-models.ts.
 export { LanguageModelGatekeeper };
 
@@ -579,8 +578,26 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
     let accounts = await user.listProvidedAccounts();
     let app = accounts.find((account: (typeof accounts)[number]) => account.vendorId === id && account.description.providesUi);
     if (!app) return null;
-    // isAdmin is supplied fresh per open so admin-gated features reflect the user's current status.
-    return user.startAccountAppUi(app.accountId, { isAdmin: this.#isAdmin() });
+    // The actor and current authority are supplied fresh on every open.
+    return user.startAccountAppUi(app.accountId, {
+      actorId: this.#userId.toString(),
+      actor: {displayName: this.#userId.name ?? this.#userId.toString()},
+      isAdmin: this.#isAdmin(),
+    });
+  }
+
+  async resolveGatekeeperAppReview(appId: string, key: string,
+      decision: "approve" | "reject"): Promise<void> {
+    if (!this.#isAdmin()) throw new Error("Deployment administrator access is required.");
+    if (!appId || !key) throw new Error("Invalid management review key.");
+    let settings = this.adminSettings.getByName("");
+    let target = await settings.getReviewAction(appId, key);
+    if (!target) throw new Error("The management review action was not found.");
+    let author = await this.#user.whoami();
+    await this.overseers.get(this.overseers.idFromString(target.workspaceId))
+      .resolveManagementReview(
+          appId, key, target.actionId, decision, author, this.#userId.toString());
+    await settings.removeReviewAction(appId, key);
   }
 
   // --- Deployment admin ---

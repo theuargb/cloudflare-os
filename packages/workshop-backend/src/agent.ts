@@ -957,7 +957,7 @@ IMPORTANT: The objects found in \`env\` most likely do NOT implement any API you
 let SET_GADGET_BINDING_TOOL_DESCRIPTION = `
 Wire a resource from your \`env\` into a Gadget's own \`env\`, so the Gadget's code can use it.
 
-The bindings in your \`env\` belong to this chat; a Gadget's code sees only the Gadget's own bindings, which are listed in the system prompt. Use this tool to add one of your bindings to a Gadget: \`gadget\` names the target Gadget (by its name in your env), \`source\` names the resource binding to wire in, and \`name\` is the name the Gadget's code will see it as (\`env.<name>\` in server.js), defaulting to the same name as \`source\`.
+The bindings in your \`env\` belong to this chat; a Gadget's code sees only the Gadget's own bindings, which are listed in the system prompt. Use this tool to add one of your bindings to a Gadget: \`gadget\` names the target Gadget (by its name in your env), \`source\` names the resource binding to wire in, and \`name\` is the name the Gadget's code will see it as (\`env.<name>\` in server.js), defaulting to the same name as \`source\`. Normally omit \`name\` so the chat resource keeps its existing name (for example, source \`DATABASE_DATA\` becomes \`this.env.DATABASE_DATA\` in server.js). Choose a different name only when the Gadget already has an established binding contract that requires it.
 
 The addition is part of your proposed changes: like code edits, it takes permanent effect when the user accepts your changes.
 
@@ -975,8 +975,33 @@ Note that this differs from the \`env\` a Gadget's own code sees: a Gadget's ser
 
 When the user asks you to just do a task that can be done with these bindings, you should use executeCode to perform the task, instead of adding code to a gadget to do it.
 
+Export exactly this wrapper (the first argument is \`self\`, not \`env\`):
+
+\`\`\`
+export default async function(self, env, ctx) {
+  // Use the exact binding names listed in the current environment section.
+}
+\`\`\`
+
 The function also receives a \`self\` parameter which is a magic object that points back to this chat thread. Calling any method on \`self\`, like \`self.foo(123)\`, delivers a callback message to this chat and activates you to respond. \`self\` can be passed over RPC (e.g. to a subscription method) and stored in a Durable Object's KV storage for long-term callbacks. When an agent callback is received, it appears in your env under a name like \`PARAMS_1\`, with \`.args\` (the callback arguments), \`.resolve(value)\` (to return a value to the caller), and \`.reject(error)\` (to reject with an error).
 `.trim();
+
+/** Formats the replay-derived binding inventory included in every agent turn. */
+export function formatCurrentEnvironmentPrompt(
+    bindings: ReadonlyMap<string, ChatBindingEntry>, gadgetIds: ReadonlySet<WorkpieceId>): string {
+  let lines = [...bindings].map(([name, entry]) => {
+    let kind = entry.type === "value"
+        ? "agent callback arguments"
+        : gadgetIds.has(entry.id) ? "Gadget RPC stub" : "external resource capability";
+    return `* env.${name} — ${kind}`;
+  });
+  return `# Current environment\n\n` +
+      (lines.length > 0 ? lines.join("\n") : "The chat env currently has no bindings.") +
+      `\n\nThis is the authoritative binding inventory for this turn, including bindings introduced ` +
+      `earlier in the conversation. Use these exact names. Keep separately listed capabilities ` +
+      `distinct, including names with suffixes such as \`_2\`; never probe guessed alternatives ` +
+      `or replace one capability with another because their resources appear similar.`;
+}
 
 let LIST_CONNECTABLE_RESOURCES_TOOL_DESCRIPTION = `
 List the resource types a gatekeeper vendor offers, so you can construct a resourceUrl for requestConnection. The system prompt lists which vendors exist; call this to learn a specific vendor's resource URL patterns before requesting a connection.
@@ -2491,7 +2516,10 @@ export async function runAgent(
     ];
   }
 
-  let systemPrompt = `${systemPromptSlots[0]}\n\n${systemPromptSlots[1]}`;
+  let currentEnvironmentPrompt = formatCurrentEnvironmentPrompt(
+      chatBindings, new Set(gadgetInfos.map(info => info.id)));
+  let systemPrompt =
+      `${systemPromptSlots[0]}\n\n${systemPromptSlots[1]}\n\n${currentEnvironmentPrompt}`;
 
   // Some models charge their response to the same window as the prompt, so the reservation is both
   // withheld from the prompt's budget and sent as the response cap -- the two can't disagree.

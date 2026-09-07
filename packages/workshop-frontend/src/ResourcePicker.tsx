@@ -141,7 +141,11 @@ export default function ResourcePicker({
         setAccountsLoaded(true)
       },
     })
-    const subscription = authenticatedApi.subscribeConnectedAccounts(subscriber)
+    // A forced auto-provisioned account can still expose explicitly connectable resources.
+    const subscription = authenticatedApi.subscribeConnectedAccounts(
+      subscriber,
+      { includeForcedAutoProvisionedAccounts: true },
+    )
     subscription.catch(error => {
       if (cancelled) return
       logRpcFailure('Failed to subscribe to connected accounts:', error)
@@ -398,8 +402,13 @@ export default function ResourcePicker({
   const handleConnectNew = async (vendorId: string, resourceUrlPatterns?: string[]) => {
     setConnectingVendor(vendorId)
     try {
-      const result = await authenticatedApi.connectAccount(vendorId, resourceUrlPatterns)
-      window.open(result.url, '_blank', 'noopener,noreferrer')
+      const vendor = allVendors.find(candidate => candidate.id === vendorId)
+      if (vendor?.description.autoProvisionsAccount) {
+        await authenticatedApi.provisionAmbientAccount(vendorId)
+      } else {
+        const result = await authenticatedApi.connectAccount(vendorId, resourceUrlPatterns)
+        window.open(result.url, '_blank', 'noopener,noreferrer')
+      }
     } catch (error) {
       console.error('Failed to initiate connection:', error)
       toasts.add({ title: 'Failed to start connection flow', variant: 'error' })
