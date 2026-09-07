@@ -288,7 +288,6 @@ const NO_DEFAULT_CRED_INPUTS = new Set([
   "gatekeeper-context",       // no third-party service; uses its own storage
   "gatekeeper-homeassistant", // users connect their own Home Assistant URL + token in-app
   "gatekeeper-scheduler",     // auto-provisioned; no third-party OAuth app
-  "gatekeeper-database",      // auto-provisioned; storage belongs to the deployment
   "gatekeeper-mcp",           // MCP OAuth uses dynamic client registration, not a static app
   "gatekeeper-mcp-portal",    // same MCP OAuth chain as gatekeeper-mcp
 ]);
@@ -300,7 +299,7 @@ const NOT_INSTALLABLE = new Set(["gatekeeper-email"]);
 // Ambient gatekeepers the deploy service installs on every fresh core deploy, server-side with
 // no user interaction. Members must take no inputs of any kind (enforced below): a preinstall
 // has nobody to ask.
-const PREINSTALL = new Set(["gatekeeper-context", "gatekeeper-scheduler", "gatekeeper-database"]);
+const PREINSTALL = new Set(["gatekeeper-context", "gatekeeper-scheduler"]);
 
 // Gatekeepers that may be installed at most once per instance; the deploy service enforces this
 // at install time. Two independent reasons to be here:
@@ -323,7 +322,6 @@ const PREINSTALL = new Set(["gatekeeper-context", "gatekeeper-scheduler", "gatek
 const SINGLETON = new Set([
   "gatekeeper-context",       // (1) ambient ContextLibrary
   "gatekeeper-scheduler",     // (1) ambient ScheduleSession
-  "gatekeeper-database",      // (1) ambient SharedDatabase
   "gatekeeper-homeassistant", // (2) no inputs; users connect their own URL + token in-app
   "gatekeeper-mcp",           // (2) no inputs; users paste their own endpoints in-app
   "gatekeeper-mcp-portal",    // (2) no inputs; the one portal comes from the deployment's vars
@@ -491,9 +489,7 @@ export function buildWorkerEntry(
       name: svc.binding,
       service: `$WORKER_NAME(${svc.service})`,
       ...(svc.entrypoint ? { entrypoint: svc.entrypoint } : {}),
-      ...(svc.props ? { props: pkgName === "gatekeeper-database" &&
-        svc.service === "gatekeeper-context"
-        ? {sharingDomain: "$PUBLIC_BASE_URL"} : svc.props } : {}),
+      ...(svc.props ? { props: svc.props } : {}),
     });
   }
 

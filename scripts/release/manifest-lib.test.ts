@@ -120,21 +120,6 @@ test("worker entries carry the deploy contract", () => {
   assert.equal(backend.migrations[0].tag, "v0");
   assert.ok(backend.migrations[0].new_sqlite_classes?.includes("UserDurableObject"));
 
-  const database = workers["gatekeeper-database"];
-  assert.equal(database.preinstall, true);
-  assert.equal(database.singleton, true);
-  assert.deepEqual(database.inputs, []);
-  assert.deepEqual(
-      database.bindings.find((binding) => binding.name === "DATABASE"),
-      { type: "d1", name: "DATABASE", id: "$D1_DATABASE_ID" });
-  assert.equal(database.bindings.find((binding) => binding.name === "AI"), undefined);
-  assert.deepEqual(
-      database.bindings.find((binding) => binding.name === "CONTEXT"),
-      { type: "service", name: "CONTEXT", service: "$WORKER_NAME(gatekeeper-context)",
-        entrypoint: "PublicContextReader", props: {sharingDomain: "$PUBLIC_BASE_URL"} });
-  assert.deepEqual(database.d1Migrations?.map(migration => migration.name),
-      ["0001_platform.sql"]);
-
   // Router: serves the access asset variant, binds the backend by templated worker name.
   const router = workers["router"];
   assert.deepEqual(
