@@ -517,7 +517,6 @@ for (const gk of gatekeepers) {
   const outPath = join(gk.dir, "wrangler.dev.jsonc");
   writeFileSync(outPath, JSON.stringify(config, null, 2) + "\n");
   console.log(`generated: ${outPath}`);
-
 }
 
 // ---------------------------------------------------------------------------
@@ -616,7 +615,6 @@ console.log(`\nStarting: wrangler dev ${args.join(" ")}\n`);
 // Reached directly for the same reason the generated custom builds are; falls back to `pnpm exec` if
 // it cannot be resolved.
 const wranglerEntry = resolveBinEntry(ROOT, "wrangler");
-
 const [wranglerCommand, wranglerArgv]: [string, string[]] = wranglerEntry
   ? [process.execPath, [wranglerEntry, "dev", ...args]]
   : pnpmCommand(["exec", "wrangler", "dev", ...args]);
