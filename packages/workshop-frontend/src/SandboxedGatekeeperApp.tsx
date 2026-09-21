@@ -35,7 +35,6 @@ type OpenTarget = (target: GatekeeperAppWorkspaceTarget) => void
 // can no longer see. Deliberately a lookup, not an enumeration: the app learns nothing new.
 type ResolveWorkspaceTitles = (ids: string[]) => Promise<(string | null)[]>
 type OpenPrompt = (prompt: string) => void
-type ResolveReview = (key: string, decision: 'approve' | 'reject') => Promise<void>
 
 type OverlayState = 'full' | null
 
@@ -86,7 +85,6 @@ class GatekeeperAppHostImpl extends RpcTarget {
   readonly #openTarget: OpenTarget
   readonly #openPrompt: OpenPrompt
   readonly #resolveWorkspaceTitles: ResolveWorkspaceTitles
-  readonly #resolveReview: ResolveReview
   #presenting = false
   #theme: GatekeeperAppTheme
   #themeReceiver: RpcStub<GatekeeperAppThemeReceiver> | null = null
@@ -102,7 +100,6 @@ class GatekeeperAppHostImpl extends RpcTarget {
     openTarget: OpenTarget,
     openPrompt: OpenPrompt,
     resolveWorkspaceTitles: ResolveWorkspaceTitles,
-    resolveReview: ResolveReview,
   ) {
     super()
     this.#theme = theme
@@ -119,7 +116,6 @@ class GatekeeperAppHostImpl extends RpcTarget {
     this.#openTarget = openTarget
     this.#openPrompt = openPrompt
     this.#resolveWorkspaceTitles = resolveWorkspaceTitles
-    this.#resolveReview = resolveReview
   }
 
   get ui(): RpcStub<RpcTarget> {
@@ -139,11 +135,6 @@ class GatekeeperAppHostImpl extends RpcTarget {
       throw new TypeError('Invalid workspace title lookup.')
     }
     return this.#resolveWorkspaceTitles(ids)
-  }
-
-
-  resolveReview(key: string, decision: 'approve' | 'reject'): Promise<void> {
-    return this.#resolveReview(key, decision)
   }
 
   openPrompt(prompt: string): void {
@@ -303,9 +294,6 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId }: {
   const openPrompt = useCallback<OpenPrompt>((prompt) => {
     navigate({ to: '/', search: { prompt } })
   }, [navigate])
-  const resolveReview = useCallback<ResolveReview>((key, decision) =>
-    authenticatedApi.resolveGatekeeperAppReview(gatekeeperVendorId, key, decision),
-  [authenticatedApi, gatekeeperVendorId])
   // The gatekeeper capability is `any`: its method shape is gatekeeper-defined and opaque to us.
   const capabilityRef = useRef<any>(null)
   capabilityRef.current = frame.ui
@@ -337,7 +325,6 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId }: {
         openTarget,
         openPrompt,
         resolveWorkspaceTitles,
-        resolveReview,
       )
       hostRef.current = host
       sessionRef.current = newMessagePortRpcSession(port, host)
@@ -371,7 +358,7 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId }: {
     // Re-establish the session if either the HTML or the `ui` capability changes, so a new frame
     // carrying a fresh stub (even with identical HTML) never keeps talking through the stale one.
   }, [frame.iframeHtml, frame.ui, gatekeeperVendorId, openPrompt, openTarget,
-      present, resolveReview, resolveWorkspaceTitles, setOverlayPhase])
+      present, resolveWorkspaceTitles, setOverlayPhase])
 
   return (
     <iframe

@@ -5844,10 +5844,6 @@ class OverseerImpl implements AgentHooks {
       }
       this.storage.actions.put(record);
     });
-    if (description.reviewApp) {
-      await this.ctx.exports.AdminSettings.getByName("").registerReviewAction(
-          description.reviewApp.appId, description.reviewApp.key, this.ctx.id.toString(), actionId);
-    }
     this.#associateAction(caller, actionId);
 
     // Same auto-approval gate as before, named because awaitDecision uses it too. The drain is
@@ -5864,42 +5860,6 @@ class OverseerImpl implements AgentHooks {
     if (willAutoApprove) {
       this.ctx.waitUntil(this.drainAutoApprovals(gatekeeperId));
     }
-  }
-
-  /** Resumes an agent only when every awaited action in its current turn was approved. */
-  async resumeAfterReviewedAction(chatId: number, author: AiChatAuthorInfo,
-      resolvingUserId: string): Promise<void> {
-    let awaited: (ActionRecord & {type: "action"})[] = [];
-    for (let message of this.storage.chats.list({prefix: `${keyString(chatId)}.`, reverse: true})) {
-      if (message.type === "agentCallback" || (message.type === "message" && (message.author.type === "user" || message.author.type === "gadget"))) break;
-      if (message.type === "action") {
-        let record = this.storage.actions.get(message.actionId);
-        if (record?.type === "action" && record.caller.from === "agent" && record.description.awaitDecision) awaited.push(record);
-      }
-    }
-    if (!awaited.length || awaited.some(record => record.state !== "approved")) return;
-    this.addChatMessages(chatId, author, [{type: "message", message: "The changes you submitted have been approved and applied. Reads now reflect them."}]);
-    await this.resumeReviewedAgent(chatId, resolvingUserId);
-  }
-
-  /** Starts a suspended agent again under the administrator who resolved its review action. */
-  async resumeReviewedAgent(chatId: number, userId: string): Promise<void> {
-    await this.waitForChatMessagePreparation(chatId);
-    let meta = this.storage.chatMeta.get(chatId);
-    if (!meta || meta.activeAgent) return;
-    let modelId: string | null = null;
-    for (let message of this.storage.chats.list({prefix: `${keyString(chatId)}.`, reverse: true})) {
-      if (message.author.type === "agent") { modelId = message.author.id; break; }
-    }
-    let user = this.users.get(this.users.idFromString(userId));
-    let userMeta = await retryOnDoReset(() => user.getChatContext(modelId), this.logger);
-    if (!userMeta.aiModel) return;
-    meta = this.storage.chatMeta.get(chatId);
-    if (!meta || meta.activeAgent) return;
-    meta.activeAgent = userMeta.aiModel.profile;
-    meta.lastActive = this.getChatTimestamp();
-    this.storage.chatMeta.put(meta);
-    this.startAgent(chatId, userMeta.aiModel, userMeta.profile, user.id.toString());
   }
 
   async bindHook<Hook extends RpcTarget>(
@@ -9789,39 +9749,6 @@ export class OverseerDurableObject extends DurableObject<Cloudflare.Env> {
   async getOutputsForOwnerBackfill(ownerId: string): Promise<WorkspaceOutputEntry[] | null> {
     if (this.impl.ownerId !== ownerId) return null;
     return this.impl.outputsSnapshot();
-  }
-
-  /** Applies a management-app decision after matching its app id and opaque key to this action. */
-  async resolveManagementReview(appId: string, key: string, actionId: number,
-      decision: "approve" | "reject", author: AiChatAuthorInfo,
-      resolvingUserId: string): Promise<void> {
-    let record = this.impl.storage.actions.get(actionId);
-    if (record?.type !== "action" ||
-        record.description.reviewApp?.appId !== appId || record.description.reviewApp.key !== key) {
-      throw new Error("The management review action is no longer pending.");
-    }
-    // Activation is durable before the awaited chat is resumed. If resume failed after activation
-    // (for example because an older caller supplied the wrong User DO id), retry only that tail.
-    if (record.state === "approved" && decision === "approve") {
-      if (record.caller.from === "agent" && record.description.awaitDecision) {
-        await this.impl.resumeAfterReviewedAction(
-            record.caller.chatId, author, resolvingUserId);
-      }
-      return;
-    }
-    if (record.state !== "pending") {
-      throw new Error("The management review action is no longer pending.");
-    }
-    if (decision === "approve") {
-      await this.impl.applyPendingAction(record, author, false);
-      if (record.caller.from === "agent" && record.description.awaitDecision) {
-        await this.impl.resumeAfterReviewedAction(
-            record.caller.chatId, author, resolvingUserId);
-      }
-      this.impl.ctx.waitUntil(this.impl.drainAutoApprovals(record.gatekeeperId));
-      return;
-    }
-    await this.impl.rejectPendingAction(record, author);
   }
 
   /**

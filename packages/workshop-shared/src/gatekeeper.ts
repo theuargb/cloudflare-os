@@ -1237,12 +1237,6 @@ export type ActionDescription = {
   implementsRevert: boolean;
 
   /**
-   * Routes review of this action to a gatekeeper management app. The opaque key is meaningful
-   * only to that app; ordinary activity controls must not approve or reject this action.
-   */
-  reviewApp?: {appId: string; key: string};
-
-  /**
    * Hint that an agent should not keep working until this action has been approved or denied.
    *
    * Set this for actions whose effects the gatekeeper does NOT simulate. Because a not-yet-approved

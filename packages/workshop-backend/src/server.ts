@@ -586,20 +586,6 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
     });
   }
 
-  async resolveGatekeeperAppReview(appId: string, key: string,
-      decision: "approve" | "reject"): Promise<void> {
-    if (!this.#isAdmin()) throw new Error("Deployment administrator access is required.");
-    if (!appId || !key) throw new Error("Invalid management review key.");
-    let settings = this.adminSettings.getByName("");
-    let target = await settings.getReviewAction(appId, key);
-    if (!target) throw new Error("The management review action was not found.");
-    let author = await this.#user.whoami();
-    await this.overseers.get(this.overseers.idFromString(target.workspaceId))
-      .resolveManagementReview(
-          appId, key, target.actionId, decision, author, this.#userId.toString());
-    await settings.removeReviewAction(appId, key);
-  }
-
   // --- Deployment admin ---
 
   async amIAdmin(): Promise<boolean> {

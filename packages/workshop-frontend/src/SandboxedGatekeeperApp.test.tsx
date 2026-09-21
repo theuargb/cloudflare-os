@@ -36,10 +36,7 @@ const WORKSPACE_ID = "a".repeat(64);
 const listGadgets = vi.fn<() => Promise<{ id: string; title: string }[]>>(
   async () => [{ id: WORKSPACE_ID, title: "Daily Brief" }],
 );
-const resolveGatekeeperAppReview = vi.fn<
-  (appId: string, key: string, decision: "approve" | "reject") => Promise<void>
->(async () => {});
-const authenticatedApi = { listGadgets, resolveGatekeeperAppReview };
+const authenticatedApi = { listGadgets };
 
 vi.mock("./AuthContext", () => ({
   useAuthenticatedApi: () => ({ authenticatedApi }),
@@ -60,7 +57,6 @@ interface TestHost extends RpcTarget {
   openWorkspace(workspaceId: string, gadgetId?: number): Promise<void>;
   resolveWorkspaceTitles(ids: string[]): Promise<(string | null)[]>;
   openPrompt(prompt: string): Promise<void>;
-  resolveReview(key: string, decision: "approve" | "reject"): Promise<void>;
 }
 
 class EmptyUi extends RpcTarget {}
@@ -79,7 +75,6 @@ describe("SandboxedGatekeeperApp navigation", () => {
 
   beforeEach(() => {
     listGadgets.mockClear();
-    resolveGatekeeperAppReview.mockClear();
   });
 
   afterEach(async () => {
@@ -207,11 +202,5 @@ describe("SandboxedGatekeeperApp navigation", () => {
       prompt: "Create a daily brief.",
     });
 
-    await host.resolveReview("proposal-1", "approve");
-    expect(resolveGatekeeperAppReview).toHaveBeenCalledWith(
-      "scheduler",
-      "proposal-1",
-      "approve",
-    );
   });
 });
