@@ -785,8 +785,8 @@ export const ChatComposer = ({
                   : isAgentActive
                     ? "Waiting for agent…"
                     : newChat
-                      ? "Почніть новий чат"
-                      : "Продовжити чат"
+                      ? "Start a new conversation…"
+                      : "Ask a follow-up…"
               }
               autoFocus={autoFocus}
               rows={minRows}

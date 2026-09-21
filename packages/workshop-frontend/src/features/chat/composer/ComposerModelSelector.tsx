@@ -13,9 +13,9 @@ export const ComposerModelSelector = ({
   selectedModel,
   onModelChange,
 }: ComposerModelSelectorProps) => {
-  /*const selectedModelLabel = selectedModel == null
+  const selectedModelLabel = selectedModel == null
     ? "No agent"
-    : models.find((model) => model.id === selectedModel)?.name ?? selectedModel;*/
+    : models.find((model) => model.id === selectedModel)?.name ?? selectedModel;
 
   return (
     <DropdownMenu>
@@ -26,7 +26,7 @@ export const ComposerModelSelector = ({
             className="group inline-flex h-10 min-w-0 max-w-[110px] cursor-pointer items-center gap-1.5 rounded-lg px-2 text-[14px] leading-5 text-kumo-subtle transition-[background-color,color,transform] duration-150 ease-out hover:bg-kumo-tint hover:text-kumo-default focus-visible:bg-kumo-tint focus-visible:text-kumo-default focus-visible:outline-none active:scale-[0.97] data-[popup-open]:bg-kumo-tint data-[popup-open]:text-kumo-default sm:h-8 sm:max-w-[180px] sm:text-[13px]"
             aria-label="Select model"
           >
-            <span className="min-w-0 truncate">Еней 1</span>
+            <span className="min-w-0 truncate">{selectedModelLabel}</span>
             <CaretDown
               size={12}
               weight="bold"
