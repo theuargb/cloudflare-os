@@ -186,12 +186,7 @@ export type AccountDescription = {
    * If set, this account has a full-page management UI (see GatekeeperUser.startAppUi). The Workshop
    * surfaces it as a nav entry / page using this title.
    */
-  providesUi?: {
-    /** Navigation title for the management application. */
-    title: string;
-    /** Optional navigation icon for the management application. */
-    icon?: AvatarImage;
-  };
+  providesUi?: { title: string; icon?: AvatarImage };
 }
 
 /** Describes metadata about a specific instance of a resource. Returned by Gatekeeper.describe(). */

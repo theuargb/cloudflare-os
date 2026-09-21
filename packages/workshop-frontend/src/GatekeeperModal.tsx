@@ -420,13 +420,7 @@ export default function GatekeeperModal({
         setAccounts(Array.from(accountMap.values()))
       },
     })
-    // Resource binding must include forced auto-provisioned identities (for example Database's
-    // Schema Designer). They remain hidden from the Connectors management list, but are valid
-    // authorities for resources exposed by their account.
-    const subscription = authenticatedApi.subscribeConnectedAccounts(
-      subscriber,
-      { includeForcedAutoProvisionedAccounts: true },
-    )
+    const subscription = authenticatedApi.subscribeConnectedAccounts(subscriber)
     subscription.catch(error => {
       if (cancelled) return
       logRpcFailure('Failed to subscribe to connected accounts:', error)

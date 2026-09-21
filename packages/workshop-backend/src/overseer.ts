@@ -75,10 +75,6 @@ let CODE_MODE_HARNESS =
 `import { WorkerEntrypoint, restore } from "cloudflare:workers";
 import agent from "agent.js";
 
-const SIGNATURE_ERROR = "executeCode default export must have the signature " +
-    "\`export default async function(self, env, ctx)\`. The first argument is \`self\`; " +
-    "use the second argument for env bindings.";
-
 export default class extends WorkerEntrypoint {
   verify() {}
   async run(self, restoreForger) {
@@ -99,9 +95,6 @@ export default class extends WorkerEntrypoint {
           });
         }
       }
-    }
-    if (typeof agent !== "function" || agent.length < 2) {
-      throw new TypeError(SIGNATURE_ERROR);
     }
     let result = await agent(self, env, this.ctx);
     if (result !== undefined) console.log("Return value:", result);
@@ -5404,19 +5397,6 @@ class OverseerImpl implements AgentHooks {
     // responsibility.
     this.storage.transaction(() => {
       this.gitCache.convertPushMarksToOnRemote(record.id);
-      this.storage.actions.put(record);
-    });
-  }
-
-  /** Rejects one pending action through the common gatekeeper and durable-state path. */
-  async rejectPendingAction(record: ActionRecord & {type: "action"},
-                            resolvedBy: AiChatAuthorInfo): Promise<void> {
-    await this.getGatekeeperFacet(record.gatekeeperId).rejectAction(record.action);
-    record.state = "rejected";
-    record.appliedAt = new Date();
-    record.resolvedBy = resolvedBy;
-    this.storage.transaction(() => {
-      this.gitCache.clearPushMarks(record.id);
       this.storage.actions.put(record);
     });
   }
@@ -11285,11 +11265,23 @@ class OverseerClientInterface extends RpcTarget implements Overseer {
       throw new Error(`Can't reject an observation: ${id}`);
     }
 
+    let gatekeeper = this.impl.getGatekeeperFacet(action.gatekeeperId);
+
     // Resolve the rejecter's identity before notifying the gatekeeper, so a failed profile fetch
     // can't leave the action rejected with the gatekeeper but still "pending" in storage.
     let profile = await this.#getClientProfile();
 
-    await this.impl.rejectPendingAction(action, profile);
+    await gatekeeper.rejectAction(action.action);
+
+    action.state = "rejected";
+    action.appliedAt = new Date();
+    action.resolvedBy = profile;
+    // A rejected push's pending-push marks are removed in the same durable step as the state
+    // change (nothing was transmitted, so nothing became proven). No-op for pushless actions.
+    this.impl.storage.transaction(() => {
+      this.impl.gitCache.clearPushMarks(action.id);
+      this.impl.storage.actions.put(action);
+    });
 
     // Deny leaves the turn ended, like denyConnectionRequest. The rejected record also prevents a
     // sibling approval from resuming this turn.
