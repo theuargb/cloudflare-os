@@ -172,7 +172,11 @@ export interface GatekeeperUserSelectionReceiver extends RpcTarget {
  * opened.
  */
 export type AppUiContext = {
-  /** Whether the opening user is currently a deployment admin. */
+  /** Opaque authenticated actor id used to attribute shared management activity. */
+  actorId: string;
+  /** Current display data used to identify the actor in shared management activity. */
+  actor: { displayName: string; avatar?: AvatarImage };
+  /** Whether the actor is currently a deployment administrator. */
   isAdmin: boolean;
 
   /**
