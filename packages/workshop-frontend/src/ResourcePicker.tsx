@@ -176,7 +176,7 @@ export default function ResourcePicker({
         })))
       } catch (error) {
         console.error('Failed to load vendors:', error)
-        toasts.add({ title: 'Failed to load available services', variant: 'error' })
+        toasts.add({ title: 'Не вдалося завантажити доступні сервіси', variant: 'error' })
       } finally {
         setVendorsLoading(false)
       }
@@ -375,7 +375,7 @@ export default function ResourcePicker({
           if (searchHasPlaceholders) return
           const accountData = allAccounts.get(item.accountId)
           if (accountData && !accountData.credentialsValid) {
-            handleReconnect(item.accountId)
+            handleReconnectAccount(item.accountId)
           } else {
             const missingGrants = missingResourceGrants(item.accountDescription, item.resource)
             if (missingGrants.length > 0) {
@@ -402,7 +402,7 @@ export default function ResourcePicker({
       openConnectWindow(await authenticatedApi.connectAccount(vendorId, resourceUrlPatterns))
     } catch (error) {
       console.error('Failed to initiate connection:', error)
-      toasts.add({ title: 'Failed to start connection flow', variant: 'error' })
+      toasts.add({ title: 'Не вдалося почати підключення', variant: 'error' })
     } finally {
       setConnectingVendor(null)
     }
@@ -417,11 +417,11 @@ export default function ResourcePicker({
       const flow = await authenticatedApi.ensureAccountResources(accountId, resourceUrlPatterns)
       if (flow) {
         openConnectWindow(flow)
-        toasts.add({ title: 'Grant the additional access in the pop-up window.', variant: 'success' })
+        toasts.add({ title: 'Надайте додатковий доступ у спливному вікні.', variant: 'success' })
       }
     } catch (error) {
       console.error('Failed to request additional access:', error)
-      toasts.add({ title: 'Failed to request additional access', variant: 'error' })
+      toasts.add({ title: 'Не вдалося запросити додатковий доступ', variant: 'error' })
     } finally {
       setGrantingAccount(current => current === accountId ? null : current)
     }
@@ -429,7 +429,7 @@ export default function ResourcePicker({
 
   // --- Reconnect expired account handler ---
 
-  const handleReconnect = useCallback(async (accountId: number) => {
+  const handleReconnectAccount = useCallback(async (accountId: number) => {
     setReconnectingAccount(accountId)
     try {
       openConnectWindow(await authenticatedApi.reconnectAccount(accountId))
@@ -437,7 +437,7 @@ export default function ResourcePicker({
       // whose add() with credentialsValid: true clears the reconnectingAccount state.
     } catch (error) {
       console.error('Failed to initiate reconnection:', error)
-      toasts.add({ title: 'Failed to start re-authentication flow', variant: 'error' })
+      toasts.add({ title: 'Не вдалося почати повторну автентифікацію', variant: 'error' })
       setReconnectingAccount(null)
     }
   }, [authenticatedApi])
@@ -454,9 +454,9 @@ export default function ResourcePicker({
     <div style={style}>
       <div className="overflow-y-auto" style={{ maxHeight }}>
         {!ready ? (
-          <p className={PICKER_EMPTY}>Loading connections…</p>
+          <p className={PICKER_EMPTY}>Завантаження підключень…</p>
         ) : matchedResources.length === 0 ? (
-          <p className={PICKER_EMPTY}>No matching resources.</p>
+          <p className={PICKER_EMPTY}>Відповідних ресурсів не знайдено.</p>
         ) : (() => {
           let itemIdx = 0
           return matchedResources.map(({ resource, vendor, classification, suffix, replaceSearch, accountsOnly }, i) => {
@@ -543,7 +543,7 @@ export default function ResourcePicker({
                         if (needsAccess) {
                           if (!isGranting) void handleGrantResourceAccess(account.id, missingGrants)
                         } else if (isExpired || isReconnecting) {
-                          if (!isReconnecting) handleReconnect(account.id)
+                          if (!isReconnecting) handleReconnectAccount(account.id)
                         } else {
                           onSelectAccount(account.id, vendor.id, resource, account.description, vendor.description)
                         }
@@ -577,12 +577,12 @@ export default function ResourcePicker({
                       ) : isExpired ? (
                         <span className="flex flex-shrink-0 items-center gap-1">
                           <Warning size={12} className="text-kumo-warning" />
-                          <span className="text-[11.5px] leading-4 text-kumo-warning">Expired — click to re-authenticate</span>
+                          <span className="text-[11.5px] leading-4 text-kumo-warning">Термін дії минув — натисніть, щоб авторизуватися знову</span>
                         </span>
                       ) : needsAccess ? (
                         <span className="flex flex-shrink-0 items-center gap-1">
                           <Warning size={12} className="text-kumo-warning" />
-                          <span className="text-[11.5px] leading-4 text-kumo-warning">Grant access</span>
+                          <span className="text-[11.5px] leading-4 text-kumo-warning">Надати доступ</span>
                         </span>
                       ) : isActive && !searchHasPlaceholders ? (
                         <TabHint />
@@ -623,7 +623,7 @@ export default function ResourcePicker({
                       )}
                     </span>
                     <span className="flex-1 text-[13px] leading-[18px] tracking-[-0.25px] text-kumo-subtle">
-                      {connectingVendor === vendor.id ? 'Opening…' : 'Connect new account'}
+                      {connectingVendor === vendor.id ? 'Відкриття…' : 'Підключити новий обліковий запис'}
                     </span>
                     {isActive && <TabHint />}
                   </div>

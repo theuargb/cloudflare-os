@@ -36,7 +36,7 @@ export default function ProtectedRoute({ children, rpcStub }: ProtectedRouteProp
       >
         <Loader size="lg" />
         <div style={{ textAlign: 'center' }}>
-          Loading...
+          Завантаження…
         </div>
       </div>
     )
@@ -61,7 +61,7 @@ export default function ProtectedRoute({ children, rpcStub }: ProtectedRouteProp
           className="mb-4"
         />
         <Button variant="primary" onClick={() => window.location.reload()}>
-          Retry
+          Повторити
         </Button>
       </div>
     )
@@ -85,7 +85,7 @@ export default function ProtectedRoute({ children, rpcStub }: ProtectedRouteProp
         >
           <Loader size="lg" />
           <div style={{ textAlign: 'center' }}>
-            Authenticating...
+            Автентифікація…
           </div>
         </div>
       )
