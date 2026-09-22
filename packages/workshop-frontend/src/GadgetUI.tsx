@@ -404,7 +404,7 @@ function GadgetUISession({ gadget, height, reloadTrigger, isVisible = true, chat
         style={{ height }}
       >
         <Text variant="secondary">
-          Switch to this tab to load the Gadget UI
+          Перейдіть на цю вкладку, щоб завантажити інтерфейс гаджета
         </Text>
       </div>
     )
@@ -434,7 +434,7 @@ function GadgetUISession({ gadget, height, reloadTrigger, isVisible = true, chat
       }}>
         <Banner
           variant="error"
-          title="Error"
+          title="Помилка"
           description={error}
           action={
             <Banner.Action
@@ -445,7 +445,7 @@ function GadgetUISession({ gadget, height, reloadTrigger, isVisible = true, chat
                 setRetryNonce(n => n + 1)
               }}
             >
-              Try again
+              Спробувати ще раз
             </Banner.Action>
           }
         />
@@ -477,10 +477,10 @@ function GadgetUISession({ gadget, height, reloadTrigger, isVisible = true, chat
           </div>
           <div className="space-y-1">
             <h2 className="text-[20px] leading-7 font-normal tracking-[-0.45px] text-kumo-default">
-              No gadget UI yet
+              Інтерфейс гаджета ще не створено
             </h2>
             <p className="text-[15px] leading-5 font-normal tracking-[-0.3px] text-kumo-subtle">
-              When the gadget builds one, it will appear here.
+              Коли гаджет його створить, він з’явиться тут.
             </p>
           </div>
         </div>
@@ -501,7 +501,7 @@ function GadgetUISession({ gadget, height, reloadTrigger, isVisible = true, chat
           border: 'none'
         }}
         sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"
-        title="Gadget UI"
+        title="Інтерфейс гаджета"
       />
     </div>
   )

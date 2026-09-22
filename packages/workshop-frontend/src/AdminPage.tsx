@@ -12,12 +12,12 @@ import AdminFormatsPanel from './components/format/AdminFormatsPanel'
 
 // Preset accent colors offered in the Theme section ('' = default brand).
 const ACCENT_PRESETS: { label: string; value: string }[] = [
-  { label: 'Default', value: '' },
-  { label: 'Blue', value: '#3b82f6' },
-  { label: 'Green', value: '#16a34a' },
-  { label: 'Purple', value: '#7c3aed' },
-  { label: 'Pink', value: '#db2777' },
-  { label: 'Teal', value: '#0d9488' },
+  { label: 'Типово', value: '' },
+  { label: 'Синій', value: '#3b82f6' },
+  { label: 'Зелений', value: '#16a34a' },
+  { label: 'Фіолетовий', value: '#7c3aed' },
+  { label: 'Рожевий', value: '#db2777' },
+  { label: 'Бірюзовий', value: '#0d9488' },
 ]
 
 // Swatch background per banner color, matching AnnouncementBanner's accent styles.
@@ -33,7 +33,7 @@ const BANNER_SWATCH: Record<BannerColor, string> = {
 export default function AdminPage() {
   const { authenticatedApi, isAdmin } = useAuthenticatedApi()
   const toasts = useKumoToastManager()
-  useDocumentTitle('Admin')
+  useDocumentTitle('Адміністрування')
 
   // The admin capability (minted once via getAdminApi; null until loaded / for non-admins). Wrapped
   // in an object so useState doesn't treat the (callable) RPC stub as a state updater function.
@@ -240,7 +240,7 @@ export default function AdminPage() {
     try {
       await admin.api.setAnnouncement(announcementDraft)
       setSavedAnnouncement(announcementDraft)
-      toasts.add({ title: 'Announcement saved', variant: 'success' })
+      toasts.add({ title: 'Оголошення збережено', variant: 'success' })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save announcement'
       toasts.add({ title: message, variant: 'error' })
@@ -258,7 +258,7 @@ export default function AdminPage() {
     try {
       await admin.api.setBanner(bannerTextDraft, bannerColorDraft)
       setSavedBanner({ text: bannerTextDraft, color: bannerColorDraft })
-      toasts.add({ title: 'Banner saved', variant: 'success' })
+      toasts.add({ title: 'Банер збережено', variant: 'success' })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save banner'
       toasts.add({ title: message, variant: 'error' })
@@ -275,7 +275,7 @@ export default function AdminPage() {
     try {
       await admin.api.setAccentColor(accentDraft)
       setSavedAccent(accentDraft)
-      toasts.add({ title: 'Accent color saved', variant: 'success' })
+      toasts.add({ title: 'Колір акценту збережено', variant: 'success' })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save accent color'
       toasts.add({ title: message, variant: 'error' })
@@ -320,7 +320,7 @@ export default function AdminPage() {
     try {
       await admin.api.setSiteName(siteNameDraft)
       setSavedSiteName(siteNameDraft)
-      toasts.add({ title: 'Site name saved', variant: 'success' })
+      toasts.add({ title: 'Назву сайту збережено', variant: 'success' })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save site name'
       toasts.add({ title: message, variant: 'error' })
@@ -339,7 +339,7 @@ export default function AdminPage() {
       const data = await prepareSiteLogo(file)
       const logo = await admin.api.setSiteLogo(data)
       setSiteLogoUrl(logo ? cacheBustSiteLogoUrl(logo.url) : null)
-      toasts.add({ title: 'Logo saved', variant: 'success' })
+      toasts.add({ title: 'Логотип збережено', variant: 'success' })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save logo'
       toasts.add({ title: message, variant: 'error' })
@@ -354,7 +354,7 @@ export default function AdminPage() {
     try {
       await admin.api.setSiteLogo(null)
       setSiteLogoUrl(null)
-      toasts.add({ title: 'Default logo restored', variant: 'success' })
+      toasts.add({ title: 'Типовий логотип відновлено', variant: 'success' })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to remove logo'
       toasts.add({ title: message, variant: 'error' })
@@ -369,7 +369,7 @@ export default function AdminPage() {
     try {
       await admin.api.setInstanceInstructions(instructionsDraft)
       setSavedInstructions(instructionsDraft)
-      toasts.add({ title: 'System prompt instructions saved', variant: 'success' })
+      toasts.add({ title: 'Інструкції системного промпту збережено', variant: 'success' })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save instructions'
       toasts.add({ title: message, variant: 'error' })
@@ -382,7 +382,7 @@ export default function AdminPage() {
     return (
       <div className="max-w-2xl mx-auto px-4 sm:px-6 py-16 text-center">
         <ShieldWarning size={32} className="mx-auto text-kumo-subtle mb-3" />
-        <p className="text-sm text-kumo-default">You don't have access to this page.</p>
+        <p className="text-sm text-kumo-default">У вас немає доступу до цієї сторінки.</p>
       </div>
     )
   }
@@ -390,7 +390,7 @@ export default function AdminPage() {
   if (loading) {
     return (
       <div className="flex-1 flex items-center justify-center min-h-[60vh]">
-        <p className="text-kumo-subtle">Loading admin settings...</p>
+        <p className="text-kumo-subtle">Завантаження налаштувань адміністратора…</p>
       </div>
     )
   }
@@ -398,9 +398,9 @@ export default function AdminPage() {
   if (loadError || !admin) {
     return (
       <div className="mx-auto w-full max-w-[1040px] px-4 sm:px-8 py-16 text-center">
-        <p className="text-sm text-kumo-danger">Something went wrong loading admin settings.</p>
+        <p className="text-sm text-kumo-danger">Під час завантаження налаштувань адміністратора сталася помилка.</p>
         <button onClick={() => window.location.reload()} className="text-kumo-brand mt-2 text-sm underline">
-          Try again
+          Спробувати ще раз
         </button>
       </div>
     )
@@ -409,9 +409,9 @@ export default function AdminPage() {
   return (
     <div className="mx-auto w-full max-w-[1040px] px-4 sm:px-8 py-8 space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-kumo-default">Admin</h1>
+        <h1 className="text-2xl font-semibold text-kumo-default">Адміністрування</h1>
         <p className="text-sm text-kumo-subtle mt-1">
-          Deployment-wide settings. Changes apply to all users on their next connection.
+          Налаштування всього розгортання. Зміни застосуються для всіх користувачів під час наступного підключення.
         </p>
       </div>
 
@@ -445,13 +445,13 @@ export default function AdminPage() {
                 <UserPlus size={18} className="text-kumo-subtle" />
               </div>
               <div className="flex-1 min-w-0">
-                <h2 className="text-lg font-semibold text-kumo-strong">Allow new sign-ups</h2>
+                <h2 className="text-lg font-semibold text-kumo-strong">Дозволити нову реєстрацію</h2>
                 <p className="text-sm text-kumo-subtle mt-0.5">
-                  When off, existing users can still log in but no new accounts can be created.
+                  Коли вимкнено, наявні користувачі можуть входити, але нові облікові записи створити не можна.
                 </p>
               </div>
               <Switch
-                aria-label="Allow new sign-ups"
+                aria-label="Дозволити нову реєстрацію"
                 checked={signupsEnabled}
                 disabled={savingSignups}
                 onCheckedChange={handleSignupsToggle}
@@ -465,7 +465,7 @@ export default function AdminPage() {
                 <MagnifyingGlass size={18} className="text-kumo-subtle" />
               </div>
               <div className="flex-1 min-w-0">
-                <h2 className="text-lg font-semibold text-kumo-strong">Allow user search</h2>
+                <h2 className="text-lg font-semibold text-kumo-strong">Дозволити пошук користувачів</h2>
                 <p className="text-sm text-kumo-subtle mt-0.5">
                   Let users find other accounts by name or email when sharing a workspace. When off,
                   people can only be invited by their exact username or email. Applies on each
@@ -473,7 +473,7 @@ export default function AdminPage() {
                 </p>
               </div>
               <Switch
-                aria-label="Allow user search"
+                aria-label="Дозволити пошук користувачів"
                 checked={userSearchEnabled}
                 disabled={savingUserSearch}
                 onCheckedChange={handleUserSearchToggle}
@@ -486,7 +486,7 @@ export default function AdminPage() {
       {/* Site name */}
       {activeTab === 'general' && (
         <div className="bg-kumo-elevated border border-kumo-line rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-kumo-strong mb-1">Site name</h2>
+          <h2 className="text-lg font-semibold text-kumo-strong mb-1">Назва сайту</h2>
           <p className="text-sm text-kumo-subtle mb-5">
             Shown next to the logo in the top bar. Leave empty to use the default
             (&ldquo;{DEFAULT_SITE_NAME}&rdquo;). Applies on each user&rsquo;s next connection.
@@ -507,7 +507,7 @@ export default function AdminPage() {
                 onClick={() => setSiteNameDraft(savedSiteName)}
                 disabled={savingSiteName}
               >
-                Reset
+                Скинути
               </Button>
             )}
             <Button
@@ -517,7 +517,7 @@ export default function AdminPage() {
               loading={savingSiteName}
               disabled={siteNameDraft === savedSiteName}
             >
-              Save
+              Зберегти
             </Button>
           </div>
         </div>
@@ -526,7 +526,7 @@ export default function AdminPage() {
       {/* Site logo */}
       {activeTab === 'general' && (
         <div className="bg-kumo-elevated border border-kumo-line rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-kumo-strong mb-1">Logo</h2>
+          <h2 className="text-lg font-semibold text-kumo-strong mb-1">Логотип</h2>
           <p className="text-sm text-kumo-subtle mb-5">
             Shown in the app chrome, sign-in screens, and browser tab. Images are scaled without
             cropping and converted to a static PNG. Square images work best. Applies on each
@@ -564,7 +564,7 @@ export default function AdminPage() {
                   onClick={handleRemoveSiteLogo}
                   disabled={savingSiteLogo}
                 >
-                  Restore default
+                  Відновити типове значення
                 </Button>
               )}
             </div>
@@ -575,7 +575,7 @@ export default function AdminPage() {
       {/* Theme / accent color */}
       {activeTab === 'general' && (
         <div className="bg-kumo-elevated border border-kumo-line rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-kumo-strong mb-1">Theme</h2>
+          <h2 className="text-lg font-semibold text-kumo-strong mb-1">Тема</h2>
           <p className="text-sm text-kumo-subtle mb-5">
             Accent color used for buttons, links, and highlights. Changes preview live here; click
             Save to apply for everyone (on their next connection). Backgrounds keep the default
@@ -615,7 +615,7 @@ export default function AdminPage() {
                 onChange={(e) => setAccentDraft(e.target.value)}
                 className="w-9 h-9 rounded-md border border-kumo-line bg-transparent cursor-pointer p-0.5"
               />
-              Custom
+              Власна
             </label>
             <span className="text-xs font-mono text-kumo-subtle">
               {accentDraft || `${DEFAULT_ACCENT_COLOR} (default)`}
@@ -628,7 +628,7 @@ export default function AdminPage() {
                 onClick={() => setAccentDraft(savedAccent)}
                 disabled={savingAccent}
               >
-                Reset
+                Скинути
               </Button>
             )}
             <Button
@@ -638,7 +638,7 @@ export default function AdminPage() {
               loading={savingAccent}
               disabled={!accentDirty}
             >
-              Save
+              Зберегти
             </Button>
           </div>
         </div>
@@ -647,7 +647,7 @@ export default function AdminPage() {
       {/* Full-width banner */}
       {activeTab === 'general' && (
         <div className="bg-kumo-elevated border border-kumo-line rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-kumo-strong mb-1">Banner</h2>
+          <h2 className="text-lg font-semibold text-kumo-strong mb-1">Банер</h2>
           <p className="text-sm text-kumo-subtle mb-5">
             A dismissible bar across the very top of the app (logged in or not). Markdown is
             supported, so you can include links. Leave empty to hide it. Applies on each
@@ -670,7 +670,7 @@ export default function AdminPage() {
 
           <div className="mt-4 flex items-end justify-between gap-4">
             <div className="min-w-0">
-              <p className="text-xs font-medium text-kumo-subtle mb-2">Type</p>
+              <p className="text-xs font-medium text-kumo-subtle mb-2">Тип</p>
               <div className="flex flex-wrap items-center gap-2">
                 {BANNER_COLORS.map((c) => {
                   const selected = bannerColorDraft === c
@@ -707,7 +707,7 @@ export default function AdminPage() {
                   }}
                   disabled={savingBanner}
                 >
-                  Reset
+                  Скинути
                 </Button>
               )}
               <Button
@@ -717,7 +717,7 @@ export default function AdminPage() {
                 loading={savingBanner}
                 disabled={!bannerDirty || bannerTextDraft.length > MAX_ANNOUNCEMENT_LENGTH}
               >
-                Save
+                Зберегти
               </Button>
             </div>
           </div>
@@ -727,7 +727,7 @@ export default function AdminPage() {
       {/* Top-bar notice */}
       {activeTab === 'general' && (
         <div className="bg-kumo-elevated border border-kumo-line rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-kumo-strong mb-1">Top-bar notice</h2>
+          <h2 className="text-lg font-semibold text-kumo-strong mb-1">Повідомлення у верхній панелі</h2>
           <p className="text-sm text-kumo-subtle mb-5">
             Shown centered in the top navigation bar. Markdown is supported, so you can include
             links. Keep it short — it renders on a single line. Leave empty to show nothing. Applies
@@ -750,7 +750,7 @@ export default function AdminPage() {
 
           <div className="flex items-center justify-between mt-3">
             <span className="text-xs text-kumo-subtle">
-              {announcementDraft.length.toLocaleString()} / {MAX_ANNOUNCEMENT_LENGTH.toLocaleString()} characters
+              {announcementDraft.length.toLocaleString('uk-UA')} / {MAX_ANNOUNCEMENT_LENGTH.toLocaleString('uk-UA')} символів
             </span>
             <div className="flex items-center gap-2">
               {announcementDraft !== savedAnnouncement && (
@@ -760,7 +760,7 @@ export default function AdminPage() {
                   onClick={() => setAnnouncementDraft(savedAnnouncement)}
                   disabled={savingAnnouncement}
                 >
-                  Reset
+                  Скинути
                 </Button>
               )}
               <Button
@@ -773,7 +773,7 @@ export default function AdminPage() {
                   announcementDraft.length > MAX_ANNOUNCEMENT_LENGTH
                 }
               >
-                Save
+                Зберегти
               </Button>
             </div>
           </div>
@@ -783,7 +783,7 @@ export default function AdminPage() {
       {/* Agent system prompt additions */}
       {activeTab === 'general' && (
       <div className="bg-kumo-elevated border border-kumo-line rounded-xl p-6">
-        <h2 className="text-lg font-semibold text-kumo-strong mb-1">Agent instructions</h2>
+        <h2 className="text-lg font-semibold text-kumo-strong mb-1">Інструкції для агента</h2>
         <p className="text-sm text-kumo-subtle mb-5">
           Extra instructions added to every agent&rsquo;s system prompt on this deployment. Use this
           for instance-specific context, conventions, or guardrails.
@@ -805,7 +805,7 @@ export default function AdminPage() {
 
         <div className="flex items-center justify-between mt-3">
           <span className="text-xs text-kumo-subtle">
-            {instructionsDraft.length.toLocaleString()} / {MAX_INSTANCE_INSTRUCTIONS_LENGTH.toLocaleString()} characters
+            {instructionsDraft.length.toLocaleString('uk-UA')} / {MAX_INSTANCE_INSTRUCTIONS_LENGTH.toLocaleString('uk-UA')} символів
           </span>
           <div className="flex items-center gap-2">
             {instructionsDraft !== savedInstructions && (
@@ -815,7 +815,7 @@ export default function AdminPage() {
                 onClick={() => setInstructionsDraft(savedInstructions)}
                 disabled={savingInstructions}
               >
-                Reset
+                Скинути
               </Button>
             )}
             <Button
@@ -828,7 +828,7 @@ export default function AdminPage() {
                 instructionsDraft.length > MAX_INSTANCE_INSTRUCTIONS_LENGTH
               }
             >
-              Save
+              Зберегти
             </Button>
           </div>
         </div>

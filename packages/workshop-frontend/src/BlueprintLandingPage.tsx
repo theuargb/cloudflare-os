@@ -196,10 +196,10 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
     setConnectingVendor(vendorId)
     try {
       openConnectWindow(await authenticatedApi.connectAccount(vendorId))
-      toasts.add({ title: 'Complete the account connection in the pop-up window.', variant: 'success' })
+      toasts.add({ title: 'Завершіть підключення облікового запису у спливному вікні.', variant: 'success' })
     } catch (err) {
       console.error('Failed to initiate connection:', err)
-      toasts.add({ title: 'Failed to start connection flow', variant: 'error' })
+      toasts.add({ title: 'Не вдалося почати підключення', variant: 'error' })
     } finally {
       setConnectingVendor(null)
     }
@@ -210,10 +210,10 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
     setReconnectingAccountId(accountId)
     try {
       openConnectWindow(await authenticatedApi.reconnectAccount(accountId))
-      toasts.add({ title: 'Complete the account reconnect in the pop-up window.', variant: 'success' })
+      toasts.add({ title: 'Завершіть повторне підключення облікового запису у спливному вікні.', variant: 'success' })
     } catch (err) {
       console.error('Failed to initiate reconnect:', err)
-      toasts.add({ title: 'Failed to start reconnect flow', variant: 'error' })
+      toasts.add({ title: 'Не вдалося почати повторне підключення', variant: 'error' })
       setReconnectingAccountId(null)
     }
   }, [authenticatedApi, toasts])
@@ -636,10 +636,10 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
         setIsInLibrary(true)
         setIsUploadedBlueprint(false)
       }
-      toasts.add({ title: nextPinned ? 'Blueprint favorited' : 'Blueprint unfavorited', variant: 'success' })
+      toasts.add({ title: nextPinned ? 'Шаблон додано до обраного' : 'Шаблон вилучено з обраного', variant: 'success' })
     } catch (err) {
       console.error('Failed to update blueprint pin:', err)
-      toasts.add({ title: 'Failed to update favorite status', variant: 'error' })
+      toasts.add({ title: 'Не вдалося оновити статус обраного', variant: 'error' })
     } finally {
       setUpdatingPinned(false)
     }
@@ -661,10 +661,10 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
     try {
       await authenticatedApi.addBlueprintToLibrary(id)
       setIsInLibrary(true)
-      toasts.add({ title: 'Blueprint added to library', variant: 'success' })
+      toasts.add({ title: 'Шаблон додано до бібліотеки', variant: 'success' })
     } catch (err) {
       console.error('Failed to add blueprint to library:', err)
-      toasts.add({ title: 'Failed to add blueprint to library', variant: 'error' })
+      toasts.add({ title: 'Не вдалося додати шаблон до бібліотеки', variant: 'error' })
     } finally {
       setAddingToLibrary(false)
     }
@@ -678,17 +678,17 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
       await authenticatedApi.removeBlueprintFromLibrary(id)
       if (isUploadedBlueprint) {
         setShowDeleteConfirm(false)
-        toasts.add({ title: 'Blueprint deleted', variant: 'success' })
+        toasts.add({ title: 'Шаблон видалено', variant: 'success' })
         navigate({ to: '/' })
       } else {
         setIsInLibrary(false)
         setIsPinned(false)
-        toasts.add({ title: 'Blueprint removed from library', variant: 'success' })
+        toasts.add({ title: 'Шаблон вилучено з бібліотеки', variant: 'success' })
       }
     } catch (err) {
       console.error('Failed to remove blueprint from library:', err)
       toasts.add({
-        title: isUploadedBlueprint ? 'Failed to delete blueprint' : 'Failed to remove blueprint from library',
+        title: isUploadedBlueprint ? 'Не вдалося видалити шаблон' : 'Не вдалося вилучити шаблон із бібліотеки',
         variant: 'error',
       })
     } finally {
@@ -711,11 +711,11 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
         await authenticatedApi.deleteOrphanedBlueprint(id)
       }
       setShowDeleteConfirm(false)
-      toasts.add({ title: 'Blueprint deleted', variant: 'success' })
+      toasts.add({ title: 'Шаблон видалено', variant: 'success' })
       navigate({ to: '/' })
     } catch (err) {
       console.error('Failed to delete blueprint:', err)
-      toasts.add({ title: 'Failed to delete blueprint', variant: 'error' })
+      toasts.add({ title: 'Не вдалося видалити шаблон', variant: 'error' })
     } finally {
       overseer?.then(stub => stub[Symbol.dispose]()).catch(() => {})
       setRemovingFromLibrary(false)
@@ -727,13 +727,13 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
   }
 
   if (loading || authLoading) {
-    return <BlueprintStatePage title="Loading blueprint..." loading />
+    return <BlueprintStatePage title="Завантаження шаблону…" loading />
   }
 
   if (notFound) {
     return (
       <BlueprintStatePage
-        title="Blueprint not found"
+        title="Шаблон не знайдено"
         message="This blueprint may have been removed or the link may be incorrect."
         actionLabel="Back to Explore"
         onAction={() => navigate({ to: '/explore' })}
@@ -744,7 +744,7 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
   if (!blueprint) {
     return (
       <BlueprintStatePage
-        title="Couldn’t load blueprint"
+        title="Не вдалося завантажити шаблон"
         message={error || 'Failed to load blueprint.'}
         actionLabel="Back to Explore"
         onAction={() => navigate({ to: '/explore' })}
@@ -764,7 +764,7 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
   } else if (unresolvedBindingName !== null) {
     primaryActionLabel = remainingCount > 0
       ? `Configure ${remainingCount} remaining ${remainingCount === 1 ? 'connection' : 'connections'}`
-      : 'Configure connections'
+      : 'Налаштувати підключення'
   } else {
     primaryActionLabel = 'Create Gadget'
   }
@@ -789,7 +789,7 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
           className="mb-8 inline-flex cursor-pointer items-center gap-2 px-1 py-1 text-[13px] leading-[18px] font-medium tracking-[-0.25px] text-kumo-subtle transition-[color,transform] duration-150 ease-out hover:text-kumo-default active:scale-[0.98]"
         >
           <ArrowLeft size={14} weight="bold" />
-          Back
+          Назад
         </button>
 
         <header className="mb-10 grid gap-7 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-start">
@@ -797,7 +797,7 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
             {isFeatured && (
               <span className="mb-3 inline-flex items-center gap-1.5 rounded-full bg-[rgba(255,72,1,0.10)] px-2 py-1 text-[11px] leading-4 font-semibold tracking-[-0.1px] text-kumo-brand">
                 <Star size={12} weight="fill" />
-                Featured
+                Рекомендовані
               </span>
             )}
             <h1 className="m-0 text-3xl font-semibold leading-tight tracking-tight text-kumo-default">
@@ -813,7 +813,7 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
               <span className="text-kumo-inactive">•</span>
               <span>v{meta.version}</span>
               <span className="text-kumo-inactive">•</span>
-              <span>Updated {new Date(meta.lastUpdated).toLocaleDateString()}</span>
+              <span>Оновлено {new Date(meta.lastUpdated).toLocaleDateString('uk-UA')}</span>
             </div>
           </div>
 
@@ -832,15 +832,15 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
                   disabled={createDisabled}
                   className="press inline-flex h-10 w-full cursor-pointer items-center justify-center rounded-lg bg-kumo-brand px-4 text-[14px] leading-5 font-semibold tracking-[-0.25px] text-white transition-colors duration-150 ease-out hover:bg-kumo-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  {creating ? 'Creating...' : primaryActionLabel}
+                  {creating ? 'Створення…' : primaryActionLabel}
                 </button>
               </span>
 
             {!isOwnBlueprint && !loadingOwnBlueprintState && !isInLibrary && (
-              <Tooltip content={isAuthenticated ? 'Add to library' : 'Log in to add to library'} asChild>
+              <Tooltip content={isAuthenticated ? 'Додати до бібліотеки' : 'Увійдіть, щоб додати до бібліотеки'} asChild>
                 <button
                   type="button"
-                  aria-label={isAuthenticated ? 'Add blueprint to library' : 'Log in to add blueprint to library'}
+                  aria-label={isAuthenticated ? 'Додати шаблон до бібліотеки' : 'Увійдіть, щоб додати шаблон до бібліотеки'}
                   onClick={handleAddToLibrary}
                   disabled={addingToLibrary || loadingLibraryState}
                   className="press inline-flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-kumo-line bg-kumo-base p-0 text-kumo-subtle transition-colors duration-150 ease-out hover:border-kumo-fill hover:bg-kumo-tint hover:text-kumo-default disabled:cursor-not-allowed disabled:opacity-60"
@@ -854,7 +854,7 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
               <DropdownMenu.Trigger
                 render={(
                   <WorkshopIconButton
-                    aria-label="More blueprint actions"
+                    aria-label="Інші дії з шаблоном"
                     className="!h-10 !w-10 shrink-0 rounded-lg border border-kumo-line bg-kumo-base text-kumo-subtle hover:border-kumo-fill hover:bg-kumo-tint hover:text-kumo-default data-[popup-open]:border-kumo-fill data-[popup-open]:bg-kumo-tint data-[popup-open]:text-kumo-default"
                   >
                     <DotsThree size={18} weight="bold" />
@@ -868,7 +868,7 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
                   disabled={downloading}
                   className={MENU_ITEM}
                 >
-                  {downloading ? 'Downloading...' : 'Download archive'}
+                  {downloading ? 'Завантаження…' : 'Завантажити архів'}
                 </DropdownMenu.Item>
 
                 <DropdownMenu.Item
@@ -877,7 +877,7 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
                   disabled={updatingPinned}
                   className={MENU_ITEM}
                 >
-                  {updatingPinned ? 'Updating...' : (isPinned ? 'Unfavorite' : 'Favorite')}
+                  {updatingPinned ? 'Оновлення…' : (isPinned ? 'Вилучити з обраного' : 'Додати до обраного')}
                 </DropdownMenu.Item>
 
                 {sourceWorkspace && (
@@ -886,7 +886,7 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
                     onClick={() => window.open(`/workspace/${sourceWorkspace.workspaceId}`, '_blank', 'noopener,noreferrer')}
                     className={MENU_ITEM}
                   >
-                    Go to workspace
+                    До робочого простору
                   </DropdownMenu.Item>
                 )}
 
@@ -899,7 +899,7 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
                       onClick={() => setShowDeleteConfirm(true)}
                       className={MENU_ITEM_DANGER}
                     >
-                      Delete blueprint
+                      Видалити шаблон
                     </DropdownMenu.Item>
                   </>
                 )}
@@ -914,7 +914,7 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
                         onClick={() => setShowDeleteConfirm(true)}
                         className={MENU_ITEM_DANGER}
                       >
-                        Delete blueprint
+                        Видалити шаблон
                       </DropdownMenu.Item>
                     ) : (
                       <DropdownMenu.Item
@@ -924,7 +924,7 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
                         disabled={removingFromLibrary}
                         className={MENU_ITEM_DANGER}
                       >
-                        {removingFromLibrary ? 'Removing...' : 'Remove from library'}
+                        {removingFromLibrary ? 'Вилучення…' : 'Вилучити з бібліотеки'}
                       </DropdownMenu.Item>
                     )}
                   </>
@@ -939,7 +939,7 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
                       disabled={updatingFeatured}
                       className={MENU_ITEM}
                     >
-                      {updatingFeatured ? 'Updating...' : (isFeatured ? 'Unfeature blueprint' : 'Feature blueprint')}
+                      {updatingFeatured ? 'Оновлення…' : (isFeatured ? 'Прибрати зі рекомендованих' : 'Додати до рекомендованих')}
                     </DropdownMenu.Item>
                   </>
                 )}
@@ -954,7 +954,7 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
             <section>
               <div className="mb-2 flex items-center gap-2 px-1">
                 <h2 className="text-[12px] font-medium uppercase tracking-[0.08em] text-kumo-inactive">
-                  Required connections
+                  Обов’язкові підключення
                 </h2>
                 <span className="text-[12px] font-medium tracking-[-0.1px] text-kumo-inactive">
                   {bindingEntries.length}
@@ -962,7 +962,7 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
               </div>
               <div className="mb-3 px-1 text-[13px] leading-[18px] font-normal tracking-[-0.25px] text-kumo-subtle">
                 {readyCount === bindingEntries.length
-                  ? 'Everything is ready. You can change any connection before creating the Gadget.'
+                  ? 'Усе готово. Перед створенням гаджета можна змінити будь-яке підключення.'
                   : `${readyCount} of ${bindingEntries.length} ready. Suggestions are used automatically when they match one of your connected accounts.`}
               </div>
               <div className="overflow-hidden rounded-2xl border border-kumo-line bg-kumo-base">
@@ -982,10 +982,10 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
           ) : (
             <section className="rounded-2xl border border-kumo-line bg-kumo-base px-5 py-5">
               <p className="m-0 text-[15px] leading-5 font-medium tracking-[-0.25px] text-kumo-default">
-                No connections required
+                Підключення не потрібні
               </p>
               <p className="mt-1 text-[13px] leading-[18px] font-normal tracking-[-0.25px] text-kumo-subtle">
-                This blueprint can create a Gadget without configuring external resources.
+                Цей шаблон може створити гаджет без налаштування зовнішніх ресурсів.
               </p>
             </section>
           )}
@@ -1018,12 +1018,12 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
                   <Dialog.Description className="mt-1 text-[13px] leading-[18px] font-normal tracking-[-0.25px] text-kumo-subtle">
                     {activeBinding.type === 'gatekeeper' && activeBinding.description
                       ? activeBinding.description
-                      : 'Choose the resource or model this new Gadget should use.'}
+                      : 'Виберіть ресурс або модель для нового гаджета.'}
                   </Dialog.Description>
                 </div>
                 <Dialog.Close
                   render={(props) => (
-                    <WorkshopIconButton {...props} aria-label="Close">
+                    <WorkshopIconButton {...props} aria-label="Закрити">
                       <X size={16} />
                     </WorkshopIconButton>
                   )}
@@ -1052,14 +1052,14 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
 
               <div className="shrink-0 flex items-center justify-end gap-2 border-t border-kumo-line px-5 py-3">
                 <WorkshopButton onClick={() => setActiveBindingName(null)}>
-                  Cancel
+                  Скасувати
                 </WorkshopButton>
                 <WorkshopButton
                   tone="primary"
                   onClick={handleSaveActiveBinding}
                   disabled={!canSaveActiveBinding()}
                 >
-                  Save connection
+                  Зберегти підключення
                 </WorkshopButton>
               </div>
             </>
@@ -1075,18 +1075,18 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
       >
         <Dialog className="responsive-dialog overflow-y-auto p-8" size="sm">
           <Dialog.Title className="text-lg font-semibold">
-            Delete blueprint
+            Видалити шаблон
           </Dialog.Title>
           <Dialog.Description className="mt-2 text-kumo-subtle">
             Delete "{blueprint?.metadata.title}"? {canDeleteOwnedBlueprint
-              ? 'This blueprint link will stop working, but gadgets already created from it won’t be affected.'
-              : 'This blueprint was uploaded manually and cannot be recovered.'}
+              ? 'Це посилання на шаблон перестане працювати, але вже створені на його основі гаджети залишаться.'
+              : 'Цей шаблон завантажено вручну, його неможливо відновити.'}
           </Dialog.Description>
           <div className="mt-6 flex justify-end gap-2">
             <Dialog.Close
               render={(props) => (
                 <Button variant="secondary" {...props} disabled={removingFromLibrary}>
-                  Cancel
+                  Скасувати
                 </Button>
               )}
             />
@@ -1095,7 +1095,7 @@ export default function BlueprintLandingPage({ rpcStub }: Props) {
               onClick={canDeleteOwnedBlueprint ? handleDeleteOwnedBlueprint : handleRemoveFromLibrary}
               loading={removingFromLibrary}
             >
-              Delete
+              Видалити
             </Button>
           </div>
         </Dialog>
@@ -1140,7 +1140,7 @@ function BlueprintScreenshotHero({
           render={(props) => (
             <WorkshopIconButton
               {...props}
-              aria-label="Close screenshot"
+              aria-label="Закрити знімок екрана"
               className="!absolute !right-3 !top-3 !z-10 !h-8 !w-8 rounded-full border border-kumo-line bg-kumo-base/90 text-kumo-subtle shadow-[0_1px_2px_rgba(0,0,0,0.05)] backdrop-blur-sm hover:bg-kumo-base hover:text-kumo-default"
             >
               <X size={18} />
@@ -1251,8 +1251,8 @@ function BlueprintBindingSummaryCard({
   const typeLabel = binding.type === 'gatekeeper'
     ? (vendor?.description.displayName ?? binding.gatekeeperName)
     : binding.type === 'aiModel'
-      ? 'AI Model'
-      : 'Agent'
+      ? 'Модель ШІ'
+      : 'Агент'
   const resource = binding.type === 'gatekeeper'
     ? vendor?.supportedResources.find(r => r.urlPattern === binding.typeUrlPattern)
     : null
@@ -1262,7 +1262,7 @@ function BlueprintBindingSummaryCard({
       ? `${binding.suggestedModel.provider} / ${binding.suggestedModel.modelName}`
       : binding.type === 'agentSpawner'
         ? binding.suggestedModel === null
-          ? 'No agent'
+          ? 'Без агента'
           : binding.suggestedModel
             ? `${binding.suggestedModel.provider} / ${binding.suggestedModel.modelName}`
             : undefined
@@ -1272,7 +1272,7 @@ function BlueprintBindingSummaryCard({
   const detail = [
     typeLabel,
     resource?.title,
-    binding.spawnerOnly ? 'For spawned agents only' : null,
+    binding.spawnerOnly ? 'Лише для запущених агентів' : null,
   ].filter(Boolean).join(' · ')
   const usingLabel = (() => {
     if (!assignment) return null
@@ -1280,11 +1280,11 @@ function BlueprintBindingSummaryCard({
     if (assignment.type === 'aiModel') {
       return modelsByIdLabel(assignment.modelId)
     }
-    if (assignment.modelId === null) return 'No agent'
+    if (assignment.modelId === null) return 'Без агента'
     return modelsByIdLabel(assignment.modelId)
   })()
-  const status = assignment ? 'Ready' : suggestion ? 'Suggested' : 'Needs setup'
-  const actionLabel = assignment ? 'Change' : 'Configure'
+  const status = assignment ? 'Готово' : suggestion ? 'Рекомендовано' : 'Потрібне налаштування'
+  const actionLabel = assignment ? 'Змінити' : 'Налаштувати'
 
   function modelsByIdLabel(modelId: string) {
     return models.find(model => model.id === modelId)?.name ?? modelId
@@ -1393,9 +1393,9 @@ function BindingField({
           <p className="text-xs text-kumo-subtle mb-1">{binding.description}</p>
         )}
         <Select
-          aria-label="Choose an AI model"
+          aria-label="Виберіть модель ШІ"
           className="w-full text-sm"
-          placeholder="Choose an AI model"
+          placeholder="Виберіть модель ШІ"
           value={(value as any).modelId || undefined}
           onValueChange={(modelId) => onChange({ modelId } as any)}
           renderValue={(id) => models.find(m => m.id === id)?.name ?? String(id)}
@@ -1410,7 +1410,7 @@ function BindingField({
         </Select>
         {models.length === 0 && (
           <p className="text-xs text-kumo-subtle mt-1">
-            No AI models are available yet. Add a model from AI Providers first.
+            Моделі ШІ поки недоступні. Спершу додайте модель у розділі «Провайдери ШІ».
           </p>
         )}
       </div>
@@ -1431,18 +1431,18 @@ function BindingField({
           <p className="text-xs text-kumo-subtle mb-1">{binding.description}</p>
         )}
         <Select
-          aria-label="Choose a model for the agent spawner"
+          aria-label="Виберіть модель для запуску агента"
           className="w-full text-sm"
-          placeholder="Choose a model for the agent spawner"
+          placeholder="Виберіть модель для запуску агента"
           value={selectedModelId}
           onValueChange={(modelId) => onChange({ modelId: modelId === NO_AGENT_MODEL_ID ? null : modelId } as any)}
           renderValue={(id) => {
-            if (id === NO_AGENT_MODEL_ID) return '(No agent)'
+            if (id === NO_AGENT_MODEL_ID) return '(Без агента)'
             return models.find(m => m.id === id)?.name ?? String(id)
           }}
           container={selectPortalContainer}
         >
-          <Select.Option value={NO_AGENT_MODEL_ID}>(No agent)</Select.Option>
+          <Select.Option value={NO_AGENT_MODEL_ID}>(Без агента)</Select.Option>
           {models.map(m => (
             <Select.Option key={m.id} value={m.id}>
               {m.name}
@@ -1667,7 +1667,7 @@ function BlueprintGatekeeperBindingField({
         <div className="space-y-2.5">
           {binding.resourceUrl && (
             <p className="m-0 pl-[2px] text-[12px] leading-4 font-normal tracking-[-0.2px] text-kumo-subtle">
-              Blueprint recommends: <span className="break-all text-kumo-default">{formatSuggestedResource(binding.resourceUrl)}</span>
+              Рекомендація шаблону: <span className="break-all text-kumo-default">{formatSuggestedResource(binding.resourceUrl)}</span>
             </p>
           )}
 
