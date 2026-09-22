@@ -84,6 +84,11 @@ export type VendorDescription = {
  * each time rather than baked into the account, since a user's admin status can change over time.
  */
 export type AppUiContext = {
+  /** Opaque authenticated actor id used to attribute shared management activity. */
+  actorId: string;
+  /** Current display data used to identify the actor in shared management activity. */
+  actor: { displayName: string; avatar?: AvatarImage };
+  /** Whether the actor is currently a deployment administrator. */
   isAdmin: boolean;
 }
 
