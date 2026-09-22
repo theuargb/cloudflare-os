@@ -610,8 +610,12 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
     let accounts = await user.listProvidedAccounts();
     let app = accounts.find((account: (typeof accounts)[number]) => account.vendorId === id && account.description.providesUi);
     if (!app) return null;
-    // isAdmin is supplied fresh per open so admin-gated features reflect the user's current status.
-    return user.startAccountAppUi(app.accountId, { isAdmin: this.#isAdmin() });
+    // The actor and current authority are supplied fresh on every open.
+    return user.startAccountAppUi(app.accountId, {
+      actorId: this.#userId.toString(),
+      actor: {displayName: this.#userId.name ?? this.#userId.toString()},
+      isAdmin: this.#isAdmin(),
+    });
   }
 
   // --- Deployment admin ---
