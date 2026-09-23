@@ -208,7 +208,7 @@ export default function CodeEditor({
         className="flex justify-center items-center bg-kumo-base text-kumo-subtle"
         style={{ height }}
       >
-        Select a file to start editing
+        Виберіть файл, щоб почати редагування
       </div>
     )
   }

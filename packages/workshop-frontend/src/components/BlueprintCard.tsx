@@ -51,10 +51,10 @@ export function uniqueBindingBadges(
         b.gatekeeperName.charAt(0).toUpperCase() + b.gatekeeperName.slice(1);
     } else if (b.type === "aiModel") {
       key = "aiModel";
-      label = "AI Model";
+      label = "Модель ШІ";
     } else {
       key = "agentSpawner";
-      label = "Agent";
+      label = "Агент";
     }
     if (!seen.has(key)) {
       seen.add(key);
@@ -144,7 +144,7 @@ export function BlueprintCard({
               {metadata.title}
             </p>
             <p className={`mt-1.5 line-clamp-2 min-h-8 text-[12px] leading-4 font-normal tracking-[-0.2px] ${metadata.description ? "text-kumo-subtle" : "text-kumo-inactive italic"}`}>
-              {metadata.description || "No description"}
+              {metadata.description || "Опис відсутній"}
             </p>
           </div>
         </div>

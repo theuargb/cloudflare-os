@@ -10,7 +10,7 @@ export default function ReconnectingChip() {
       role="status"
       className="text-xs text-kumo-warning px-2 py-0.5 rounded-full bg-kumo-warning-tint border border-kumo-warning/20"
     >
-      Reconnecting…
+      Повторне підключення…
     </span>
   )
 }

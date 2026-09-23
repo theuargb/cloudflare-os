@@ -55,7 +55,7 @@ export default function AccountSelectionModal() {
     setSaving(true)
     try {
       await auth.authenticatedApi.selectCloudflareAccount(chosen)
-      toasts.add({ title: 'Cloudflare account selected', variant: 'success' })
+      toasts.add({ title: 'Обліковий запис Cloudflare вибрано', variant: 'success' })
       setNeedsSelection(false)
       setAccounts(null)
     } catch (err) {
@@ -74,7 +74,7 @@ export default function AccountSelectionModal() {
         <div className="shrink-0 px-6 pt-6">
           <Dialog.Title className="text-lg font-semibold mb-2 flex items-center gap-2">
             <Warning size={22} weight="bold" className="text-kumo-warning" />
-            Choose a Cloudflare account
+            Виберіть обліковий запис Cloudflare
           </Dialog.Title>
           <p className="text-sm text-kumo-subtle">
             Your Cloudflare connection has access to multiple accounts. Select the one whose credits
@@ -86,7 +86,7 @@ export default function AccountSelectionModal() {
           {accounts === null ? (
             <div className="flex justify-center py-6"><Loader size="base" /></div>
           ) : accounts.length === 0 ? (
-            <p className="text-sm text-kumo-subtle">No accounts available on this connection.</p>
+            <p className="text-sm text-kumo-subtle">Для цього підключення немає доступних облікових записів.</p>
           ) : (
             <Radio.Group
               appearance="card"
@@ -94,7 +94,7 @@ export default function AccountSelectionModal() {
               onValueChange={setChosen}
               disabled={saving}
             >
-              <Radio.Legend className="sr-only">Cloudflare account</Radio.Legend>
+              <Radio.Legend className="sr-only">Обліковий запис Cloudflare</Radio.Legend>
               {accounts.map((a) => (
                 <Radio.Item key={a.accountId} value={a.accountId} label={a.accountName} />
               ))}
@@ -109,10 +109,10 @@ export default function AccountSelectionModal() {
             // un-actionable modal — let them retry or dismiss (it re-checks on focus).
             <>
               <Button variant="ghost" onClick={() => setNeedsSelection(false)}>
-                Dismiss
+                Закрити
               </Button>
               <Button variant="secondary" onClick={() => setAccounts(null)}>
-                Try again
+                Спробувати ще раз
               </Button>
             </>
           ) : (
@@ -122,7 +122,7 @@ export default function AccountSelectionModal() {
               loading={saving}
               disabled={!chosen || saving}
             >
-              Save
+              Зберегти
             </Button>
           )}
         </div>

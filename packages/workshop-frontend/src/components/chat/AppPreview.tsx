@@ -15,12 +15,12 @@ export default function AppPreview() {
         {/* App header */}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <Text variant="heading2" as="h1">Channel Summarizer</Text>
+            <Text variant="heading2" as="h1">Підсумовувач каналів</Text>
             <p className="text-sm text-kumo-subtle mt-1">
-              Daily digest of your Slack channels, powered by Workers AI
+              Щоденний огляд каналів Slack на базі Workers AI
             </p>
           </div>
-          <Badge variant="success">Live</Badge>
+          <Badge variant="success">Активний</Badge>
         </div>
 
         {/* Channel cards */}
@@ -67,7 +67,7 @@ export default function AppPreview() {
         {/* Quiet channels */}
         <div className="mt-6">
           <div className="text-xs font-semibold text-kumo-subtle uppercase tracking-wider mb-3">
-            No new activity
+            Нової активності немає
           </div>
           <div className="flex flex-wrap gap-2">
             {sampleDataRows.filter(r => !r.unread).map((row) => (

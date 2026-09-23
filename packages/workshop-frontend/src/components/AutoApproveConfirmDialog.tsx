@@ -42,7 +42,7 @@ export default function AutoApproveConfirmDialog({
               Always approve “{actionLabel}”?
             </Dialog.Title>
             <Dialog.Description className="mt-1 text-[12px] leading-4 font-normal tracking-[-0.2px] text-kumo-subtle">
-              Future <span className="font-medium text-kumo-default">{actionLabel}</span> actions on{' '}
+              Майбутні <span className="font-medium text-kumo-default">{actionLabel}</span> actions on{' '}
               <span className="font-medium text-kumo-default">{resourceTitle}</span> will be applied
               automatically, without asking for approval. This action will be applied now too.
             </Dialog.Description>
@@ -53,7 +53,7 @@ export default function AutoApproveConfirmDialog({
                 {...props}
                 className="!h-7 !w-7"
                 disabled={isProcessing}
-                aria-label="Close"
+                aria-label="Закрити"
               >
                 <X size={16} />
               </WorkshopIconButton>
@@ -65,7 +65,7 @@ export default function AutoApproveConfirmDialog({
           <Dialog.Close
             render={(props) => (
               <WorkshopButton {...props} className="!h-9" disabled={isProcessing}>
-                Cancel
+                Скасувати
               </WorkshopButton>
             )}
           />
@@ -75,7 +75,7 @@ export default function AutoApproveConfirmDialog({
             disabled={isProcessing}
             className="!h-9 min-w-[64px]"
           >
-            {isProcessing ? 'Enabling...' : 'Always approve'}
+            {isProcessing ? 'Увімкнення…' : 'Завжди схвалювати'}
           </WorkshopButton>
         </div>
       </Dialog>
