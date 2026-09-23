@@ -106,7 +106,11 @@ describe("push authorization through the Overseer chokepoints", () => {
     await inOverseer("push-apply", async impl => {
       let { base, head } = await seedPushableHistory(impl);
 
-      await impl.submitAction(GATEKEEPER, 1, pushDescription([head]), { from: "user" });
+      impl.getActionContextForUser = async () => ({
+        actorId: "alice@example.com", actor: {displayName: "Alice"}, isAdmin: false,
+      });
+      await impl.submitAction(GATEKEEPER, 1, pushDescription([head]),
+          { from: "user", userId: "alice@example.com" });
       let record = Array.from(impl.storage.actions.list())
           .find((a: any) => a.type === "action") as any;
       expect(record.state).toBe("pending");
@@ -142,7 +146,11 @@ describe("push authorization through the Overseer chokepoints", () => {
       let treeOid = await storeLocal(impl, "tree", new Uint8Array(0));
       let root = await storeLocal(impl, "commit", commitPayload(treeOid, [], "unrelated root"));
 
-      await expect(impl.submitAction(GATEKEEPER, 1, pushDescription([root]), { from: "user" }))
+      impl.getActionContextForUser = async () => ({
+        actorId: "alice@example.com", actor: {displayName: "Alice"}, isAdmin: false,
+      });
+      await expect(impl.submitAction(GATEKEEPER, 1, pushDescription([root]),
+          { from: "user", userId: "alice@example.com" }))
           .rejects.toThrow(/root commit/);
       expect(Array.from(impl.storage.actions.list())).toStrictEqual([]);
       expect(Array.from(impl.storage.gitObjectMetadata.byPendingPushAction.list()))
@@ -168,7 +176,11 @@ describe("push authorization through the Overseer chokepoints", () => {
   it("cleans a queued push's marks when its gatekeeper is removed", async () => {
     await inOverseer("push-gatekeeper-removed", async impl => {
       let { head } = await seedPushableHistory(impl);
-      await impl.submitAction(GATEKEEPER, 1, pushDescription([head]), { from: "user" });
+      impl.getActionContextForUser = async () => ({
+        actorId: "alice@example.com", actor: {displayName: "Alice"}, isAdmin: false,
+      });
+      await impl.submitAction(GATEKEEPER, 1, pushDescription([head]),
+          { from: "user", userId: "alice@example.com" });
       let record = Array.from(impl.storage.actions.list())
           .find((a: any) => a.type === "action") as any;
       expect(marksOf(impl, record.id)).toStrictEqual([head]);
