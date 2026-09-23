@@ -25,7 +25,7 @@ catalog:
   vite: 7.3.6
   vite-plus: ^0.2.8
   vitest: ^4.1.11
-  wrangler: ^4.128.0
+  wrangler: ^4.136.1
 
 overrides:
   # Keep the test pool's Wrangler/Miniflare/workerd stack aligned with the workspace toolchain.

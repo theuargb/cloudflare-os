@@ -1,0 +1,9 @@
+{
+  "$schema": "../../../../node_modules/wrangler/config-schema.json",
+  "name": "integration-hr-database-bootstrap",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-09-04",
+  "d1_databases": [
+    { "binding": "DATABASE", "database_name": "hr-agent-integration", "database_id": "00000000-0000-0000-0000-000000000001" }
+  ]
+}
