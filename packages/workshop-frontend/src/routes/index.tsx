@@ -40,7 +40,7 @@ function HomePage() {
 }
 
 export function HomePageContent({ prompt }: HomeSearch) {
-  useDocumentTitle("Home");
+  useDocumentTitle("Головна");
 
   const { authenticatedApi, currentUser } = useAuthenticatedApi();
   const navigate = useNavigate();
@@ -70,7 +70,7 @@ export function HomePageContent({ prompt }: HomeSearch) {
         // Toast unless it's a connection error (reconnect refetches); a do-reset here already
         // survived the Worker's same-colo retry, so the user should hear about it.
         if (classifyRpcError(err) !== "connection") {
-          toasts.add({ title: "Couldn't load AI models", variant: "error" });
+          toasts.add({ title: "Не вдалося завантажити моделі ШІ", variant: "error" });
         }
       });
     return () => {
@@ -130,7 +130,7 @@ export function HomePageContent({ prompt }: HomeSearch) {
           provisionalOverseerRef.current = null;
         }
         if (!transient) {
-          toasts.add({ title: "Failed to create workspace", variant: "error" });
+          toasts.add({ title: "Не вдалося створити робочий простір", variant: "error" });
         }
         throw err;
       }

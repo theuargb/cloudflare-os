@@ -98,8 +98,8 @@ export default function BlueprintModal({ open, onClose, overseer, gadget, metada
     try {
       setBlueprints(await overseer.listBlueprints())
     } catch (err) {
-      console.error('Failed to load blueprints:', err)
-      toasts.add({ title: 'Failed to load blueprints', variant: 'error' })
+      console.error('Не вдалося завантажити шаблони:', err)
+      toasts.add({ title: 'Не вдалося завантажити шаблони', variant: 'error' })
     } finally {
       setLoading(false)
     }
@@ -116,7 +116,7 @@ export default function BlueprintModal({ open, onClose, overseer, gadget, metada
       setBindings(loaded.filter((b): b is BindingCardData => b !== null))
     } catch (err) {
       console.error('Failed to load bindings:', err)
-      setBindingsError('Could not load connections.')
+      setBindingsError('Не вдалося завантажити підключення.')
     } finally {
       setBindingsLoading(false)
     }
@@ -157,7 +157,7 @@ export default function BlueprintModal({ open, onClose, overseer, gadget, metada
     if (!file) return
 
     if (!file.type.startsWith('image/')) {
-      toasts.add({ title: 'Please select an image file.', variant: 'error' })
+      toasts.add({ title: 'Виберіть файл зображення.', variant: 'error' })
       return
     }
 
@@ -172,7 +172,7 @@ export default function BlueprintModal({ open, onClose, overseer, gadget, metada
       setClearScreenshot(false)
     } catch (err) {
       console.error('Failed to process blueprint screenshot:', err)
-      toasts.add({ title: 'Failed to process screenshot', variant: 'error' })
+      toasts.add({ title: 'Не вдалося обробити знімок екрана', variant: 'error' })
     } finally {
       setProcessingScreenshot(false)
     }
@@ -205,7 +205,7 @@ export default function BlueprintModal({ open, onClose, overseer, gadget, metada
         newDescription.trim() || undefined,
         screenshot,
       )
-      toasts.add({ title: 'Blueprint created.', variant: 'success' })
+      toasts.add({ title: 'Шаблон створено.', variant: 'success' })
       setFormMode('list')
       setNewTitle(metadata.title)
       setNewDescription('')
@@ -214,7 +214,7 @@ export default function BlueprintModal({ open, onClose, overseer, gadget, metada
       setClearScreenshot(false)
       await loadBlueprints()
     } catch (err: any) {
-      setCreateError(err.message || 'Could not create blueprint.')
+      setCreateError(err.message || 'Не вдалося створити шаблон.')
     } finally {
       setCreating(false)
     }
@@ -244,7 +244,7 @@ export default function BlueprintModal({ open, onClose, overseer, gadget, metada
         updateBindings: true,
         screenshot,
       })
-      toasts.add({ title: 'Blueprint updated.', variant: 'success' })
+      toasts.add({ title: 'Шаблон оновлено.', variant: 'success' })
       setFormMode('list')
       setEditingBlueprint(null)
       setNewScreenshotBlob(null)
@@ -252,7 +252,7 @@ export default function BlueprintModal({ open, onClose, overseer, gadget, metada
       setClearScreenshot(false)
       await loadBlueprints()
     } catch (err: any) {
-      setCreateError(err.message || 'Could not update blueprint.')
+      setCreateError(err.message || 'Не вдалося оновити шаблон.')
     } finally {
       setCreating(false)
     }
@@ -262,11 +262,11 @@ export default function BlueprintModal({ open, onClose, overseer, gadget, metada
     setDeletingId(id)
     try {
       await overseer.deleteBlueprint(id)
-      toasts.add({ title: 'Blueprint deleted.', variant: 'success' })
+      toasts.add({ title: 'Шаблон видалено.', variant: 'success' })
       setConfirmingDeleteId(null)
       await loadBlueprints()
     } catch (err: any) {
-      toasts.add({ title: err.message || 'Failed to delete blueprint.', variant: 'error' })
+      toasts.add({ title: err.message || 'Не вдалося видалити шаблон.', variant: 'error' })
     } finally {
       setDeletingId(null)
     }
@@ -284,14 +284,14 @@ export default function BlueprintModal({ open, onClose, overseer, gadget, metada
             <div className="flex min-w-0 items-start gap-3">
               <div className="min-w-0">
               <Dialog.Title className="text-[17px] leading-6 font-medium tracking-[-0.35px] text-kumo-default">
-                {formMode === 'create' ? 'Create blueprint' : formMode === 'edit' ? 'Edit blueprint' : 'Blueprints'}
+                {formMode === 'create' ? 'Створити шаблон' : formMode === 'edit' ? 'Редагувати шаблон' : 'Шаблони'}
               </Dialog.Title>
               <Dialog.Description className="mt-1 text-[13px] leading-[18px] font-normal tracking-[-0.25px] text-kumo-subtle">
                 {formMode === 'create'
-                  ? 'Describe what people get when they start from this blueprint.'
+                  ? 'Опишіть, що отримають користувачі, коли почнуть роботу з цього шаблону.'
                   : formMode === 'edit'
-                    ? 'Update the details, screenshot, and connection guidance for this blueprint.'
-                    : 'Turn this gadget into a reusable starting point.'}
+                    ? 'Оновіть опис, знімок екрана та пояснення щодо підключень у цьому шаблоні.'
+                    : 'Перетворіть цей гаджет на шаблон для повторного використання.'}
               </Dialog.Description>
               </div>
             </div>
@@ -299,7 +299,7 @@ export default function BlueprintModal({ open, onClose, overseer, gadget, metada
               render={(props) => (
                 <WorkshopIconButton
                   {...props}
-                  aria-label="Close"
+                  aria-label="Закрити"
                 >
                   <X size={18} />
                 </WorkshopIconButton>
@@ -312,15 +312,15 @@ export default function BlueprintModal({ open, onClose, overseer, gadget, metada
                 <div className="chat-panel min-h-0 flex-1 space-y-5 overflow-y-auto px-4 py-5 sm:px-6">
                   <div className="space-y-3">
                     <WorkshopInput
-                      placeholder="Title"
-                      aria-label="Blueprint title"
+                      placeholder="Назва"
+                      aria-label="Назва шаблону"
                       value={newTitle}
                       onChange={(e) => setNewTitle(e.target.value)}
                       className="w-full"
                     />
                     <WorkshopInputArea
-                      placeholder="Description (optional)"
-                      aria-label="Blueprint description"
+                      placeholder="Опис (необов’язково)"
+                      aria-label="Опис шаблону"
                       value={newDescription}
                       onChange={(e) => setNewDescription(e.target.value)}
                       rows={3}
@@ -337,11 +337,11 @@ export default function BlueprintModal({ open, onClose, overseer, gadget, metada
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
                           <p className="m-0 text-[13px] leading-[18px] font-medium tracking-[-0.25px] text-kumo-default">
-                            Screenshot
+                            Знімок екрана
                           </p>
                           <p className="m-0 mt-0.5 text-[12px] leading-4 font-normal tracking-[-0.2px] text-kumo-subtle">
-                            Optional image shown on Explore and the blueprint detail page.
-                            {formMode === 'edit' && !newScreenshotUrl && editingBlueprint?.screenshotUrl && !clearScreenshot ? ' The current screenshot will stay unless you upload a new one.' : ''}
+                            Необов’язкове зображення для сторінок огляду та шаблону.
+                            {formMode === 'edit' && !newScreenshotUrl && editingBlueprint?.screenshotUrl && !clearScreenshot ? ' Поточний знімок залишиться, якщо не завантажити новий.' : ''}
                           </p>
                         </div>
                         <div className="flex shrink-0 items-center gap-1.5">
@@ -358,7 +358,7 @@ export default function BlueprintModal({ open, onClose, overseer, gadget, metada
                               }}
                               disabled={processingScreenshot || creating}
                             >
-                              Clear
+                              Очистити
                             </WorkshopButton>
                           )}
                           <WorkshopButton
@@ -367,7 +367,7 @@ export default function BlueprintModal({ open, onClose, overseer, gadget, metada
                             disabled={processingScreenshot || creating}
                           >
                             <ImageSquare size={13} weight="bold" />
-                            {processingScreenshot ? 'Processing...' : newScreenshotUrl || (formMode === 'edit' && editingBlueprint?.screenshotUrl && !clearScreenshot) ? 'Change' : 'Upload'}
+                            {processingScreenshot ? 'Обробка…' : newScreenshotUrl || (formMode === 'edit' && editingBlueprint?.screenshotUrl && !clearScreenshot) ? 'Замінити' : 'Завантажити'}
                           </WorkshopButton>
                         </div>
                       </div>
@@ -375,14 +375,14 @@ export default function BlueprintModal({ open, onClose, overseer, gadget, metada
                         <div className="mt-3 overflow-hidden rounded-lg border border-kumo-line bg-kumo-tint">
                           <img
                             src={screenshotPreviewUrl}
-                            alt="Blueprint screenshot preview"
+                            alt="Попередній перегляд знімка екрана шаблону"
                             className="max-h-[320px] w-full object-contain"
                           />
                         </div>
                       )}
                       {clearScreenshot && !newScreenshotUrl && (
                         <div className="mt-3 rounded-lg border border-dashed border-kumo-line bg-kumo-tint px-3 py-2 text-[12px] leading-4 text-kumo-subtle">
-                          Screenshot will be removed when you save.
+                          Знімок екрана буде вилучено після збереження.
                         </div>
                       )}
                     </div>
@@ -390,7 +390,7 @@ export default function BlueprintModal({ open, onClose, overseer, gadget, metada
 
                   {bindingsLoading ? (
                     <div className="rounded-xl border border-kumo-line bg-kumo-base px-4 py-6 text-center text-[13px] text-kumo-subtle">
-                      Loading connections...
+                      Завантаження підключень…
                     </div>
                   ) : bindingsError ? (
                     <div className="rounded-xl border border-kumo-line bg-kumo-base px-4 py-3 text-[13px] text-kumo-subtle">
@@ -399,10 +399,10 @@ export default function BlueprintModal({ open, onClose, overseer, gadget, metada
                   ) : bindings.length > 0 ? (
                     <section>
                       <h3 className="m-0 mb-1 text-[13px] leading-[18px] font-medium tracking-[-0.25px] text-kumo-default">
-                        Connections
+                        Підключення
                       </h3>
                       <p className="m-0 mb-3 text-[12px] leading-4 font-normal tracking-[-0.2px] text-kumo-subtle">
-                        Name each connection and add guidance for people using this blueprint.
+                        Назвіть кожне підключення та додайте пояснення для користувачів цього шаблону.
                       </p>
                       <div className="space-y-2">
                         {bindings.map((b) => (
@@ -433,7 +433,7 @@ export default function BlueprintModal({ open, onClose, overseer, gadget, metada
                       }}
                       disabled={creating}
                     >
-                      Back
+                      Назад
                     </WorkshopButton>
                     <WorkshopButton
                       tone="primary"
@@ -442,10 +442,10 @@ export default function BlueprintModal({ open, onClose, overseer, gadget, metada
                       disabled={creating || bindingsLoading || processingScreenshot}
                     >
                       {creating
-                        ? formMode === 'create' ? 'Creating...' : 'Saving...'
-                        : processingScreenshot ? 'Processing...'
-                          : bindingsLoading ? 'Loading...'
-                            : formMode === 'create' ? 'Create' : 'Save'}
+                        ? formMode === 'create' ? 'Створення…' : 'Збереження…'
+                        : processingScreenshot ? 'Обробка…'
+                          : bindingsLoading ? 'Завантаження…'
+                            : formMode === 'create' ? 'Створити' : 'Зберегти'}
                     </WorkshopButton>
                   </div>
                 </div>
@@ -467,10 +467,10 @@ export default function BlueprintModal({ open, onClose, overseer, gadget, metada
               >
                 <span>
                   <span className="block text-[13px] leading-[18px] font-medium tracking-[-0.25px] text-kumo-default">
-                    Create blueprint
+                    Створити шаблон
                   </span>
                   <span className="mt-0.5 block text-[13px] leading-[18px] font-normal tracking-[-0.25px] text-kumo-subtle">
-                    Publish this gadget as a reusable template.
+                    Опублікувати цей гаджет як шаблон для повторного використання.
                   </span>
                 </span>
                 <Plus size={16} className="text-kumo-subtle" />
@@ -478,17 +478,17 @@ export default function BlueprintModal({ open, onClose, overseer, gadget, metada
 
             <section>
               <h3 className="mb-2 text-[13px] leading-[18px] font-medium tracking-[-0.25px] text-kumo-default">
-                Existing blueprints
+                Наявні шаблони
               </h3>
 
               {loading ? (
                 <div className="rounded-xl border border-kumo-line bg-kumo-base px-4 py-6 text-center text-[13px] text-kumo-subtle">
-                  Loading blueprints...
+                  Завантаження шаблонів…
                 </div>
               ) : blueprints.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-kumo-line bg-kumo-base px-4 py-6 text-center">
                   <p className="text-[13px] leading-[18px] font-normal tracking-[-0.25px] text-kumo-subtle">
-                    No blueprints yet.
+                    Шаблонів поки немає.
                   </p>
                 </div>
               ) : (
@@ -510,19 +510,19 @@ export default function BlueprintModal({ open, onClose, overseer, gadget, metada
                       onUpdateCode={async () => {
                         try {
                           await overseer.updateBlueprint(bp.id, { updateCode: true })
-                          toasts.add({ title: 'Blueprint updated to current code.', variant: 'success' })
+                          toasts.add({ title: 'Шаблон оновлено поточним кодом.', variant: 'success' })
                           loadBlueprints()
                         } catch (err: any) {
-                          toasts.add({ title: err.message || 'Failed to update blueprint.', variant: 'error' })
+                          toasts.add({ title: err.message || 'Не вдалося оновити шаблон.', variant: 'error' })
                         }
                       }}
                       onRetryPublish={async () => {
                         try {
                           await overseer.retryBlueprintPublish(bp.id)
-                          toasts.add({ title: 'Blueprint published successfully.', variant: 'success' })
+                          toasts.add({ title: 'Шаблон успішно опубліковано.', variant: 'success' })
                           loadBlueprints()
                         } catch (err: any) {
-                          toasts.add({ title: err.message || 'Retry failed.', variant: 'error' })
+                          toasts.add({ title: err.message || 'Не вдалося повторити спробу.', variant: 'error' })
                         }
                       }}
                       onCopyLink={async () => {
@@ -587,10 +587,10 @@ function BlueprintRow({
         <div className="flex w-full flex-wrap items-center gap-3">
           <div className="min-w-0 flex-1">
             <p className="m-0 truncate text-[14px] leading-5 font-semibold tracking-[-0.3px] text-kumo-danger">
-              Delete "{bp.title}"?
+              Видалити «{bp.title}»?
             </p>
             <p className="m-0 mt-0.5 text-[12px] leading-4 font-normal tracking-[-0.2px] text-kumo-subtle">
-              People who started a gadget from this blueprint won't be affected, but the link will stop working.
+              Користувачі, які створили гаджет на основі цього шаблону, не постраждають, але посилання перестане працювати.
             </p>
           </div>
           <button
@@ -599,7 +599,7 @@ function BlueprintRow({
             disabled={isDeleting}
             className="inline-flex h-7 shrink-0 cursor-pointer items-center rounded-md bg-kumo-danger px-2.5 text-[12px] leading-4 font-medium tracking-[-0.2px] text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isDeleting ? 'Deleting...' : 'Delete'}
+            {isDeleting ? 'Видалення…' : 'Видалити'}
           </button>
           <button
             type="button"
@@ -607,7 +607,7 @@ function BlueprintRow({
             disabled={isDeleting}
             className="inline-flex h-7 shrink-0 cursor-pointer items-center rounded-md bg-transparent px-2.5 text-[12px] leading-4 font-medium tracking-[-0.2px] text-kumo-subtle transition-colors hover:bg-kumo-tint hover:text-kumo-default disabled:cursor-not-allowed disabled:opacity-50"
           >
-            Cancel
+            Скасувати
           </button>
         </div>
       </div>
@@ -629,7 +629,7 @@ function BlueprintRow({
               ? 'border-kumo-brand/25 bg-kumo-brand/10 text-kumo-brand'
               : 'border-kumo-line bg-kumo-tint text-kumo-subtle'
           }`}
-          title={bp.dirty ? 'Last publish failed' : undefined}
+          title={bp.dirty ? 'Не вдалося опублікувати' : undefined}
         >
           {bp.dirty && (
             <span
@@ -637,7 +637,7 @@ function BlueprintRow({
               aria-hidden="true"
             />
           )}
-          v{bp.version} · {new Date(bp.codeVersionDate).toLocaleDateString()}
+          v{bp.version} · {new Date(bp.codeVersionDate).toLocaleDateString('uk-UA')}
         </span>
       </div>
 
@@ -648,7 +648,7 @@ function BlueprintRow({
           </p>
         ) : (
           <p className="m-0 text-[13px] leading-[18px] font-normal tracking-[-0.25px] text-kumo-inactive">
-            No description
+            Опис відсутній
           </p>
         )}
       </div>
@@ -656,11 +656,11 @@ function BlueprintRow({
       <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
         <div className="-ml-[7px] flex flex-wrap items-center gap-1">
           <GhostButton onClick={onUpdateCode} icon={<ArrowsClockwise size={13} />}>
-            Update code
+            Оновити код
           </GhostButton>
           {bp.dirty && (
             <GhostButton onClick={onRetryPublish} icon={<ArrowsClockwise size={13} />}>
-              Retry publish
+              Повторити публікацію
             </GhostButton>
           )}
           <GhostButton
@@ -675,7 +675,7 @@ function BlueprintRow({
               )
             }
           >
-            {copyState === 'copied' ? 'Copied' : copyState === 'failed' ? 'Copy failed' : 'Copy link'}
+            {copyState === 'copied' ? 'Скопійовано' : copyState === 'failed' ? 'Не вдалося скопіювати' : 'Скопіювати посилання'}
           </GhostButton>
         </div>
         <div className="-mr-1.5 ml-auto flex items-center gap-0.5 opacity-60 transition-opacity group-hover/row:opacity-100 focus-within:opacity-100">
@@ -683,7 +683,7 @@ function BlueprintRow({
             type="button"
             onClick={onStartEdit}
             className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md bg-transparent text-kumo-subtle transition-colors hover:bg-kumo-tint hover:text-kumo-default"
-            aria-label="Edit blueprint"
+            aria-label="Редагувати шаблон"
           >
             <Pencil size={13} />
           </button>
@@ -691,7 +691,7 @@ function BlueprintRow({
             type="button"
             onClick={onStartDelete}
             className="inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md bg-transparent text-kumo-subtle transition-colors hover:bg-kumo-danger-tint hover:text-kumo-danger"
-            aria-label="Delete blueprint"
+            aria-label="Видалити шаблон"
           >
             <Trash size={13} />
           </button>
