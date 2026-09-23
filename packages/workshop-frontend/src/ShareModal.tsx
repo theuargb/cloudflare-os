@@ -36,7 +36,7 @@ const NO_DIRECTORY_SEARCH: DirectorySearch = { status: 'ready', query: '', resul
 // the chip stays for correction while everyone else's goes through.
 type StagedRecipient = { id: string; name: string; error?: string }
 const NO_IDS: ReadonlySet<string> = new Set()
-const NAME_LIST = new Intl.ListFormat('en', { type: 'conjunction' })
+const NAME_LIST = new Intl.ListFormat('uk', { type: 'conjunction' })
 
 function withRecipient(list: StagedRecipient[], recipient: StagedRecipient): StagedRecipient[] {
   return list.some(entry => entry.id === recipient.id) ? list : [...list, recipient]
@@ -72,17 +72,17 @@ function formatRelativeTime(date: Date): string {
   if (diffMinutes < 60) return `${diffMinutes}m ago`
   if (diffHours < 24) return `${diffHours}h ago`
   if (diffDays < 7) return `${diffDays}d ago`
-  return date.toLocaleDateString()
+  return date.toLocaleDateString('uk-UA')
 }
 
 const ROLE_LABELS: Record<CollaboratorRole, string> = {
-  build: 'Workspace',
-  use: 'Gadget only',
+  build: 'Робочий простір',
+  use: 'Лише гаджети',
 }
 
 const ROLE_DESCRIPTIONS: Record<CollaboratorRole, string> = {
-  build: 'Edit gadgets, use chat, and manage access.',
-  use: 'Use gadgets without agent chat or editing.',
+  build: 'Редагуйте гаджети, спілкуйтеся в чаті та керуйте доступом.',
+  use: 'Використовуйте гаджети без чату з агентом і редагування.',
 }
 
 function roleLabel(role: CollaboratorRole | undefined): string {
@@ -195,7 +195,7 @@ function InlineConfirm({
         type="button"
         onClick={onCancel}
         disabled={busy}
-        aria-label="Cancel"
+        aria-label="Скасувати"
         className="grid h-7 w-7 cursor-pointer place-items-center rounded-lg text-kumo-inactive transition-[background-color,color,transform] duration-150 ease-out hover:bg-kumo-tint hover:text-kumo-default active:scale-[0.96] disabled:opacity-60"
       >
         <X size={14} />
@@ -265,7 +265,7 @@ function RecipientVerification({
   if (failed) {
     body = (
       <p className="px-1 text-[12px] leading-[16px] tracking-[-0.15px] text-kumo-subtle">
-        Couldn’t check which connections recipients will be asked to verify.
+        Не вдалося перевірити, які підключення мають підтвердити отримувачі.
       </p>
     )
   } else if (requirements === null || requirements.length === 0) {
@@ -276,8 +276,8 @@ function RecipientVerification({
       <div className="rounded-2xl border border-kumo-line/80 bg-kumo-base px-3 py-2.5">
         <p className="text-[12px] leading-[16px] tracking-[-0.15px] text-kumo-subtle">
           {role ? (
-            <>People with <span className="font-medium text-kumo-default">{roleLabel(role)}</span> access must</>
-          ) : 'Recipients must'} prove their own account can reach:
+            <>Користувачі з <span className="font-medium text-kumo-default">{roleLabel(role)}</span> мають доступ</>
+          ) : 'Отримувачі мають'} підтвердити доступ свого облікового запису до:
         </p>
         <ul className="mt-1.5 max-h-32 space-y-1 overflow-y-auto">
           {requirements.map(requirement => (
@@ -551,7 +551,7 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
       return { collaborators: collabs, shareLinks: keys }
     } catch (err) {
       console.error('Failed to load share data:', err)
-      toasts.add({ title: 'Failed to load sharing info', variant: 'error' })
+      toasts.add({ title: 'Не вдалося завантажити дані спільного доступу', variant: 'error' })
       setMembershipStatus(current => current === 'ready' ? current : 'failed')
       return null
     }
@@ -698,7 +698,7 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
     if (!edge) return 'Collaborator'
     if (edge.type === 'user') return `Added directly by ${edge.sharer}`
     const key = shareLinks.find(item => item.linkId === edge.keyId)
-    return key?.note ? `Joined through “${key.note}”` : 'Joined through a share link'
+    return key?.note ? `Приєдналися за посиланням «${key.note}»` : 'Приєдналися за посиланням'
   }
 
   const copyNewLink = async () => {
@@ -707,7 +707,7 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
     if (copied) {
       setNewShareLinkCopied(true)
     } else {
-      toasts.add({ title: 'Could not copy share link.', variant: 'error' })
+      toasts.add({ title: 'Не вдалося скопіювати посилання для спільного доступу.', variant: 'error' })
     }
   }
 
@@ -719,7 +719,7 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
     if (await copyToClipboard(workspaceUrl)) {
       setInvitedLinkCopied(true)
     } else {
-      toasts.add({ title: 'Could not copy the workspace link.', variant: 'error' })
+      toasts.add({ title: 'Не вдалося скопіювати посилання на робочий простір.', variant: 'error' })
     }
   }
 
@@ -810,10 +810,10 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
           const { reason } = outcome
           failed.push({
             ...recipient,
-            error: reason instanceof Error ? reason.message : 'Failed to add collaborator.',
+            error: reason instanceof Error ? reason.message : 'Не вдалося додати учасника.',
           })
         } else if (outcome.value === null) {
-          failed.push({ ...recipient, error: 'No account found for that username or email.' })
+          failed.push({ ...recipient, error: 'За цим ім’ям користувача або адресою електронної пошти обліковий запис не знайдено.' })
         } else {
           added.push(outcome.value.profile)
         }
@@ -884,7 +884,7 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
       }
       const copied = await copyToClipboard(url)
       if (!copied) {
-        toasts.add({ title: 'Could not copy share link.', variant: 'error' })
+        toasts.add({ title: 'Не вдалося скопіювати посилання для спільного доступу.', variant: 'error' })
         return
       }
       setCopiedLinkId(linkId)
@@ -894,7 +894,7 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
         setCopiedLinkId(current => (current === linkId ? null : current))
         copiedTimerRef.current = null
       }, 2000)
-      toasts.add({ title: 'Link copied to clipboard.', variant: 'success' })
+      toasts.add({ title: 'Посилання скопійовано в буфер обміну.', variant: 'success' })
     } catch (err: any) {
       toasts.add({ title: err.message || 'Failed to copy share link.', variant: 'error' })
     } finally {
@@ -924,8 +924,8 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
       setConfirmationTarget(null)
       toasts.add({
         title: removed.length > 0
-          ? 'Collaborator removed.'
-          : 'Your direct grant was removed. This collaborator still has access through another source.',
+          ? 'Учасника вилучено.'
+          : 'Ваш прямий дозвіл вилучено. У цього учасника все ще є доступ через інше джерело.',
         variant: 'success',
       })
       await loadData()
@@ -963,7 +963,7 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
       cancelRenameShareLink()
       await loadData()
       showLandedRow('shareLink', [linkId])
-      toasts.add({ title: 'Share link renamed.', variant: 'success' })
+      toasts.add({ title: 'Посилання для спільного доступу перейменовано.', variant: 'success' })
     } catch (err: any) {
       toasts.add({ title: err.message || 'Failed to rename share link.', variant: 'error' })
     } finally {
@@ -998,7 +998,7 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
         setNewShareLinkCopied(false)
         setShowLinkComposer(false)
       }
-      toasts.add({ title: 'Share link revoked.', variant: 'success' })
+      toasts.add({ title: 'Посилання для спільного доступу відкликано.', variant: 'success' })
       await loadData()
     } catch (err: any) {
       toasts.add({ title: err.message || 'Failed to revoke share link.', variant: 'error' })
@@ -1020,13 +1020,13 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
             </Dialog.Title>
             <Dialog.Description className="mt-1 text-[13px] leading-[18px] tracking-[-0.25px] text-kumo-subtle">
               {canUseShareLinks
-                ? 'Invite people or share a link.'
-                : canInvite ? 'Invite people.' : 'Manage access.'}
+                ? 'Запросіть людей або поділіться посиланням.'
+                : canInvite ? 'Запросити людей.' : 'Керувати доступом.'}
             </Dialog.Description>
           </div>
           <Dialog.Close
             render={(props) => (
-              <WorkshopIconButton {...props} aria-label="Close">
+              <WorkshopIconButton {...props} aria-label="Закрити">
                 <X size={18} />
               </WorkshopIconButton>
             )}
@@ -1102,8 +1102,8 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
                 ref={peopleInputRef}
                 type="search"
                 role={userSearchEnabled ? 'combobox' : undefined}
-                placeholder={userSearchEnabled ? 'Search by name or email' : 'Username or email'}
-                aria-label={userSearchEnabled ? 'Search people' : 'Username or email'}
+                placeholder={userSearchEnabled ? 'Пошук за ім’ям або адресою електронної пошти' : 'Ім’я користувача або адреса електронної пошти'}
+                aria-label={userSearchEnabled ? 'Пошук людей' : 'Ім’я користувача або адреса електронної пошти'}
                 aria-autocomplete={userSearchEnabled ? 'list' : undefined}
                 aria-expanded={userSearchEnabled ? directoryOpen : undefined}
                 aria-controls={directoryOpen ? directoryListboxId : undefined}
@@ -1130,7 +1130,7 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
               />
             </div>
             <RoleMenu
-              ariaLabel="Access to grant"
+              ariaLabel="Рівень доступу"
               value={addRole}
               onValueChange={setAddRole}
               container={menuContainer}
@@ -1145,14 +1145,14 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
               onClick={() => void handleInvite(typedRecipient)}
               disabled={!canSubmitInvite || adding}
             >
-              {adding ? 'Inviting…' : inviteCount > 1 ? `Invite ${inviteCount} people` : 'Invite'}
+              {adding ? 'Запрошення…' : inviteCount > 1 ? `Запросити ${inviteCount} учасників` : 'Запросити'}
             </WorkshopButton>
             {directoryOpen && directoryPortalContainer && createPortal(
               <div
                 ref={directoryListboxRef}
                 id={directoryListboxId}
                 role="listbox"
-                aria-label="Matching people"
+                aria-label="Знайдені користувачі"
                 aria-busy={directory.status === 'loading'}
                 // Pressing anywhere in the popover (an option, its padding, the scrollbar) must not
                 // blur the combobox, which would dismiss the popover before the click lands.
@@ -1160,13 +1160,13 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
                 className="chat-panel themed-floating-shadow-lg pointer-events-auto absolute overscroll-contain overflow-y-auto rounded-xl border border-kumo-line/70 bg-kumo-base p-2"
               >
                 {directory.status === 'loading' ? (
-                  <p role="status" className="px-3 py-2 text-[12px] text-kumo-subtle">Searching…</p>
+                  <p role="status" className="px-3 py-2 text-[12px] text-kumo-subtle">Пошук…</p>
                 ) : directory.status === 'failed' ? (
                   <p role="status" className="px-3 py-2 text-[12px] text-kumo-danger">
-                    User search is temporarily unavailable.
+                    Пошук користувачів тимчасово недоступний.
                   </p>
                 ) : directory.results.length === 0 ? (
-                  <p role="status" className="px-3 py-2 text-[12px] text-kumo-subtle">No users found.</p>
+                  <p role="status" className="px-3 py-2 text-[12px] text-kumo-subtle">Користувачів не знайдено.</p>
                 ) : (
                   <>
                     {directory.results.map((user, index) => (
@@ -1216,7 +1216,7 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
                           Add &ldquo;{directoryQuery}&rdquo; exactly
                         </span>
                         <span className="block text-[11px] text-kumo-subtle">
-                          Use the text as a username or email
+                          Введіть ім’я користувача або адресу електронної пошти
                         </span>
                       </span>
                     </button>
@@ -1248,17 +1248,17 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
                     Added {NAME_LIST.format(invitedNames)}
                   </p>
                   <span className="text-[11px] leading-4 text-kumo-inactive">
-                    {invitedLinkCopied ? 'Link copied to your clipboard' : 'Send them this link to open it'}
+                    {invitedLinkCopied ? 'Посилання скопійовано в буфер обміну' : 'Надішліть це посилання, щоб відкрити робочий простір'}
                   </span>
                 </div>
                 <p className="truncate font-mono text-[11px] leading-4 text-kumo-subtle">{workspaceUrl}</p>
               </div>
               <WorkshopButton tone="primary" onClick={copyWorkspaceUrl} className="gap-1.5 !rounded-xl">
                 {invitedLinkCopied ? <Check size={13} weight="bold" /> : <Copy size={13} />}
-                {invitedLinkCopied ? 'Copied' : 'Copy link'}
+                {invitedLinkCopied ? 'Скопійовано' : 'Скопіювати посилання'}
               </WorkshopButton>
               <WorkshopIconButton
-                aria-label="Dismiss added collaborator"
+                aria-label="Прибрати доданого учасника"
                 onClick={() => { setInvitedNames([]); setInvitedLinkCopied(false) }}
               >
                 <X size={14} />
@@ -1277,20 +1277,20 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
                     <div className="min-w-[160px] flex-1">
                       <div className="flex items-baseline gap-1.5">
                         <p className="text-[13px] leading-[18px] font-medium text-kumo-default">
-                          {newShareLinkCopied ? 'Link copied' : 'Link ready'}
+                          {newShareLinkCopied ? 'Посилання скопійовано' : 'Посилання готове'}
                         </p>
                         <span className="text-[11px] leading-4 text-kumo-inactive">
-                          You can copy it again anytime from Share links
+                          Ви можете скопіювати його пізніше в розділі «Посилання для спільного доступу»
                         </span>
                       </div>
                       <p className="truncate font-mono text-[11px] leading-4 text-kumo-subtle">{newShareLink}</p>
                     </div>
                     <WorkshopButton tone="primary" onClick={copyNewLink} className="w-[78px] gap-1.5 !rounded-xl">
                       {newShareLinkCopied ? <Check size={13} weight="bold" /> : <Copy size={13} />}
-                      {newShareLinkCopied ? 'Copied' : 'Copy'}
+                      {newShareLinkCopied ? 'Скопійовано' : 'Копіювати'}
                     </WorkshopButton>
                     <WorkshopIconButton
-                      aria-label="Dismiss created link"
+                      aria-label="Прибрати створене посилання"
                       onClick={() => { setNewShareLink(null); setNewShareLinkId(null); setNewShareLinkCopied(false); setShowLinkComposer(false) }}
                     >
                       <X size={14} />
@@ -1306,22 +1306,22 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
                       value={newLinkNote}
                       onChange={(e) => setNewLinkNote(e.target.value)}
                       onKeyDown={(e) => { if (!isImeComposing(e) && e.key === 'Enter') handleCreateShareLink() }}
-                      placeholder="Name this link (optional)…"
-                      aria-label="Share link name (optional)"
+                      placeholder="Назва посилання (необов’язково)…"
+                      aria-label="Назва посилання для спільного доступу (необов’язково)"
                       className="h-9 min-w-0 flex-1 border-0 bg-transparent p-0 text-[14px] leading-5 tracking-[-0.25px] text-kumo-default outline-none placeholder:text-kumo-inactive"
                       disabled={creatingLink}
                     />
                     <RoleMenu
-                      ariaLabel="Access granted by link"
+                      ariaLabel="Доступ за посиланням"
                       value={newLinkRole}
                       onValueChange={setNewLinkRole}
                       disabled={creatingLink}
                       container={menuContainer}
                     />
                     <WorkshopButton tone="primary" className="shrink-0 !rounded-xl" onClick={handleCreateShareLink} disabled={creatingLink}>
-                      {creatingLink ? 'Creating…' : 'Create link'}
+                      {creatingLink ? 'Створення…' : 'Створити посилання'}
                     </WorkshopButton>
-                    <WorkshopIconButton aria-label="Cancel creating link" onClick={() => setShowLinkComposer(false)}>
+                    <WorkshopIconButton aria-label="Скасувати створення посилання" onClick={() => setShowLinkComposer(false)}>
                       <X size={14} />
                     </WorkshopIconButton>
                 </div>
@@ -1332,7 +1332,7 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
                 onClick={() => setShowLinkComposer(true)}
                 className="themed-compact-shadow flex h-12 w-full cursor-pointer items-center justify-center gap-1.5 rounded-2xl border border-kumo-line/80 bg-kumo-base px-3 text-[13px] font-medium text-kumo-subtle transition-[background-color,color,transform] duration-150 ease-out hover:bg-kumo-elevated/60 hover:text-kumo-default active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-40"
               >
-                <Link size={14} /> Create a share link
+                <Link size={14} /> Створити посилання для спільного доступу
               </button>
             )}
           </div>
@@ -1345,7 +1345,7 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
           <section aria-labelledby="people-heading" className="mt-4">
             <div className="mb-2 px-1">
               <h3 id="people-heading" className="text-[12px] leading-4 font-medium tracking-[-0.15px] text-kumo-subtle">
-                People with access
+                Користувачі з доступом
               </h3>
             </div>
             <div className="overflow-hidden rounded-2xl border border-kumo-line/80 bg-kumo-base">
@@ -1369,12 +1369,12 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
                         </p>
                       </div>
                       {row.kind === 'owner' ? (
-                        <span className="px-2 text-[12px] text-kumo-subtle">Owner</span>
+                        <span className="px-2 text-[12px] text-kumo-subtle">Власник</span>
                       ) : isRemoving ? (
                         <InlineConfirm
-                          label="Remove"
+                          label="Вилучити"
                           busy={removeTarget.previewing || confirmationBusy}
-                          busyLabel={removeTarget.previewing ? 'Checking…' : undefined}
+                          busyLabel={removeTarget.previewing ? 'Перевірка…' : undefined}
                           onConfirm={handleConfirmRemoveCollaborator}
                           onCancel={() => setConfirmationTarget(null)}
                         />
@@ -1419,7 +1419,7 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
           <section aria-labelledby="links-heading" className="mt-4">
             <div className="mb-2 px-1">
               <h3 id="links-heading" className="text-[12px] leading-4 font-medium tracking-[-0.15px] text-kumo-subtle">
-                Share links
+                Посилання для спільного доступу
               </h3>
             </div>
 
@@ -1444,8 +1444,8 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
                                 if (e.key === 'Enter') handleSaveShareLinkNote()
                                 if (e.key === 'Escape') cancelRenameShareLink()
                               }}
-                              placeholder="Name this link…"
-                              aria-label="Share link name"
+                              placeholder="Назва посилання…"
+                              aria-label="Назва посилання для спільного доступу"
                               className="block w-full border-0 bg-transparent p-0 text-[13px] leading-[17px] font-medium tracking-[-0.25px] text-kumo-default outline-none shadow-[inset_0_-1px_0_0_var(--color-kumo-line)] transition-shadow placeholder:font-normal placeholder:text-kumo-inactive focus:shadow-[inset_0_-1px_0_0_var(--color-kumo-fill)]"
                               disabled={savingShareLinkNote}
                             />
@@ -1456,7 +1456,7 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
                         </div>
                         {isRenaming ? (
                           <InlineConfirm
-                            label="Save"
+                            label="Зберегти"
                             tone="brand"
                             busy={savingShareLinkNote}
                             onConfirm={handleSaveShareLinkNote}
@@ -1464,9 +1464,9 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
                           />
                         ) : isRevoking ? (
                           <InlineConfirm
-                            label="Revoke"
+                            label="Відкликати"
                             busy={revokeTarget.previewing || confirmationBusy}
-                            busyLabel={revokeTarget.previewing ? 'Checking…' : undefined}
+                            busyLabel={revokeTarget.previewing ? 'Перевірка…' : undefined}
                             onConfirm={handleConfirmRevokeShareLink}
                             onCancel={() => setConfirmationTarget(null)}
                           />
@@ -1477,7 +1477,7 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
                               <WorkshopIconButton
                                 className="!h-7 !w-7"
                                 onClick={() => handleCopyShareLink(sk.linkId)}
-                                aria-label={`Copy ${sk.note || 'share link'}`}
+                                aria-label={`Копіювати ${sk.note || 'посилання для спільного доступу'}`}
                                 disabled={confirmationBusy || copyingLinkId === sk.linkId}
                               >
                                 {copiedLinkId === sk.linkId ? <Check size={13} weight="bold" /> : <Copy size={13} />}
@@ -1486,7 +1486,7 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
                             <WorkshopIconButton
                               className="!h-7 !w-7 opacity-35 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                               onClick={() => startRenameShareLink(sk)}
-                              aria-label={`Rename ${sk.note || 'share link'}`}
+                              aria-label={`Перейменувати ${sk.note || 'посилання для спільного доступу'}`}
                               disabled={confirmationBusy}
                             >
                               <PencilSimple size={13} />
@@ -1495,7 +1495,7 @@ export default function ShareModal({ open, onClose, overseer, metadata, currentU
                               danger
                               className="!h-7 !w-7 opacity-35 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                               onClick={() => handleStartRevokeShareLink(sk.linkId)}
-                              aria-label={`Revoke ${sk.note || 'share link'}`}
+                              aria-label={`Відкликати ${sk.note || 'посилання для спільного доступу'}`}
                               disabled={confirmationBusy}
                             >
                               <Trash size={13} />

@@ -42,8 +42,8 @@ export default function ActivityNotifications({
           <button
             type="button"
             aria-label={pending.length > 0
-              ? `Activity — ${pending.length} ${pending.length === 1 ? 'request needs' : 'requests need'} review`
-              : 'Activity'}
+              ? `Активність — ${pending.length} ${pending.length === 1 ? 'запит потребує' : 'запити потребують'} перевірки`
+              : 'Активність'}
             className={`relative flex h-8 w-8 shrink-0 cursor-pointer items-center justify-center rounded-md transition-colors duration-150 hover:bg-kumo-tint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kumo-ring ${
               pending.length > 0 ? 'text-kumo-strong' : 'text-kumo-subtle hover:text-kumo-default'
             }`}
@@ -63,7 +63,7 @@ export default function ActivityNotifications({
       >
         <div className="flex items-center justify-between gap-2 px-3.5 pb-1 pt-2.5">
           <Popover.Title className="text-[11px] font-medium uppercase tracking-[0.06em] text-kumo-inactive">
-            Needs review
+            Потребує перевірки
           </Popover.Title>
           <CountBadge count={pending.length} />
         </div>
@@ -72,7 +72,7 @@ export default function ActivityNotifications({
           <p className="m-0 px-3.5 pb-3 pt-1 text-[13px] leading-[18px] tracking-[-0.25px] text-kumo-subtle">
             {status === 'error' ? PENDING_ERROR_COPY
               : status === 'checking' ? PENDING_CHECKING_COPY
-              : 'Nothing is waiting on you.'}
+              : 'Немає запитів, що очікують на вас.'}
           </p>
         ) : (
           <div className="max-h-[min(58vh,420px)] overflow-y-auto pb-1">
@@ -128,8 +128,8 @@ export default function ActivityNotifications({
           >
             <span>
               {pending.length > PREVIEW_LIMIT
-                ? `View all ${pending.length} requests`
-                : 'View all activity'}
+                ? `Переглянути всі запити (${pending.length})`
+                : 'Переглянути всю активність'}
             </span>
             <ArrowRight size={13} className="text-kumo-inactive" />
           </button>

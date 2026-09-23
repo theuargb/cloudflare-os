@@ -13,14 +13,14 @@ import { readPopupHandoff, ticketFromHandoffFragment } from './connectHandoff'
 type Outcome = { title: string; detail: string; failed?: true }
 
 const INVALID: Outcome = {
-  title: "This link isn't valid",
-  detail: 'Reload the Workshop and start the connection again.',
+  title: "Це посилання недійсне",
+  detail: 'Перезавантажте Workshop і почніть підключення знову.',
 }
 const SIGNED_OUT: Outcome = {
-  title: "You're signed out",
-  detail: 'Sign in to the Workshop and start the connection again.',
+  title: "Ви вийшли з облікового запису",
+  detail: 'Увійдіть у Workshop і почніть підключення знову.',
 }
-const CLOSE_HINT = 'You can close this window.'
+const CLOSE_HINT = 'Це вікно можна закрити.'
 
 /**
  * The page a finished connect / sign-in popup lands on (HANDOFF_PATH), with the single-use ticket
@@ -77,13 +77,13 @@ export default function ConnectHandoffPage() {
       if (isLoading || authenticatedApi === null) return
       api = authenticatedApi
       redeem = () => authenticatedApi.completeConnectHandoff(ticket, handoff.nonce)
-      done = { title: 'Connected', detail: CLOSE_HINT }
-      failed = 'Could not complete the connection'
+      done = { title: 'Підключено', detail: CLOSE_HINT }
+      failed = 'Не вдалося завершити підключення'
     } else {
       api = rpcStub
       redeem = () => rpcStub.confirmLogin(ticket, handoff.nonce)
-      done = { title: 'Signed in', detail: CLOSE_HINT }
-      failed = 'Could not sign in'
+      done = { title: 'Вхід виконано', detail: CLOSE_HINT }
+      failed = 'Не вдалося увійти'
     }
     if (sentWithRef.current === api) return
     if (sentWithRef.current !== null && !result?.failed) return
@@ -116,7 +116,7 @@ export default function ConnectHandoffPage() {
 
   return (
     <div className="flex min-h-full flex-col items-center justify-center gap-2 bg-kumo-base p-6 text-center">
-      <h1 className="text-lg font-semibold text-kumo-default">{outcome?.title ?? 'Finishing up…'}</h1>
+      <h1 className="text-lg font-semibold text-kumo-default">{outcome?.title ?? 'Завершення…'}</h1>
       {outcome && <p className="text-sm text-kumo-subtle">{outcome.detail}</p>}
     </div>
   )
