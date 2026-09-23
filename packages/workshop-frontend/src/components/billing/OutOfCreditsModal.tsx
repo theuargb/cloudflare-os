@@ -64,7 +64,7 @@ export default function OutOfCreditsModal({ open, onClose }: OutOfCreditsModalPr
       openConnectWindow(await auth.authenticatedApi.connectAccount('cloudflare', []))
     } catch (err) {
       toasts.add({
-        title: 'Failed to start Cloudflare connection',
+        title: 'Не вдалося підключити Cloudflare',
         description: err instanceof Error ? err.message : undefined,
         variant: 'error',
       })
@@ -96,7 +96,7 @@ export default function OutOfCreditsModal({ open, onClose }: OutOfCreditsModalPr
       <Dialog className="responsive-dialog overflow-y-auto p-6 sm:w-[560px]" size="base">
         <Dialog.Title className="text-lg font-semibold mb-2 flex items-center gap-2">
           <CloudWarning size={22} weight="bold" className="text-kumo-warning" />
-          You've reached your free usage limit
+          Ви досягли безкоштовного ліміту використання
         </Dialog.Title>
 
         {usage === null ? (
@@ -105,33 +105,34 @@ export default function OutOfCreditsModal({ open, onClose }: OutOfCreditsModalPr
           <div className="space-y-4">
             {!connected ? (
               <p className="text-sm text-kumo-subtle">
-                You've used all {usage.dailyLimit} of your free {usage.dailyLimit === 1 ? 'request' : 'requests'} for
-                today. Connect your Cloudflare account to keep building now — usage beyond the free
-                tier is billed to your own Cloudflare AI Gateway credits
+                Сьогодні використано весь безкоштовний ліміт — {usage.dailyLimit}{' '}
+                {usage.dailyLimit === 1 ? 'запит' : 'запитів'}. Підключіть обліковий запис Cloudflare,
+                щоб продовжити роботу. Використання понад безкоштовний ліміт оплачуватиметься з
+                вашого балансу Cloudflare AI Gateway
                 {usage.resetAt ? (
                   <>
-                    {' '}— or wait: your free {usage.dailyLimit === 1 ? 'request resets' : 'requests reset'} at
-                    00:00 UTC, in <ResetCountdown resetAt={usage.resetAt} onElapsed={refresh} />.
+                    {' '}або зачекайте: безкоштовний ліміт оновиться о 00:00 UTC, через{' '}
+                    <ResetCountdown resetAt={usage.resetAt} onElapsed={refresh} />.
                   </>
                 ) : '.'}
               </p>
             ) : needsSelection ? (
               <p className="text-sm text-kumo-subtle">
-                Your Cloudflare connection has access to multiple accounts. Choose which one's AI
-                Gateway credits should be billed for usage beyond the free tier.
+                До вашого підключення Cloudflare прив’язано кілька облікових записів. Виберіть,
+                із балансу якого облікового запису AI Gateway оплачувати використання понад
+                безкоштовний ліміт.
               </p>
             ) : (
               <p className="text-sm text-kumo-subtle">
-                Your Cloudflare account is connected
+                Обліковий запис Cloudflare підключено
                 {usage.balance !== null && (
-                  <> with a balance of <strong>${usage.balance.toFixed(2)}</strong></>
+                  <> Залишок балансу: <strong>${usage.balance.toFixed(2)}</strong></>
                 )}
-                , but it's below the minimum needed to continue. Add credits to your AI Gateway to
-                keep building now
+                , але балансу недостатньо для продовження роботи. Поповніть баланс AI Gateway
                 {usage.resetAt ? (
                   <>
-                    {' '}or wait — your free {usage.dailyLimit === 1 ? 'request resets' : 'requests reset'} at
-                    00:00 UTC, in <ResetCountdown resetAt={usage.resetAt} onElapsed={refresh} />.
+                    {' '}або зачекайте: безкоштовний ліміт оновиться о 00:00 UTC, через{' '}
+                    <ResetCountdown resetAt={usage.resetAt} onElapsed={refresh} />.
                   </>
                 ) : '.'}
               </p>
@@ -140,9 +141,9 @@ export default function OutOfCreditsModal({ open, onClose }: OutOfCreditsModalPr
             {needsSelection && (
               <div className="flex flex-col gap-2">
                 {accounts === null ? (
-                  <p className="text-sm text-kumo-subtle">Loading accounts…</p>
+                  <p className="text-sm text-kumo-subtle">Завантаження облікових записів…</p>
                 ) : accounts.length === 0 ? (
-                  <p className="text-sm text-kumo-subtle">No accounts available on this connection.</p>
+                  <p className="text-sm text-kumo-subtle">Для цього підключення немає доступних облікових записів.</p>
                 ) : (
                   accounts.map((a) => (
                     <Button
@@ -161,14 +162,14 @@ export default function OutOfCreditsModal({ open, onClose }: OutOfCreditsModalPr
             )}
 
             <p className="text-sm text-kumo-subtle">
-              Learn more about{' '}
+              Докладніше про{' '}
               <a
                 href="https://developers.cloudflare.com/ai-gateway/features/unified-billing/"
                 target="_blank"
                 rel="noreferrer"
                 className="underline"
               >
-                AI Gateway unified billing
+                Єдина система оплати AI Gateway
               </a>
               .
             </p>
@@ -176,22 +177,22 @@ export default function OutOfCreditsModal({ open, onClose }: OutOfCreditsModalPr
             <div className="flex items-center justify-end gap-2 pt-2">
               {!connected ? (
                 <>
-                  <Button variant="secondary" onClick={onClose}>Maybe later</Button>
+                  <Button variant="secondary" onClick={onClose}>Можливо, пізніше</Button>
                   <Button variant="primary" onClick={connect} loading={connecting}>
                     <Lightning size={16} weight="bold" />
-                    Connect Cloudflare
+                    Підключити Cloudflare
                   </Button>
                 </>
               ) : needsSelection ? (
-                <Button variant="secondary" onClick={onClose}>Close</Button>
+                <Button variant="secondary" onClick={onClose}>Закрити</Button>
               ) : (
                 <>
-                  <Button variant="secondary" onClick={onClose}>Close</Button>
+                  <Button variant="secondary" onClick={onClose}>Закрити</Button>
                   <Button
                     variant="primary"
                     onClick={() => window.open(buildAddCreditsUrl(usage.accountId), '_blank')}
                   >
-                    Add credits in Cloudflare
+                    Поповнити баланс у Cloudflare
                   </Button>
                 </>
               )}
