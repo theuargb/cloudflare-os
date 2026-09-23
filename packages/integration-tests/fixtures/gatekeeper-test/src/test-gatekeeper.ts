@@ -33,6 +33,10 @@ import type {
 // Nothing but classes and the default handler may be exported from a Worker entry module: workerd
 // treats every named export as an entrypoint and rejects anything that isn't one.
 const VENDOR_HOST = "gadgets-test.example";
+// A test-controlled barrier lets a continuation created in the gatekeeper request context probe its
+// queue after the active agent turn has ended. The HTTP control request only releases the barrier;
+// it never uses the RPC queue itself (RPC stubs are request-context-bound).
+const staleProbeReleases = new Map<string, () => void>();
 
 const SUPPORTED_RESOURCES: SupportedResource[] = [{
   urlPattern: `https://${VENDOR_HOST}/things/*`,
@@ -46,6 +50,8 @@ interface TestThing {
   readValue(): Promise<number>;
   writeValue(value: number): Promise<number>;
   writeValues(values: number[]): Promise<number[]>;
+  getAgentContext(): Promise<{actorId: string; actor: {displayName: string}; isAdmin: boolean} | undefined>;
+  captureQueueForStaleSubmit(): Promise<{actorId: string; actor: {displayName: string}; isAdmin: boolean} | undefined>;
 }
 `;
 
@@ -125,6 +131,26 @@ export class TestControl extends DurableObject<Cloudflare.Env> {
     };
   }
 
+  recordAgentContext(label: string, context: {actorId: string; actor: {displayName: string}; isAdmin: boolean} | undefined): void {
+    this.ctx.storage.kv.put(`agent-context:${label}`, context);
+  }
+
+  getAgentContext(label: string): {actorId: string; actor: {displayName: string}; isAdmin: boolean} | undefined {
+    return this.ctx.storage.kv.get(`agent-context:${label}`);
+  }
+
+  clearAgentContext(label: string): void {
+    this.ctx.storage.kv.delete(`agent-context:${label}`);
+  }
+
+  recordStaleSubmitResult(label: string, result: {contextError?: string; submitError?: string}): void {
+    this.ctx.storage.kv.put(`stale-submit:${label}`, result);
+  }
+
+  getStaleSubmitResult(label: string): {contextError?: string; submitError?: string} | undefined {
+    return this.ctx.storage.kv.get(`stale-submit:${label}`);
+  }
+
   stageAction(label: string, value: number): number {
     const state = this.getActionState(label);
     const id = state.nextId++;
@@ -148,6 +174,7 @@ export class TestControl extends DurableObject<Cloudflare.Env> {
     state.applyCount++;
     this.ctx.storage.kv.put(`actions:${label}`, state);
   }
+
 }
 
 // ctx.exports is typed via the Cloudflare.GlobalProps declaration in env.d.ts, so loopback bindings
@@ -317,7 +344,8 @@ class TestSessionTarget extends RpcTarget implements TestSession {
   constructor(
       approvalQueue: RpcStub<ApprovalQueue>,
       private readonly state: DurableObjectStub<TestControl>,
-      private readonly label: string) {
+      private readonly label: string,
+      private readonly scheduleWaitUntil: (promise: Promise<unknown>) => void) {
     super();
     this.approvalQueue = approvalQueue.dup();
   }
@@ -352,6 +380,48 @@ class TestSessionTarget extends RpcTarget implements TestSession {
   async writeValues(values: number[]): Promise<number[]> {
     return Promise.all(values.map(value => this.writeValue(value)));
   }
+
+  async getAgentContext() {
+    const context = typeof this.approvalQueue.getAgentActionContext === "function"
+        ? await this.approvalQueue.getAgentActionContext() : undefined;
+    await this.state.recordAgentContext(this.label, context);
+    return context;
+  }
+
+  async captureQueueForStaleSubmit() {
+    const context = typeof this.approvalQueue.getAgentActionContext === "function"
+        ? await this.approvalQueue.getAgentActionContext() : undefined;
+    await this.state.recordAgentContext(this.label, context);
+    const queue = this.approvalQueue.dup();
+    let release!: () => void;
+    const barrier = new Promise<void>(resolve => { release = resolve; });
+    staleProbeReleases.set(this.label, release);
+    this.scheduleWaitUntil((async () => {
+      await barrier;
+      let contextError: string | undefined;
+      try {
+        if (typeof queue.getAgentActionContext === "function") await queue.getAgentActionContext();
+        else contextError = "Agent actor context is unavailable.";
+      } catch (error) {
+        contextError = error instanceof Error ? error.message : String(error);
+      }
+      let submitError: string | undefined;
+      try {
+        await queue.submitAction(987654321, {
+          title: "Stale agent action probe",
+          description: "This test action must be rejected before persistence.",
+          implementsRevert: false,
+        });
+      } catch (error) {
+        submitError = error instanceof Error ? error.message : String(error);
+      }
+      await this.state.recordStaleSubmitResult(this.label, { contextError, submitError });
+      queue[Symbol.dispose]();
+      staleProbeReleases.delete(this.label);
+    })());
+    return context;
+  }
+
 
   [Symbol.dispose](): void {
     this.approvalQueue[Symbol.dispose]();
@@ -392,7 +462,8 @@ export class TestGatekeeper
 
   async startSession(approvalQueue: RpcStub<ApprovalQueue>): Promise<TestSession> {
     return new TestSessionTarget(
-        approvalQueue, control(this.ctx.exports), this.ctx.props.label);
+        approvalQueue, control(this.ctx.exports), this.ctx.props.label,
+        promise => this.ctx.waitUntil(promise));
   }
 
   /** No discovery index: the ambient fixture is reached through its session alone. */
@@ -531,6 +602,35 @@ export default {
         value: state.value,
         applyCount: state.applyCount,
       });
+    }
+
+    if (url.pathname === "/control/agent-context" && req.method === "POST") {
+      const { label } = body as Record<string, unknown>;
+      if (!isNonEmptyString(label)) return badRequest("`label` must be a non-empty string");
+      return Response.json(await control(ctx.exports).getAgentContext(label) ?? null);
+    }
+
+    if (url.pathname === "/control/clear-agent-context" && req.method === "POST") {
+      const { label } = body as Record<string, unknown>;
+      if (!isNonEmptyString(label)) return badRequest("`label` must be a non-empty string");
+      await control(ctx.exports).clearAgentContext(label);
+      return new Response(null, { status: 204 });
+    }
+
+    if (url.pathname === "/control/stale-agent-probe" && req.method === "POST") {
+      const { label } = body as Record<string, unknown>;
+      if (!isNonEmptyString(label)) return badRequest("`label` must be a non-empty string");
+      const command = (body as Record<string, unknown>).command;
+      if (command === "release") {
+        const release = staleProbeReleases.get(label);
+        if (!release) return Response.json({ error: "No stale agent probe is waiting." }, { status: 404 });
+        release();
+        return new Response(null, { status: 204 });
+      }
+      if (command === "result") {
+        return Response.json(await control(ctx.exports).getStaleSubmitResult(label) ?? null);
+      }
+      return badRequest("`command` must be `release` or `result`");
     }
 
     // Submit an external chat message through the Workshop's ExternalMessageGateway entrypoint,
