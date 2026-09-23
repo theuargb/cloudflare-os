@@ -21,8 +21,8 @@ export type RateLimitOptions = {
 }
 
 /**
- * Returns the rate-limited proxy plus a `dispose` that cancels any pending resume timer (otherwise it
- * could fire after the session is torn down). `dispose` is a no-op in `reject` mode (no timer).
+ * Returns the rate-limited proxy plus a `dispose` that tears down admission and cancels any pending
+ * resume timer (otherwise it could fire after the session is torn down).
  */
 export function createRateLimitedCapability(
   capability: any,
@@ -37,8 +37,14 @@ export function createRateLimitedCapability(
 
   const startedCalls: number[] = []
   const queue: QueuedCall[] = []
+  const activeDisposers = new Set<() => void>()
   let inFlight = 0
   let resumeTimer: ReturnType<typeof setTimeout> | null = null
+  let disposed = false
+  // Keep one deterministic rejection for the lifetime of this capability. In addition to making
+  // teardown errors predictable, this ensures calls racing with disposal cannot accidentally use a
+  // stale rate-limit error after the capability is gone.
+  const disposedError = new Error(`${options.label} capability has been disposed.`)
 
   const pruneCallWindow = () => {
     const cutoff = Date.now() - 60_000
@@ -46,6 +52,7 @@ export function createRateLimitedCapability(
   }
 
   const drain = () => {
+    if (disposed) return
     pruneCallWindow()
     while (inFlight < options.maxConcurrency && queue.length > 0) {
       if (startedCalls.length >= options.maxCallsPerMinute) {
@@ -68,10 +75,34 @@ export function createRateLimitedCapability(
       }
       startedCalls.push(Date.now())
       inFlight++
+      let activeDisposer: (() => void) | undefined
       Promise.resolve()
-        .then(() => capability[call.method](...call.args))
+        .then(() => {
+          if (disposed) throw disposedError
+          // Capture the raw RPC result before returning it to the promise chain. Returning a
+          // disposable RpcPromise directly would cause Promise assimilation to hide its
+          // cancellation handle from the limiter.
+          const rawResult = capability[call.method](...call.args)
+          if (rawResult !== null && (typeof rawResult === 'object' || typeof rawResult === 'function')) {
+            const disposer = (rawResult as Record<PropertyKey, unknown>)[Symbol.dispose]
+            if (typeof disposer === 'function') {
+              activeDisposer = () => disposer.call(rawResult)
+              if (disposed) {
+                try {
+                  activeDisposer()
+                } catch {
+                  // Best effort: teardown must continue if the result is already closed.
+                }
+              } else {
+                activeDisposers.add(activeDisposer)
+              }
+            }
+          }
+          return rawResult
+        })
         .then(call.resolve, call.reject)
         .finally(() => {
+          if (activeDisposer !== undefined) activeDisposers.delete(activeDisposer)
           inFlight--
           drain()
         })
@@ -84,6 +115,10 @@ export function createRateLimitedCapability(
       if (property === Symbol.dispose) return undefined
       if (typeof property !== 'string') return undefined
       return (...args: unknown[]) => new Promise((resolve, reject) => {
+        if (disposed) {
+          reject(disposedError)
+          return
+        }
         if (queue.length + inFlight >= options.maxPendingCalls) {
           reject(new Error(`${options.label} has too many pending requests.`))
           return
@@ -97,9 +132,25 @@ export function createRateLimitedCapability(
   return {
     capability: proxy,
     dispose: () => {
+      if (disposed) return
+      disposed = true
       if (resumeTimer !== null) {
         clearTimeout(resumeTimer)
         resumeTimer = null
+      }
+      // Reject before dropping references so every caller waiting in the queue is released
+      // synchronously. Dispose active RPC results as well, so the iframe teardown cannot leave
+      // server-side JS-RPC invocations running after their session has gone away. Clear the set
+      // first and isolate disposer failures so one result cannot prevent the others from closing.
+      for (const call of queue.splice(0)) call.reject(disposedError)
+      const disposers = [...activeDisposers]
+      activeDisposers.clear()
+      for (const disposer of disposers) {
+        try {
+          disposer()
+        } catch {
+          // Best effort: teardown must continue even if an individual RPC result is already closed.
+        }
       }
     },
   }

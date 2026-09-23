@@ -231,11 +231,11 @@ type CreatedWorkpieceCardInfo = {
 // The card's caption: what the workpiece is and what clicking does. A worktree has no app to
 // preview; opening it lands on its code.
 function describeCreatedWorkpiece(created: CreatedWorkpieceCardInfo): string {
-  if (created.type === "worktree") return "Worktree · Click to open its code";
+  if (created.type === "worktree") return "Робоче дерево · натисніть, щоб відкрити код";
   const noun = formatOf(created.output).noun;
   return created.isPending
-    ? `New ${noun.toLowerCase()} · Click to preview`
-    : `${noun} · Click to open`;
+    ? `Новий формат ${noun.toLowerCase()} · натисніть для перегляду`
+    : `${noun} · натисніть, щоб відкрити`;
 }
 
 function CreatedWorkpieceChatCard({
@@ -273,7 +273,7 @@ function CreatedWorkpieceChatCard({
             <span className="mt-0.5 flex items-center gap-1.5 text-[12px] text-kumo-subtle">
               {created.type === "gadget" && created.isPending && (
                 <span className="rounded-full bg-kumo-fill px-1.5 py-0.5 text-[10px] font-medium leading-none">
-                  Draft
+                  Чернетка
                 </span>
               )}
               <span>{describeCreatedWorkpiece(created)}</span>
@@ -315,8 +315,8 @@ type ChatListScope = "direct" | "agents" | "all";
 
 const CHAT_LIST_SCOPE_LABELS: Record<ChatListScope, string> = {
   all: "All",
-  direct: "Started by people",
-  agents: "Started by agents",
+  direct: "Розпочато користувачами",
+  agents: "Розпочато агентами",
 };
 
 const SHOW_THINKING_TRACES_KEY = "showThinkingTraces";
@@ -574,35 +574,34 @@ function getToolCallSummary(
 ): { verb: string; target?: string } {
   switch (tc.toolName) {
     case "readFile":
-      return { verb: "Read", target: tc.input.filename };
+      return { verb: "Прочитано", target: tc.input.filename };
     case "writeFile":
-      return { verb: "Wrote", target: tc.input.filename };
+      return { verb: "Записано", target: tc.input.filename };
     case "editFile":
-      return { verb: "Edited", target: tc.input.filename };
+      return { verb: "Відредаговано", target: tc.input.filename };
     case "describeBinding":
-      return { verb: "Inspected", target: `${String(tc.input.name)} binding` };
+      return { verb: "Перевірено", target: `${String(tc.input.name)} (прив’язування)` };
     case "setBindingHook":
       return {
-        verb: "Connected",
+        verb: "Підключено",
         target: tc.input.entrypoint
           ? `${tc.input.bindingName} → ${tc.input.entrypoint}`
           : tc.input.bindingName,
       };
     case "setGadgetBinding":
       return {
-        verb: "Wired up",
+        verb: "Налаштовано",
         target: formatGadgetBindingTarget(tc.input.gadget, tc.input.name ?? tc.input.source),
       };
     // Obsolete predecessor of `setGadgetBinding`; appears only in old chat logs.
     case "saveCapsuleAsBinding":
-      return { verb: "Saved resource", target: tc.input.bindingName };
+      return { verb: "Збережено ресурс", target: tc.input.bindingName };
     case "createGadget": {
-
       const output = outputOf?.(tc);
-      return { verb: `Created ${output?.noun ?? "gadget"}`, target: tc.input.title };
+      return { verb: `Створено ${output?.noun ?? "гаджет"}`, target: tc.input.title };
     }
     case "createWorktree":
-      return { verb: "Created worktree", target: tc.input.title };
+      return { verb: "Створено робоче дерево", target: tc.input.title };
     case "executeCode": {
       // Prefer the first non-empty line as a preview. `code` may be absent while the tool call's
       // input is still streaming in, so guard against undefined.
@@ -611,7 +610,7 @@ function getToolCallSummary(
         .map((line) => line.trim())
         .find((line) => line.length > 0);
       return {
-        verb: "Ran code",
+        verb: "Виконано код",
         target: firstLine
           ? firstLine.length > 60
             ? `${firstLine.slice(0, 57)}…`
@@ -620,7 +619,7 @@ function getToolCallSummary(
       };
     }
     case "giveUp":
-      return { verb: "Stopped" };
+      return { verb: "Зупинено" };
     case "webFetch": {
       let target = tc.input.url;
       try {
@@ -628,16 +627,16 @@ function getToolCallSummary(
       } catch {
         // Leave as the raw URL.
       }
-      return { verb: "Fetched", target };
+      return { verb: "Отримано", target };
     }
     case "observeUserChanges":
-      return { verb: "Observed user changes" };
+      return { verb: "Зафіксовано зміни користувача" };
     case "listBlueprints":
-      return { verb: "Listed blueprints" };
+      return { verb: "Переглянуто шаблони" };
     case "listConnectableResources":
-      return { verb: "Listed connectable resources", target: tc.input.vendorId };
+      return { verb: "Переглянуто доступні ресурси", target: tc.input.vendorId };
     case "requestConnection":
-      return { verb: "Requested connection", target: tc.input.vendorId };
+      return { verb: "Запитано підключення", target: tc.input.vendorId };
   }
   // Compile-time exhaustiveness check.
   const _exhaustive: never = tc;
@@ -689,52 +688,59 @@ function lowerFirst(text: string): string {
   return text ? text[0].toLowerCase() + text.slice(1) : text;
 }
 
-function pluralize(count: number, singular: string, plural = `${singular}s`): string {
-  return `${count} ${count === 1 ? singular : plural}`;
+function pluralize(count: number, one: string, few: string, many: string): string {
+  const hundredRemainder = count % 100;
+  const remainder = count % 10;
+  const noun = remainder === 1 && hundredRemainder !== 11
+    ? one
+    : remainder >= 2 && remainder <= 4 && (hundredRemainder < 12 || hundredRemainder > 14)
+      ? few
+      : many;
+  return `${count} ${noun}`;
 }
 
 function formatTimes(count: number): string {
-  return pluralize(count, "time");
+  return pluralize(count, "раз", "рази", "разів");
 }
 
 function describeObservationCount(count: number): string {
-  return count === 1 ? "Read 1 resource" : `${count} resource reads`;
+  return `Прочитано ${pluralize(count, "ресурс", "ресурси", "ресурсів")}`;
 }
 
 function describeToolCallCount(toolName: AiToolCall["toolName"], count: number): string {
   switch (toolName) {
     case "readFile":
-      return `Read ${pluralize(count, "file")}`;
+      return `Прочитано ${pluralize(count, "файл", "файли", "файлів")}`;
     case "writeFile":
-      return `Wrote ${pluralize(count, "file")}`;
+      return `Записано ${pluralize(count, "файл", "файли", "файлів")}`;
     case "editFile":
-      return count === 1 ? "Made 1 edit" : `Made ${count} edits`;
+      return `Внесено ${pluralize(count, "зміну", "зміни", "змін")}`;
     case "webFetch":
-      return `Fetched ${pluralize(count, "page")}`;
+      return `Отримано ${pluralize(count, "сторінку", "сторінки", "сторінок")}`;
     case "executeCode":
-      return count === 1 ? "Ran code" : `Ran code ${formatTimes(count)}`;
+      return count === 1 ? "Виконано код" : `Виконано код ${formatTimes(count)}`;
     case "describeBinding":
-      return `Inspected ${pluralize(count, "binding")}`;
+      return `Перевірено ${pluralize(count, "зв’язок", "зв’язки", "зв’язків")}`;
     case "setBindingHook":
-      return `Connected ${pluralize(count, "binding")}`;
+      return `Підключено ${pluralize(count, "ресурс", "ресурси", "ресурсів")}`;
     case "setGadgetBinding":
-      return `Wired up ${pluralize(count, "binding")}`;
+      return `Налаштовано ${pluralize(count, "зв’язок", "зв’язки", "зв’язків")}`;
     case "saveCapsuleAsBinding":
-      return `Saved ${pluralize(count, "resource")}`;
+      return `Збережено ${pluralize(count, "ресурс", "ресурси", "ресурсів")}`;
     case "createGadget":
-      return `Created ${pluralize(count, "gadget")}`;
+      return `Створено ${pluralize(count, "гаджет", "гаджети", "гаджетів")}`;
     case "createWorktree":
-      return `Created ${pluralize(count, "worktree")}`;
+      return `Створено ${pluralize(count, "робоче дерево", "робочі дерева", "робочих дерев")}`;
     case "observeUserChanges":
-      return `Observed ${pluralize(count, "change set")}`;
+      return `Зафіксовано ${pluralize(count, "набір змін", "набори змін", "наборів змін")}`;
     case "giveUp":
-      return count === 1 ? "Stopped" : `Stopped ${count} times`;
+      return count === 1 ? "Зупинено" : `Зупинено (${count} разів)`;
     case "listBlueprints":
-      return `Listed blueprints`;
+      return "Переглянуто шаблони";
     case "listConnectableResources":
-      return `Listed connectable resources`;
+      return "Переглянуто доступні ресурси";
     case "requestConnection":
-      return count === 1 ? "Requested a connection" : `Requested ${count} connections`;
+      return `Запитано ${pluralize(count, "підключення", "підключення", "підключень")}`;
   }
   const _exhaustive: never = toolName;
   return _exhaustive;
@@ -780,33 +786,39 @@ function getToolIcon(
 function getProvisionalToolLabel(toolName: AiToolCall["toolName"] | null | undefined) {
   switch (toolName) {
     case "readFile":
-      return "Reading file";
+      return "Читання файлу";
     case "writeFile":
-      return "Writing file";
+      return "Запис файлу";
     case "editFile":
-      return "Editing file";
+      return "Редагування файлу";
     case "describeBinding":
-      return "Inspecting binding";
+      return "Перевірка прив’язування";
     case "setBindingHook":
-      return "Connecting binding";
+      return "Підключення прив’язування";
     case "setGadgetBinding":
-      return "Wiring up binding";
+      return "Налаштування прив’язування";
     case "saveCapsuleAsBinding":
-      return "Saving resource";
+      return "Збереження ресурсу";
     case "createGadget":
-      return "Creating gadget";
+      return "Створення гаджета";
     case "createWorktree":
-      return "Creating worktree";
+      return "Створення робочого дерева";
     case "executeCode":
-      return "Running code";
+      return "Виконується код";
     case "webFetch":
-      return "Fetching web page";
+      return "Завантаження вебсторінки";
     case "observeUserChanges":
-      return "Observing user changes";
+      return "Перевірка змін користувача";
     case "giveUp":
-      return "Stopping";
+      return "Зупинка";
+    case "listBlueprints":
+      return "Перегляд шаблонів";
+    case "listConnectableResources":
+      return "Перегляд доступних ресурсів";
+    case "requestConnection":
+      return "Запит підключення";
     default:
-      return "Using tool";
+      return "Використання інструмента";
   }
 }
 
@@ -817,22 +829,22 @@ function getToolTarget(tc: AiToolCall): string | undefined {
 // Present-tense verb for an in-progress tool call.
 function getProvisionalToolVerb(toolName: AiToolCall["toolName"]): string {
   switch (toolName) {
-    case "readFile": return "Reading";
-    case "writeFile": return "Writing";
-    case "editFile": return "Editing";
-    case "describeBinding": return "Inspecting";
-    case "setBindingHook": return "Connecting";
-    case "setGadgetBinding": return "Wiring up";
-    case "saveCapsuleAsBinding": return "Saving";
-    case "createGadget": return "Creating gadget";
-    case "createWorktree": return "Creating worktree";
-    case "executeCode": return "Running code";
-    case "webFetch": return "Fetching";
-    case "observeUserChanges": return "Observing user changes";
-    case "giveUp": return "Stopping";
-    case "listBlueprints": return "Listing blueprints";
-    case "listConnectableResources": return "Listing connectable resources";
-    case "requestConnection": return "Requesting a connection";
+    case "readFile": return "Читання";
+    case "writeFile": return "Запис";
+    case "editFile": return "Редагування";
+    case "describeBinding": return "Перевірка";
+    case "setBindingHook": return "Підключення";
+    case "setGadgetBinding": return "Налаштування";
+    case "saveCapsuleAsBinding": return "Збереження";
+    case "createGadget": return "Створення гаджета";
+    case "createWorktree": return "Створення робочого дерева";
+    case "executeCode": return "Виконується код";
+    case "webFetch": return "Завантаження";
+    case "observeUserChanges": return "Перевірка змін користувача";
+    case "giveUp": return "Зупинка";
+    case "listBlueprints": return "Перегляд шаблонів";
+    case "listConnectableResources": return "Перегляд доступних ресурсів";
+    case "requestConnection": return "Запит підключення";
   }
   const _exhaustive: never = toolName;
   return _exhaustive;
@@ -842,22 +854,22 @@ function getProvisionalToolVerb(toolName: AiToolCall["toolName"]): string {
 function describeProvisionalToolCount(toolName: AiToolCall["toolName"], count: number): string {
   if (count <= 1) return getProvisionalToolLabel(toolName);
   switch (toolName) {
-    case "readFile": return `Reading ${pluralize(count, "file")}`;
-    case "writeFile": return `Writing ${pluralize(count, "file")}`;
-    case "editFile": return `Making ${count} edits`;
-    case "webFetch": return `Fetching ${pluralize(count, "page")}`;
-    case "executeCode": return count === 1 ? "Running code" : `Running code ${formatTimes(count)}`;
-    case "describeBinding": return `Inspecting ${pluralize(count, "binding")}`;
-    case "setBindingHook": return `Connecting ${pluralize(count, "binding")}`;
-    case "setGadgetBinding": return `Wiring up ${pluralize(count, "binding")}`;
-    case "saveCapsuleAsBinding": return `Saving ${pluralize(count, "resource")}`;
-    case "createGadget": return `Creating ${pluralize(count, "gadget")}`;
-    case "createWorktree": return `Creating ${pluralize(count, "worktree")}`;
-    case "observeUserChanges": return `Observing ${pluralize(count, "change set")}`;
-    case "giveUp": return "Stopping";
-    case "listBlueprints": return "Listing blueprints";
-    case "listConnectableResources": return "Listing connectable resources";
-    case "requestConnection": return `Requesting ${pluralize(count, "connection")}`;
+    case "readFile": return `Читання ${pluralize(count, "файлу", "файлів", "файлів")}`;
+    case "writeFile": return `Запис ${pluralize(count, "файлу", "файлів", "файлів")}`;
+    case "editFile": return `Редагування (${count})`;
+    case "webFetch": return `Отримання ${pluralize(count, "сторінки", "сторінок", "сторінок")}`;
+    case "executeCode": return count === 1 ? "Виконується код" : `Виконується код ${formatTimes(count)}`;
+    case "describeBinding": return `Перевірка ${pluralize(count, "зв’язку", "зв’язків", "зв’язків")}`;
+    case "setBindingHook": return `Підключення ${pluralize(count, "ресурсу", "ресурсів", "ресурсів")}`;
+    case "setGadgetBinding": return `Налаштування ${pluralize(count, "зв’язку", "зв’язків", "зв’язків")}`;
+    case "saveCapsuleAsBinding": return `Збереження ${pluralize(count, "ресурсу", "ресурсів", "ресурсів")}`;
+    case "createGadget": return `Створення ${pluralize(count, "гаджета", "гаджетів", "гаджетів")}`;
+    case "createWorktree": return `Створення ${pluralize(count, "робочого дерева", "робочих дерев", "робочих дерев")}`;
+    case "observeUserChanges": return `Перевірка ${pluralize(count, "набору змін", "наборів змін", "наборів змін")}`;
+    case "giveUp": return "Зупинка";
+    case "listBlueprints": return "Перегляд шаблонів";
+    case "listConnectableResources": return "Перегляд доступних ресурсів";
+    case "requestConnection": return `Запит підключення (${count})`;
   }
   const _exhaustive: never = toolName;
   return _exhaustive;
@@ -869,7 +881,7 @@ function buildProvisionalToolSummary(
 ): { label: string; detailLines: string[] } {
 
   if (calls.length === 1 && calls[0].outputFormat) {
-    return { label: `Creating ${calls[0].outputFormat.noun}`, detailLines: [] };
+    return { label: `Створення ${calls[0].outputFormat.noun}`, detailLines: [] };
   }
   const toolNames = Array.from(
     new Set(calls.map((c) => c.toolName).filter((n): n is AiToolCall["toolName"] => !!n)),
@@ -879,7 +891,7 @@ function buildProvisionalToolSummary(
   );
 
   if (toolNames.length === 0) {
-    return { label: "Using tool", detailLines: [] };
+    return { label: "Використання інструмента", detailLines: [] };
   }
 
   if (toolNames.length > 1) {
@@ -942,7 +954,7 @@ function buildToolCallGroups(
       return describeToolCallCount(toolName, count);
     }));
   } else if (toolCalls.length > 0) {
-    labelParts.push(`${toolCalls.length} tool calls`);
+    labelParts.push(`Викликів інструментів: ${toolCalls.length}`);
   }
 
   if (observations.length > 0) {
@@ -1121,8 +1133,8 @@ function CodeBlock({ children, ...props }: ComponentPropsWithoutRef<"pre">) {
         type="button"
         className={styles.codeCopyButton}
         onClick={() => void copyToClipboard(code)}
-        aria-label="Copy code"
-        title="Copy code"
+        aria-label="Скопіювати код"
+        title="Скопіювати код"
       >
         <ClipboardIcon size={16} />
       </button>
@@ -1313,7 +1325,7 @@ const AttachmentPreviewModal = memo(function AttachmentPreviewModal(
           type="button"
           onClick={onClose}
           className="absolute right-3 top-3 z-10 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border border-kumo-line bg-kumo-base/90 text-kumo-subtle shadow-[0_1px_2px_rgba(0,0,0,0.05)] backdrop-blur-sm transition-[background-color,color,transform] duration-150 ease-out hover:bg-kumo-base hover:text-kumo-default active:scale-[0.96]"
-          aria-label="Close preview"
+          aria-label="Закрити попередній перегляд"
         >
           <X size={18} />
         </button>
@@ -1335,14 +1347,14 @@ const AttachmentPreviewModal = memo(function AttachmentPreviewModal(
                 <div className="text-[12px] leading-5 text-kumo-subtle">
                   {attachment.mimeType || "Unknown file type"}{sizeLabel ? ` · ${sizeLabel}` : ""}
                 </div>
-                <div className="text-[12px] leading-5 text-kumo-inactive">This file can’t be previewed here.</div>
+                <div className="text-[12px] leading-5 text-kumo-inactive">Попередній перегляд цього файлу тут недоступний.</div>
                 {onDownload && (
                   <button
                     type="button"
                     onClick={() => onDownload(attachment)}
                     className="mt-1 inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-kumo-line/70 bg-kumo-base px-3 py-1.5 text-[12px] font-medium text-kumo-default transition-colors hover:bg-kumo-tint/40"
                   >
-                    Download
+                    Завантажити
                   </button>
                 )}
               </div>
@@ -1388,7 +1400,7 @@ const ChatAttachmentThumbnail = memo(function ChatAttachmentThumbnail(
             onError={() => setImageState("error")}
           />
           {imageState !== "loaded" && (
-            <div className="absolute inset-0 grid place-items-center bg-kumo-elevated text-[11px] text-kumo-inactive">Loading image…</div>
+            <div className="absolute inset-0 grid place-items-center bg-kumo-elevated text-[11px] text-kumo-inactive">Завантаження зображення…</div>
           )}
         </>
       ) : (
@@ -1452,7 +1464,7 @@ const ToolCallDetails = memo(function ToolCallDetails(
       {tc.toolName === "executeCode" ? (
         <>
           <span className="font-mono text-[11px] leading-4 text-kumo-inactive uppercase tracking-[0.08em]">
-            Code
+            Код
           </span>
           <pre className="max-h-56 overflow-auto rounded-xl border border-kumo-line/70 bg-kumo-base p-3 font-mono text-[12px] leading-[18px] text-kumo-subtle whitespace-pre-wrap">
             {tc.input.code}
@@ -1460,7 +1472,7 @@ const ToolCallDetails = memo(function ToolCallDetails(
           {tc.output && (
             <>
               <span className="font-mono text-[11px] leading-4 text-kumo-inactive uppercase tracking-[0.08em]">
-                Output
+                Вивід
               </span>
               <pre className="max-h-56 overflow-auto rounded-xl border border-kumo-line/70 bg-kumo-base p-3 font-mono text-[12px] leading-[18px] text-kumo-subtle whitespace-pre-wrap">
                 {tc.output}
@@ -1548,7 +1560,7 @@ const NestedToolCallRow = memo(function NestedToolCallRow({
           <span className="min-w-0 truncate">{label}</span>
           {tc.error && (
             <span className="flex-shrink-0 rounded-full bg-kumo-danger-tint px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-kumo-danger">
-              Error
+              Помилка
             </span>
           )}
           <CaretRight
@@ -1667,7 +1679,7 @@ const ToolGroupRow = memo(function ToolGroupRow({
             <span className="min-w-0 truncate">{group.label}</span>
             {group.hasError && (
               <span className="flex-shrink-0 rounded-full bg-kumo-danger-tint px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.04em] text-kumo-danger">
-                Error
+                Помилка
               </span>
             )}
             <CaretRight
@@ -1735,7 +1747,7 @@ const ToolGroupRow = memo(function ToolGroupRow({
           </Tooltip>
           <Tooltip content={formatFullTimestamp(footerTimestamp)} asChild>
             <span className="px-1 font-mono text-[11px] leading-4 text-kumo-inactive">
-              {footerTimestamp.toLocaleTimeString([], {
+              {footerTimestamp.toLocaleTimeString('uk-UA', {
                 hour: "2-digit",
                 minute: "2-digit",
               })}
@@ -1881,7 +1893,7 @@ function appendWorkParts(target: WorkMessageParts, source: WorkMessageParts) {
 function describeCreatedWorkpieceDeletion(created: CreatedWorkpieceName[] | undefined): string {
   if (!created || created.length === 0) return "";
   const titles = created.map((c) => `“${c.title}”`);
-  return ` (deletes ${titles.length === 1 ? "gadget" : "gadgets"} ${titles.join(", ")})`;
+  return ` (буде видалено ${titles.length === 1 ? "гаджет" : "гаджети"} ${titles.join(", ")})`;
 }
 
 // Label for the per-turn discard-changes button.
@@ -1890,8 +1902,8 @@ function getDiscardLabel(
   createdWorkpieces?: CreatedWorkpieceName[],
 ): string {
   const base = isTrailing
-    ? "Discard changes from this response"
-    : "Discard changes from this response and later responses";
+    ? "Відхилити зміни цієї відповіді"
+    : "Відхилити зміни цієї та наступних відповідей";
   return base + describeCreatedWorkpieceDeletion(createdWorkpieces);
 }
 
@@ -1900,8 +1912,8 @@ function getSavedEditsDiscardLabel(
   createdWorkpieces?: CreatedWorkpieceName[],
 ): string {
   const base = isTrailing
-    ? "Discard saved edits"
-    : "Discard saved edits and later changes";
+    ? "Відхилити збережені зміни"
+    : "Відхилити збережені зміни та всі наступні";
   return base + describeCreatedWorkpieceDeletion(createdWorkpieces);
 }
 
@@ -1927,7 +1939,7 @@ function DiscardPendingChangesPopover({
             disabled={disabled}
             className="inline-flex h-[30px] cursor-pointer items-center justify-center rounded-md border border-kumo-fill bg-kumo-base px-2.5 text-[12px] font-medium leading-[18px] tracking-[-0.25px] text-kumo-default transition-colors enabled:hover:bg-kumo-tint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kumo-ring disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Discard…
+            Відхилити…
           </button>
         }
       />
@@ -1940,14 +1952,14 @@ function DiscardPendingChangesPopover({
       >
         <div className="px-3.5 pb-2.5 pt-3">
           <Popover.Title className="text-[13px] font-medium leading-[18px] tracking-[-0.25px] text-kumo-default">
-            Discard all pending changes?
+            Відхилити всі незбережені зміни?
           </Popover.Title>
           <p className="mt-0.5 text-[11.5px] leading-4 tracking-[-0.15px] text-kumo-subtle">
-            Return to the last accepted version. Any gadgets or worktrees created by these
-            changes will be permanently deleted. Pending changes can&apos;t be restored.
+            Повернення до останньої прийнятої версії. Гаджети й робочі дерева, створені цими
+            змінами, буде видалено назавжди. Незбережені зміни не можна відновити.
           </p>
           <p className="mt-2 border-t border-kumo-line pt-2 text-[11px] leading-[15px] tracking-[-0.1px] text-kumo-inactive">
-            Use the <ArrowUUpLeft size={12} className="mx-0.5 inline-block align-[-2px]" aria-hidden="true" /><span className="sr-only">undo arrow</span> under any agent response to discard from that turn onward.
+            Скористайтеся <ArrowUUpLeft size={12} className="mx-0.5 inline-block align-[-2px]" aria-hidden="true" /><span className="sr-only">стрілкою скасування</span> під будь-якою відповіддю агента, щоб відхилити зміни від цього кроку й далі.
           </p>
         </div>
         <div className="flex items-center justify-end gap-0.5 border-t border-kumo-line px-2 py-1.5">
@@ -1957,7 +1969,7 @@ function DiscardPendingChangesPopover({
             onClick={() => onOpenChange(false)}
             className="flex h-6 cursor-pointer items-center rounded-md px-2 text-[12px] font-medium tracking-[-0.15px] text-kumo-inactive transition-colors enabled:hover:bg-kumo-tint enabled:hover:text-kumo-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kumo-ring disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Cancel
+            Скасувати
           </button>
           <button
             type="button"
@@ -1965,7 +1977,7 @@ function DiscardPendingChangesPopover({
             onClick={onConfirm}
             className="flex h-6 cursor-pointer items-center rounded-md px-2 text-[12px] font-medium tracking-[-0.15px] text-kumo-default transition-colors enabled:hover:bg-kumo-tint enabled:hover:text-kumo-danger focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kumo-ring disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {isDiscarding ? "Discarding..." : "Discard changes"}
+            {isDiscarding ? "Відхилення…" : "Відхилити зміни"}
           </button>
         </div>
       </Popover.Content>
@@ -2476,10 +2488,10 @@ function chatHasProposedChanges(meta: AiChatMetadata): boolean {
 type ChatTimeBucket = "today" | "yesterday" | "thisWeek" | "earlier";
 
 const CHAT_TIME_BUCKET_LABELS: Record<ChatTimeBucket, string> = {
-  today: "Today",
-  yesterday: "Yesterday",
-  thisWeek: "Earlier this week",
-  earlier: "Earlier",
+  today: "Сьогодні",
+  yesterday: "Учора",
+  thisWeek: "Раніше цього тижня",
+  earlier: "Раніше",
 };
 const CHAT_TIME_BUCKET_ORDER: ChatTimeBucket[] = [
   "today",
@@ -2508,12 +2520,12 @@ function getChatTimeBucket(date: Date, now: Date): ChatTimeBucket {
 // own the "date" half of the label (via the section header), so rows only show
 // what the header doesn't.
 function formatChatRowTime(date: Date, bucket: ChatTimeBucket, now: Date): string {
-  const time = date.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  const time = date.toLocaleTimeString('uk-UA', { hour: "numeric", minute: "2-digit" });
   if (bucket === "today" || bucket === "yesterday") {
     return time;
   }
   if (bucket === "thisWeek") {
-    const day = date.toLocaleDateString([], { weekday: "short" });
+    const day = date.toLocaleDateString('uk-UA', { weekday: "short" });
     return `${day} ${time}`;
   }
   const sameYear = date.getFullYear() === now.getFullYear();
@@ -3107,7 +3119,7 @@ function ChatInterface({
       }
     } catch (err: any) {
       console.error("Failed to download chat attachment:", err);
-      toasts.add({ title: err?.message || "Failed to download attachment", variant: "error" });
+      toasts.add({ title: err?.message || "Не вдалося завантажити вкладення", variant: "error" });
     }
   }, [overseer, toasts]);
 
@@ -3606,7 +3618,7 @@ function ChatInterface({
           provisional.compacting = false;
           if (event.nothingToCompact) {
             toastsRef.current.add({
-              title: "Nothing to compact — there are no earlier messages to summarize.",
+              title: "Немає чого стискати — попередніх повідомлень для підсумовування немає.",
             });
           }
           break;
@@ -3773,7 +3785,7 @@ function ChatInterface({
       } catch (err) {
         if (!logRpcFailure("Failed to subscribe to chats:", err)) {
           reportIssue('chat.subscription-load', err)
-          toasts.add({ title: "Unable to load conversations", variant: "error" });
+          toasts.add({ title: "Не вдалося завантажити розмови", variant: "error" });
         }
       }
     };
@@ -3926,7 +3938,7 @@ function ChatInterface({
       forceUpdate();
     } catch (err) {
       console.error("Failed to load earlier messages:", err);
-      toasts.add({ title: "Failed to load earlier messages", variant: "error" });
+      toasts.add({ title: "Не вдалося завантажити попередні повідомлення", variant: "error" });
     } finally {
       setIsLoadingEarlier(false);
     }
@@ -3967,7 +3979,7 @@ function ChatInterface({
       }
     } catch (err) {
       if (!logRpcFailure("Failed to send message:", err, { reportSite: "chat.send" })) {
-        toasts.add({ title: "Failed to send message", variant: "error" });
+        toasts.add({ title: "Не вдалося надіслати повідомлення", variant: "error" });
       }
       throw err;
     }
@@ -3990,7 +4002,7 @@ function ChatInterface({
       onNavigateToChatRef.current(newChatId);
     } catch (err) {
       if (!logRpcFailure("Failed to create new chat:", err, { reportSite: "chat.new" })) {
-        toasts.add({ title: "Failed to start conversation", variant: "error" });
+        toasts.add({ title: "Не вдалося почати розмову", variant: "error" });
       }
       throw err;
     }
@@ -4010,7 +4022,7 @@ function ChatInterface({
       await overseer.stopAgent(selectedChatId);
     } catch (err) {
       console.error("Failed to stop agent:", err);
-      toasts.add({ title: "Failed to stop agent", variant: "error" });
+      toasts.add({ title: "Не вдалося зупинити агента", variant: "error" });
     }
   };
 
@@ -4034,10 +4046,10 @@ function ChatInterface({
       }
 
       setIsEditingTitle(false);
-      toasts.add({ title: "Chat title updated successfully", variant: "success" });
+      toasts.add({ title: "Назву чату оновлено", variant: "success" });
     } catch (err) {
       console.error("Failed to update chat title:", err);
-      toasts.add({ title: "Failed to update chat title", variant: "error" });
+      toasts.add({ title: "Не вдалося оновити назву чату", variant: "error" });
     }
   };
 
@@ -4061,10 +4073,10 @@ function ChatInterface({
     setIsDeleting(true);
     try {
       await overseer.deleteChat(deleteTarget.id);
-      toasts.add({ title: "Chat deleted successfully", variant: "success" });
+      toasts.add({ title: "Чат видалено", variant: "success" });
     } catch (err) {
       console.error("Failed to delete chat:", err);
-      toasts.add({ title: "Failed to delete chat", variant: "error" });
+      toasts.add({ title: "Не вдалося видалити чат", variant: "error" });
     }
     setIsDeleting(false);
     setDeleteTarget(null);
@@ -4103,10 +4115,10 @@ function ChatInterface({
         bumpChatListVersion();
         forceUpdate();
       }
-      toasts.add({ title: "Chat title updated successfully", variant: "success" });
+      toasts.add({ title: "Назву чату оновлено", variant: "success" });
     } catch (err) {
       console.error("Failed to update chat title:", err);
-      toasts.add({ title: "Failed to update chat title", variant: "error" });
+      toasts.add({ title: "Не вдалося оновити назву чату", variant: "error" });
     }
   };
 
@@ -4124,10 +4136,10 @@ function ChatInterface({
         setStaleAcceptChatId(selectedChatId);
         return;
       }
-      toasts.add({ title: "Changes accepted", variant: "success" });
+      toasts.add({ title: "Зміни прийнято", variant: "success" });
     } catch (err) {
       console.error("Failed to accept changes:", err);
-      toasts.add({ title: "Failed to accept changes", variant: "error" });
+      toasts.add({ title: "Не вдалося прийняти зміни", variant: "error" });
     }
   };
 
@@ -4144,20 +4156,20 @@ function ChatInterface({
       setStaleAcceptChatId(null);
       if (conflictPaths.length > 0) {
         toasts.add({
-          title: `Updated this draft with the gadget's latest changes. ` +
+          title: `Чернетку оновлено останніми змінами гаджета. ` +
             `${conflictPaths.length} ${conflictPaths.length === 1 ? "file has" : "files have"} ` +
             `conflicts marked in the code -- resolve them (or ask the agent to), then accept again.`,
           variant: "warning",
         });
       } else {
         toasts.add({
-          title: "Updated this draft with the gadget's latest changes. Review and accept again.",
+          title: "Чернетку оновлено останніми змінами гаджета. Review and accept again.",
           variant: "success",
         });
       }
     } catch (err) {
       console.error("Failed to update from mainline:", err);
-      toasts.add({ title: "Failed to bring in the latest changes", variant: "error" });
+      toasts.add({ title: "Не вдалося застосувати останні зміни", variant: "error" });
     } finally {
       setIsUpdatingFromMainline(false);
     }
@@ -4168,10 +4180,10 @@ function ChatInterface({
 
     try {
       await overseer.finalizeChatDraft(selectedChatId);
-      toasts.add({ title: "Changes saved", variant: "success" });
+      toasts.add({ title: "Зміни збережено", variant: "success" });
     } catch (err) {
       console.error("Failed to save changes:", err);
-      toasts.add({ title: "Failed to save changes", variant: "error" });
+      toasts.add({ title: "Не вдалося зберегти зміни", variant: "error" });
     }
   };
 
@@ -4182,10 +4194,10 @@ function ChatInterface({
       // The destructive generation bump this causes prunes the buffered rows when its
       // metadata arrives (see the metadata handler).
       await overseer.discardChatDraftChanges(selectedChatId);
-      toasts.add({ title: "Changes discarded", variant: "success" });
+      toasts.add({ title: "Зміни відхилено", variant: "success" });
     } catch (err) {
       console.error("Failed to discard changes:", err);
-      toasts.add({ title: "Failed to discard changes", variant: "error" });
+      toasts.add({ title: "Не вдалося відхилити зміни", variant: "error" });
     }
   };
 
@@ -4202,13 +4214,13 @@ function ChatInterface({
       setDiscardChangesTarget((current) =>
         current?.chatId === target.chatId ? null : current,
       );
-      toasts.add({ title: "Pending changes discarded", variant: "success" });
+      toasts.add({ title: "Незбережені зміни відхилено", variant: "success" });
     } catch (err) {
-      console.error("Failed to discard pending changes:", err);
+      console.error("Не вдалося відхилити незбережені зміни:", err);
       // See handleRevertChanges: the server's refusals are instructive, so surface them.
       toasts.add({
         title: err instanceof Error && err.message
-          ? err.message : "Failed to discard pending changes",
+          ? err.message : "Не вдалося відхилити незбережені зміни",
         variant: "error",
       });
     } finally {
@@ -4307,13 +4319,13 @@ function ChatInterface({
 
     try {
       await overseer.revertChanges(selectedChatId, revertFrom);
-      toasts.add({ title: "Draft rewound", variant: "success" });
+      toasts.add({ title: "Чернетку повернуто до попереднього стану", variant: "success" });
     } catch (err) {
-      console.error("Failed to rewind draft:", err);
+      console.error("Не вдалося повернути чернетку до попереднього стану:", err);
       // The server's refusals here are instructive (e.g. a still-proposed update-from-mainline
       // batch can't be reverted), so surface them rather than a generic failure.
       toasts.add({
-        title: err instanceof Error && err.message ? err.message : "Failed to rewind draft",
+        title: err instanceof Error && err.message ? err.message : "Не вдалося повернути чернетку до попереднього стану",
         variant: "error",
       });
     }
@@ -4347,7 +4359,7 @@ function ChatInterface({
       }
     } catch (err) {
       console.error("Failed to toggle hook:", err);
-      toasts.add({ title: `Failed to ${enabled ? "enable" : "disable"} hook`, variant: "error" });
+      toasts.add({ title: `Не вдалося ${enabled ? "увімкнути" : "вимкнути"} тригер`, variant: "error" });
       // Revert the optimistic update.
       if (applyOptimisticHookEnabled(actionId, !enabled)) forceUpdate();
     } finally {
@@ -4388,7 +4400,7 @@ function ChatInterface({
       setConnectionAccept(null);
     } catch (err) {
       console.error("Failed to finalize connection:", err);
-      toasts.add({ title: "Failed to add connection", variant: "error" });
+      toasts.add({ title: "Не вдалося додати підключення", variant: "error" });
     } finally {
       gk[Symbol.dispose]();
       setProcessingConnections((prev) => {
@@ -4409,7 +4421,7 @@ function ChatInterface({
       }
     } catch (err) {
       console.error("Failed to deny connection:", err);
-      toasts.add({ title: "Failed to deny connection", variant: "error" });
+      toasts.add({ title: "Не вдалося відхилити запит на підключення", variant: "error" });
     } finally {
       setProcessingConnections((prev) => {
         const next = new Set(prev);
@@ -4489,14 +4501,14 @@ function ChatInterface({
       await overseer.retryAgent(selectedChatId, selectedModel);
     } catch (err) {
       console.error("Failed to retry agent:", err);
-      toasts.add({ title: "Failed to retry agent", variant: "error" });
+      toasts.add({ title: "Не вдалося повторно запустити агента", variant: "error" });
     }
   };
 
   const handleCopyMessage = useCallback(async (message: string) => {
     const ok = await copyToClipboard(message);
     toasts.add({
-      title: ok ? "Copied message" : "Unable to copy message",
+      title: ok ? "Повідомлення скопійовано" : "Не вдалося скопіювати повідомлення",
       variant: ok ? "success" : "error",
     });
   }, [toasts]);
@@ -4721,7 +4733,7 @@ function ChatInterface({
     const isDenied = msg.state === "denied";
     const isProc = processingConnections.has(msg.requestId);
 
-    const stateLabel = isAccepted ? "Connected" : isDenied ? "Denied" : null;
+    const stateLabel = isAccepted ? "Підключено" : isDenied ? "Відхилено" : null;
     const stateLabelCls = isDenied ? "text-kumo-danger" : "text-kumo-success";
     const scope = msg.resourceTitle ?? msg.resourceUrl;
 
@@ -4737,7 +4749,7 @@ function ChatInterface({
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                 <span className="font-medium text-kumo-default">
-                  Connect {msg.vendorName}
+                  Підключити {msg.vendorName}
                 </span>
                 {scope && (
                   <span className="rounded-full bg-kumo-tint px-2 py-0.5 text-[11px] leading-4 text-kumo-subtle">
@@ -4764,7 +4776,7 @@ function ChatInterface({
                   disabled={isProc}
                   className="cursor-pointer rounded-md px-2 py-1 font-medium text-kumo-inactive transition-colors duration-150 ease-out hover:text-kumo-danger focus-visible:text-kumo-danger focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  Deny
+                  Відхилити
                 </button>
                 <button
                   type="button"
@@ -4772,7 +4784,7 @@ function ChatInterface({
                   disabled={isProc}
                   className="cursor-pointer rounded-md bg-kumo-brand px-3 py-1 font-medium text-white transition-[opacity,transform] duration-150 ease-out hover:opacity-90 focus-visible:outline-none active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  Set up
+                  Налаштувати
                 </button>
               </div>
             )}
@@ -4795,10 +4807,10 @@ function ChatInterface({
     if (log.type === "bindHook") {
       const isDeleted = log.hookId === undefined;
       const stateLabel = isDeleted
-        ? "Deleted"
+        ? "Видалено"
         : log.enabled
-          ? "Enabled"
-          : "Disabled";
+          ? "Увімкнено"
+          : "Вимкнено";
       const stateLabelCls = isDeleted
         ? "text-kumo-inactive"
         : log.enabled
@@ -4913,9 +4925,9 @@ function ChatInterface({
     const showDescription = isPending || open;
     const metadata = log.resourceTitle;
     const stateLabel = isApproved
-      ? "Approved"
+      ? "Схвалено"
       : isRejected
-        ? "Denied"
+        ? "Відхилено"
         : null;
     const stateLabelCls = isRejected
       ? "text-kumo-danger"
@@ -5086,7 +5098,7 @@ function ChatInterface({
               <button
                 type="button"
                 className="group flex h-8 -ml-1.5 cursor-pointer items-center gap-1.5 rounded-md px-1.5 text-left transition-colors duration-150 ease-out hover:bg-kumo-tint/60 focus-visible:bg-kumo-tint/60 focus-visible:outline-none data-[popup-open]:bg-kumo-tint/60"
-                aria-label="Filter conversations"
+                aria-label="Фільтрувати розмови"
               >
                 <span className="text-[13px] leading-[18px] font-medium tracking-[-0.25px] text-kumo-default">
                   {CHAT_LIST_SCOPE_LABELS[chatListScope]}
@@ -5129,7 +5141,7 @@ function ChatInterface({
           </div>
         ) : chatList.length === 0 ? (
           <p className="text-sm text-kumo-inactive text-center py-8">
-            No conversations yet
+            Розмов поки немає
           </p>
         ) : (
           <div className="flex flex-col gap-1">
@@ -5145,7 +5157,7 @@ function ChatInterface({
                   onClick={() => setChatListScope("all")}
                   className="mt-2 cursor-pointer rounded-md px-2 py-1 text-[12px] leading-4 font-medium text-kumo-subtle transition-colors duration-150 ease-out hover:text-kumo-default focus-visible:text-kumo-default focus-visible:outline-none"
                 >
-                  Show all
+                  Показати все
                 </button>
               </div>
             ) : (
@@ -5204,13 +5216,13 @@ function ChatInterface({
                         {!isRenaming && chat.activeAgent ? (
                           <span className="inline-flex flex-shrink-0 cursor-pointer items-center gap-1 text-[11px] leading-4 font-medium text-kumo-brand">
                             <span className="h-1.5 w-1.5 rounded-full bg-kumo-brand animate-pulse" />
-                            Working
+                            Працює
                           </span>
                         ) : !isRenaming && chatHasProposedChanges(chat) ? (
                           <Tooltip content="This conversation has pending changes" asChild>
                             <span className="inline-flex flex-shrink-0 cursor-pointer items-center gap-1 text-[11px] leading-4 font-medium text-kumo-warning">
                               <span className="h-1.5 w-1.5 rounded-full bg-kumo-warning" />
-                              Pending changes
+                              Очікують на зміни
                             </span>
                           </Tooltip>
                         ) : null}
@@ -5218,7 +5230,7 @@ function ChatInterface({
                       <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] leading-4 text-kumo-inactive">
                         {chat.spawnerName && (
                           <>
-                            <span className="truncate">Agent · {chat.spawnerName}</span>
+                            <span className="truncate">Агент · {chat.spawnerName}</span>
                             <span className="flex-shrink-0" aria-hidden="true">·</span>
                           </>
                         )}
@@ -5257,7 +5269,7 @@ function ChatInterface({
                             onClick={() => startListRename(chat.id, chat.title)}
                             className="!h-auto rounded-md !px-2.5 !py-1.5 text-[12px] leading-4 tracking-[-0.2px] text-kumo-default transition-colors data-highlighted:bg-kumo-tint"
                           >
-                            Rename
+                            Перейменувати
                           </DropdownMenu.Item>
                           <DropdownMenu.Item
                             icon={<Trash size={12} className="mr-2" />}
@@ -5265,7 +5277,7 @@ function ChatInterface({
                             onClick={() => handleDeleteChat(chat.id, chat.title)}
                             className="!h-auto rounded-md !px-2.5 !py-1.5 text-[12px] leading-4 tracking-[-0.2px] transition-colors data-highlighted:bg-kumo-danger-tint"
                           >
-                            Delete
+                            Видалити
                           </DropdownMenu.Item>
                         </DropdownMenu.Content>
                       </DropdownMenu>
@@ -5359,7 +5371,7 @@ function ChatInterface({
                     : "font-normal text-kumo-subtle hover:text-kumo-default"
                 }`}
               >
-                Chat
+                Чат
               </button>
               <button
                 type="button"
@@ -5370,7 +5382,7 @@ function ChatInterface({
                     : "font-normal text-kumo-subtle hover:text-kumo-default"
                 }`}
               >
-                Connections
+                Підключення
               </button>
             </div>
           )}
@@ -5391,8 +5403,8 @@ function ChatInterface({
                   <WorkshopIconButton
                     onClick={() => onNavigateToChat(null)}
                     className="!h-8 !w-8 flex-shrink-0"
-                    title="Back to conversations"
-                    aria-label="Back to conversations"
+                    title="До списку розмов"
+                    aria-label="До списку розмов"
                   >
                     <CaretLeft size={14} />
                   </WorkshopIconButton>
@@ -5415,14 +5427,14 @@ function ChatInterface({
                         onClick={handleSaveChatTitle}
                         disabled={!titleInput.trim()}
                         className="!h-8 !w-8 hover:text-kumo-brand disabled:opacity-30"
-                        aria-label="Save chat title"
+                        aria-label="Зберегти назву чату"
                       >
                         <Check size={13} />
                       </WorkshopIconButton>
                       <WorkshopIconButton
                         onClick={handleCancelTitleEdit}
                         className="!h-8 !w-8"
-                        aria-label="Cancel title edit"
+                        aria-label="Скасувати редагування назви"
                       >
                         <X size={13} />
                       </WorkshopIconButton>
@@ -5435,8 +5447,8 @@ function ChatInterface({
                       <WorkshopIconButton
                         onClick={() => setIsEditingTitle(true)}
                         className="!h-8 !w-8 flex-shrink-0 text-kumo-inactive hover:text-kumo-subtle"
-                        title="Rename chat"
-                        aria-label="Rename chat"
+                        title="Перейменувати чат"
+                        aria-label="Перейменувати чат"
                       >
                         <Pencil size={11} />
                       </WorkshopIconButton>
@@ -5447,8 +5459,8 @@ function ChatInterface({
                     onClick={() => handleDeleteChat()}
                     danger
                     className="!h-8 !w-8 flex-shrink-0 text-kumo-inactive"
-                    title="Delete chat"
-                    aria-label="Delete chat"
+                    title="Видалити чат"
+                    aria-label="Видалити чат"
                   >
                     <Trash size={14} />
                   </WorkshopIconButton>
@@ -5471,7 +5483,7 @@ function ChatInterface({
                   >
                     {isLoadingEarlier && (
                       <div className="mx-auto mb-6 text-[12px] leading-4 font-medium text-kumo-inactive">
-                        Loading earlier messages…
+                        Завантаження попередніх повідомлень…
                       </div>
                     )}
 
@@ -5486,7 +5498,7 @@ function ChatInterface({
                             <div className="flex items-center gap-3" role="separator">
                               <span className="h-px flex-1 bg-kumo-line/60" aria-hidden="true" />
                               <span className="flex-shrink-0 text-[11px] leading-4 font-medium tracking-[0.6px] text-kumo-inactive uppercase">
-                                Kept in full from here
+                                Від цього місця збережено повністю
                               </span>
                               <span className="h-px flex-1 bg-kumo-line/60" aria-hidden="true" />
                             </div>
@@ -5505,7 +5517,7 @@ function ChatInterface({
                               <p className="mb-3 text-[12px] leading-[17px] text-kumo-subtle">
                                 The agent reads this in place of everything earlier in the chat.{" "}
                                 {kept === 0
-                                  ? "Nothing after it was kept."
+                                  ? "Після цього нічого не збережено."
                                   : `The ${kept === 1 ? "message" : `${kept} messages`} after the cut ${kept === 1 ? "was" : "were"} kept in full.`}
                               </p>
                             )}
@@ -5546,7 +5558,7 @@ function ChatInterface({
 
                         return (
                           <div key={entry.key} className={`${entryTopClass} mb-4 max-w-[860px]`}>
-                            <div className="flex items-center gap-3" role="separator" aria-label="Context compacted">
+                            <div className="flex items-center gap-3" role="separator" aria-label="Контекст стиснуто">
                               <span className="h-px flex-1 bg-kumo-line" aria-hidden="true" />
                               <button
                                 type="button"
@@ -5555,7 +5567,7 @@ function ChatInterface({
                                 className="flex flex-shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-1 py-0.5 text-[11px] leading-4 font-medium tracking-[0.6px] text-kumo-inactive uppercase transition-colors duration-150 ease-out hover:text-kumo-default focus-visible:text-kumo-default focus-visible:outline-none"
                               >
                                 <Brain size={13} aria-hidden="true" />
-                                Context compacted
+                                Контекст стиснуто
                                 <CaretRight
                                   size={11}
                                   weight="bold"
@@ -5609,7 +5621,7 @@ function ChatInterface({
                         // chat's pins, and erasing it would let a later accept silently overwrite
                         // the mainline content it brought in (the server refuses too).
                         const discardLabel = mainlineMerge
-                          ? "This update can't be discarded: it brought in changes already accepted elsewhere. Edit the files instead."
+                          ? "Це оновлення не можна відхилити: воно містить зміни, уже прийняті в іншому місці. Відредагуйте файли."
                           : getSavedEditsDiscardLabel(
                               entry.message.sequence === lastDurablePendingChange?.sequence,
                               createdWorkpiecesOf(entry.message),
@@ -5642,7 +5654,7 @@ function ChatInterface({
                                 )}
                                 <Tooltip content={formatFullTimestamp(entry.message.timestamp)} asChild>
                                   <span className="px-1 font-mono text-[11px] leading-4 text-kumo-inactive">
-                                    {entry.message.timestamp.toLocaleTimeString([], {
+                                    {entry.message.timestamp.toLocaleTimeString('uk-UA', {
                                       hour: "2-digit",
                                       minute: "2-digit",
                                     })}
@@ -5729,7 +5741,7 @@ function ChatInterface({
                               )}
                               <Tooltip content={formatFullTimestamp(msg.timestamp)} asChild>
                                 <span className="font-mono">
-                                  {msg.timestamp.toLocaleTimeString([], {
+                                  {msg.timestamp.toLocaleTimeString('uk-UA', {
                                     hour: "2-digit",
                                     minute: "2-digit",
                                   })}
@@ -5779,7 +5791,7 @@ function ChatInterface({
                                 )}
                                 <Tooltip content={formatFullTimestamp(msg.timestamp)} asChild>
                                   <span className="font-mono">
-                                    {msg.timestamp.toLocaleTimeString([], {
+                                    {msg.timestamp.toLocaleTimeString('uk-UA', {
                                       hour: "2-digit",
                                       minute: "2-digit",
                                     })}
@@ -5834,12 +5846,12 @@ function ChatInterface({
                                     : "opacity-100 sm:opacity-0 sm:group-hover/agentMessage:opacity-100 sm:group-focus-within/agentMessage:opacity-100"
                                 }`}>
                                   {hasMessageText && (
-                                    <Tooltip content="Copy message" asChild>
+                                    <Tooltip content="Скопіювати повідомлення" asChild>
                                       <button
                                         type="button"
                                         onClick={() => handleCopyMessage(msg.message)}
                                         className="flex cursor-pointer items-center rounded-md p-1 text-kumo-inactive transition-[color,transform] duration-150 ease-out hover:text-kumo-default focus-visible:text-kumo-default focus-visible:outline-none active:scale-[0.96]"
-                                        aria-label="Copy message"
+                                        aria-label="Скопіювати повідомлення"
                                       >
                                         <Copy size={15} />
                                       </button>
@@ -5866,7 +5878,7 @@ function ChatInterface({
                                   })()}
                                   <Tooltip content={formatFullTimestamp(msg.timestamp)} asChild>
                                     <span className="px-1 font-mono text-[11px] leading-4 text-kumo-inactive">
-                                      {msg.timestamp.toLocaleTimeString([], {
+                                      {msg.timestamp.toLocaleTimeString('uk-UA', {
                                         hour: "2-digit",
                                         minute: "2-digit",
                                       })}
@@ -5937,7 +5949,7 @@ function ChatInterface({
                                   content={
                                     isMerge
                                       ? `Accepted draft changes${ts ? ` through ${formatFullTimestamp(ts)}` : ""}.`
-                                      : `Returned to the gadget state before the prompt sent ${ts ? `at ${ts.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "earlier"}.`
+                                      : `Повернуто стан гаджета, який був до надсилання запиту ${ts ? `о ${ts.toLocaleTimeString('uk-UA', { hour: "2-digit", minute: "2-digit" })}` : "раніше"}.`
                                   }
                                   asChild
                                 >
@@ -5968,7 +5980,7 @@ function ChatInterface({
                                 <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center text-kumo-inactive" aria-hidden="true">
                                   <Plug size={16} />
                                 </span>
-                                <span>Used the gadget</span>
+                                <span>Використано гаджет</span>
                               </span>
                             </Tooltip>
                           </div>
@@ -5997,7 +6009,7 @@ function ChatInterface({
                                         </span>
                                         <span className="flex min-w-0 flex-1 items-center gap-1">
                                           <span className="min-w-0 truncate">
-                                            <span className="font-medium text-kumo-danger">Error: </span>
+                                            <span className="font-medium text-kumo-danger">Помилка: </span>
                                             <span className="text-kumo-subtle">{msg.message}</span>
                                           </span>
                                           <CaretRight
@@ -6017,7 +6029,7 @@ function ChatInterface({
                                         className="flex flex-shrink-0 cursor-pointer items-center gap-1 rounded-md px-1 py-0.5 text-[13px] leading-4 font-medium text-kumo-default transition-[color,opacity,transform] duration-150 ease-out hover:text-kumo-default-hover focus-visible:text-kumo-default-hover focus-visible:outline-none active:scale-[0.98]"
                                       >
                                         <Lightning size={12} weight="bold" />
-                                        Continue
+                                        Продовжити
                                       </button>
                                     </Tooltip>
                                   )}
@@ -6030,7 +6042,7 @@ function ChatInterface({
                                         className="flex flex-shrink-0 cursor-pointer items-center gap-1 rounded-md px-1 py-0.5 text-[13px] leading-4 font-medium text-kumo-default transition-[color,opacity,transform] duration-150 ease-out hover:text-kumo-default-hover focus-visible:text-kumo-default-hover focus-visible:outline-none active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
                                       >
                                         <ArrowsClockwise size={12} weight="bold" />
-                                        Retry
+                                        Повторити
                                       </button>
                                     </Tooltip>
                                   )}
@@ -6097,7 +6109,7 @@ function ChatInterface({
                               asChild
                             >
                               <span className="font-medium text-kumo-subtle">
-                                Draft changes pending
+                                Є незбережені зміни
                               </span>
                             </Tooltip>
                             <div className="flex flex-wrap items-center gap-2 text-[13px] leading-4">
@@ -6108,7 +6120,7 @@ function ChatInterface({
                                   onClick={handleDiscardDraftChanges}
                                   className="cursor-pointer rounded-md px-1 py-0.5 font-medium text-kumo-inactive transition-colors duration-150 ease-out hover:text-kumo-danger focus-visible:text-kumo-danger focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-40"
                                 >
-                                  Discard
+                                  Відхилити
                                 </button>
                               </Tooltip>
                               <Tooltip content="Save these edits as a draft version. They won't affect the gadget until you accept changes." asChild>
@@ -6118,7 +6130,7 @@ function ChatInterface({
                                   onClick={handleFinalizeDraftChanges}
                                   className="cursor-pointer rounded-md px-1 py-0.5 font-medium text-kumo-default transition-[color,opacity,transform] duration-150 ease-out hover:text-kumo-default-hover focus-visible:text-kumo-default-hover focus-visible:outline-none active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-40"
                                 >
-                                  Save draft
+                                  Зберегти чернетку
                                 </button>
                               </Tooltip>
                             </div>
@@ -6168,13 +6180,13 @@ function ChatInterface({
                         <div className={`group/agent min-w-0 w-full max-w-[860px] space-y-2 ${provisionalTopClass}`}>
                           {isCompacting && (
                             <div className={`inline-flex px-1.5 py-1 text-[14px] leading-5 tracking-[-0.25px] ${styles.thinkingShimmer}`}>
-                              Compacting…
+                              Стискання контексту…
                             </div>
                           )}
 
                           {showThinking && (
                             <div className={`inline-flex px-1.5 py-1 text-[14px] leading-5 tracking-[-0.25px] ${styles.thinkingShimmer}`}>
-                              Thinking
+                              Обмірковує
                             </div>
                           )}
 
@@ -6234,7 +6246,7 @@ function ChatInterface({
                                         >
                                           {toolCall.code && (
                                             <>
-                                              <span className="font-mono text-[11px] leading-4 text-kumo-inactive uppercase tracking-[0.08em]">Code</span>
+                                              <span className="font-mono text-[11px] leading-4 text-kumo-inactive uppercase tracking-[0.08em]">Код</span>
                                               <pre className="max-h-56 overflow-auto rounded-xl border border-kumo-line/70 bg-kumo-base p-3 font-mono text-[12px] leading-[18px] text-kumo-subtle whitespace-pre-wrap">
                                                 {toolCall.code}
                                               </pre>
@@ -6242,7 +6254,7 @@ function ChatInterface({
                                           )}
                                           {toolCall.output && (
                                             <>
-                                              <span className="font-mono text-[11px] leading-4 text-kumo-inactive uppercase tracking-[0.08em]">Output</span>
+                                              <span className="font-mono text-[11px] leading-4 text-kumo-inactive uppercase tracking-[0.08em]">Вивід</span>
                                               <pre className="max-h-56 overflow-auto rounded-xl border border-kumo-line/70 bg-kumo-base p-3 font-mono text-[12px] leading-[18px] text-kumo-subtle whitespace-pre-wrap">
                                                 {toolCall.output}
                                               </pre>
@@ -6295,9 +6307,9 @@ function ChatInterface({
                       : undefined}
                     blockedReason={
                       hasPendingConnectionRequest
-                        ? "Set up or deny the connection request above to continue."
+                        ? "Налаштуйте підключення або відхиліть запит вище, щоб продовжити."
                         : hasPendingAwaitedAction
-                          ? "Approve or reject the pending action above to continue."
+                          ? "Схваліть або відхиліть дію вище, щоб продовжити."
                           : undefined
                     }
                     draftUpdateBanner={(() => {
@@ -6316,7 +6328,7 @@ function ChatInterface({
                         <div className="themed-surface-inset relative flex items-center gap-2 overflow-hidden rounded-t-[calc(1rem-1px)] border-b border-kumo-line bg-kumo-elevated px-3.5 py-2">
                           <span className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-kumo-brand/40 to-transparent" aria-hidden="true" />
                           <span className="min-w-0 flex-1 truncate text-[12px] font-medium leading-4 tracking-[-0.2px] text-kumo-default">
-                            Pending changes
+                            Очікують на зміни
                           </span>
                           <DiscardPendingChangesPopover
                             open={discardChangesTarget?.chatId === currentChatMetadata.id}
@@ -6331,9 +6343,9 @@ function ChatInterface({
                             onConfirm={handleDiscardPendingChanges}
                           />
                           <Tooltip content={isAgentActive
-                            ? "Wait for the agent to finish before accepting changes."
+                            ? "Дочекайтеся завершення роботи агента, перш ніж приймати зміни."
                             : isDiscardingChanges
-                              ? "Wait for pending changes to finish discarding."
+                              ? "Дочекайтеся завершення відхилення змін."
                               : "Keep this draft and make it the gadget's current version."} asChild>
                             <WorkshopButton
                               disabled={changesActionsDisabled}
@@ -6342,7 +6354,7 @@ function ChatInterface({
                               className="!h-7 !cursor-pointer !rounded-md !border-transparent !shadow-none gap-1 text-[12px]"
                             >
                               <Check size={11} weight="bold" />
-                              Accept changes
+                              Прийняти зміни
                             </WorkshopButton>
                           </Tooltip>
                         </div>
@@ -6354,7 +6366,7 @@ function ChatInterface({
                   <div className="-mt-1 flex min-h-[1.25rem] items-start justify-end gap-4 px-4 pb-1 font-mono text-[11px] leading-4 text-kumo-inactive">
                     {currentChatMetadata?.totalTokens != null && (
                       <span>
-                        {currentChatMetadata.totalTokens.toLocaleString()} tokens
+                        {currentChatMetadata.totalTokens.toLocaleString('uk-UA')} токенів
                       </span>
                     )}
                     {currentChatMetadata?.totalCost != null && (
@@ -6383,7 +6395,7 @@ function ChatInterface({
           <div className="flex items-start justify-between gap-4 border-b border-kumo-line px-5 py-4">
             <div className="min-w-0">
               <Dialog.Title className="text-[15px] leading-5 font-medium tracking-[-0.3px] text-kumo-default">
-                The gadget changed since this draft started
+                Гаджет змінився після створення цієї чернетки
               </Dialog.Title>
               <Dialog.Description className="mt-1 text-[12px] leading-4 font-normal tracking-[-0.2px] text-kumo-subtle">
                 Someone else&apos;s changes were accepted in the meantime, so this draft&apos;s
@@ -6398,7 +6410,7 @@ function ChatInterface({
                   {...props}
                   className="!h-7 !w-7"
                   disabled={isUpdatingFromMainline}
-                  aria-label="Close"
+                  aria-label="Закрити"
                 >
                   <X size={16} />
                 </WorkshopIconButton>
@@ -6414,7 +6426,7 @@ function ChatInterface({
                   className="!h-9"
                   disabled={isUpdatingFromMainline}
                 >
-                  Not now
+                  Не зараз
                 </WorkshopButton>
               )}
             />
@@ -6424,7 +6436,7 @@ function ChatInterface({
               disabled={isUpdatingFromMainline}
               className="!h-9 min-w-[64px]"
             >
-              {isUpdatingFromMainline ? "Updating..." : "Bring in latest changes"}
+              {isUpdatingFromMainline ? "Оновлення…" : "Застосувати останні зміни"}
             </WorkshopButton>
           </div>
         </Dialog>
@@ -6432,8 +6444,8 @@ function ChatInterface({
 
       <DeleteConfirmationDialog
         open={deleteTarget !== null}
-        title="Delete conversation?"
-        description={<>This removes <span className="font-medium text-kumo-default">{deleteTarget?.title}</span>. You can&apos;t undo this.</>}
+        title="Видалити розмову?"
+        description={<>Буде видалено <span className="font-medium text-kumo-default">{deleteTarget?.title}</span>. Цю дію не можна скасувати.</>}
         isDeleting={isDeleting}
         onOpenChange={(open) => {
           if (!open) setDeleteTarget(null);
