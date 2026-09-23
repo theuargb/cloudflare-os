@@ -4356,7 +4356,7 @@ class OverseerImpl implements AgentHooks {
 
   // `joinAs` counts the returned client toward #hasCollaboratorSession for its lifetime; passed by
   // the collaborator-facing mints, omitted for the owner's and for internal callers (see
-  // GadgetClientImpl). `actorUserId` is who the returned client acts for, for analytics only.
+  // GadgetClientImpl). `actorUserId` is who the returned client acts for (see GatekeeperClientImpl).
   async addGatekeeper(
       cls: GatekeeperClass, creationSpec: GatekeeperCreationSpec, actorUserId: string,
       joinAs?: SessionKind)
@@ -4906,10 +4906,12 @@ class OverseerImpl implements AgentHooks {
     let gatekeeper = this.storage.gatekeepers.get(gatekeeperId);
     // Attribute the action to its initiator when one is verifiable, resolved before allocating an
     // action id or persisting anything. An agent's comes from the active turn and current
-    // workspace membership, never from the RPC input; without a live turn the action is queued
-    // unattributed, as are those from sessions with no per-submission principal.
+    // workspace membership, never from the RPC input; a user capability's is the authenticated
+    // User DO ID the API minted it with. Without either (an agent's code after its turn ended,
+    // gadget and hook sessions) the action is queued unattributed.
     let initiatorUserId = caller.from === "agent"
-        ? this.storage.activeAgents.get(caller.chatId)?.initiatorUserId : undefined;
+        ? this.storage.activeAgents.get(caller.chatId)?.initiatorUserId
+        : caller.from === "user" ? caller.userId : undefined;
     let requester = initiatorUserId ? await this.getActionContextForUser(initiatorUserId) : undefined;
     if (!gatekeeper) {
       throw new Error(
@@ -11885,7 +11887,8 @@ class GatekeeperClientImpl<Session extends RpcCompatible<Session>>
     extends RpcTarget implements GatekeeperClient<Session> {
   // See GadgetClientImpl: `joinedAs` counts a collaborator's retained capability toward
   // #hasCollaboratorSession; omitted for the owner's and for internal construction.
-  // `actorUserId` (hex user DO ID of the client holding this capability) feeds analytics only.
+  // `actorUserId` (hex user DO ID of the client holding this capability) feeds analytics and is
+  // the authenticated initiator of actions submitted through its sessions.
   #leaveSession?: () => void;
 
   constructor(private impl: OverseerImpl, private id: number,
@@ -11939,7 +11942,8 @@ class GatekeeperClientImpl<Session extends RpcCompatible<Session>>
   }
 
   async openSession(): Promise<RpcStub<Session>> {
-    return this.impl.openGatekeeperSession(this.id, this.facet, {from: "user"});
+    return this.impl.openGatekeeperSession(
+        this.id, this.facet, {from: "user", userId: this.actorUserId});
   }
 
   async getCreationSpec(): Promise<GatekeeperCreationSpec> {

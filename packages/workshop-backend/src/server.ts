@@ -615,10 +615,13 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
     let accounts = await user.listProvidedAccounts();
     let app = accounts.find((account: (typeof accounts)[number]) => account.vendorId === id && account.description.providesUi);
     if (!app) return null;
-    // The actor and current authority are supplied fresh on every open.
+    // The actor and current authority are supplied fresh on every open. The actor id is the
+    // canonical login identity (username or Access email), the same id agent sessions carry.
+    let actorId = this.#userId.name;
+    if (!actorId) throw new Error("The authenticated user has no canonical identity.");
     return user.startAccountAppUi(app.accountId, {
-      actorId: this.#userId.toString(),
-      actor: {displayName: this.#userId.name ?? this.#userId.toString()},
+      actorId,
+      actor: {displayName: actorId},
       isAdmin: this.#isAdmin(),
     });
   }

@@ -370,6 +370,12 @@ export type GatekeeperCaller = {
   gadgetId?: WorkpieceId;
 } | {
   from: "user";
+  /**
+   * The authenticated User DO id of the Workshop API session that minted the capability, which
+   * attributes its actions. Absent on un-attributed user callers (slash command observation
+   * authorizers).
+   */
+  userId?: string;
   chatId?: number;
 } | {
   from: "hook";
