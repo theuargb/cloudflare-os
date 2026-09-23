@@ -84,7 +84,10 @@ export type VendorDescription = {
  * each time rather than baked into the account, since a user's admin status can change over time.
  */
 export type AppUiContext = {
-  /** Opaque authenticated actor id used to attribute shared management activity. */
+  /**
+   * Canonical authenticated actor id — the username for password accounts, the email for Access
+   * and sign-in accounts — identical to `AgentActionContext.actorId` for the same person.
+   */
   actorId: string;
   /** Current display data used to identify the actor in shared management activity. */
   actor: { displayName: string; avatar?: AvatarImage };
