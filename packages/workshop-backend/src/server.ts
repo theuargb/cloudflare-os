@@ -23,7 +23,9 @@ import { GatekeeperConnectCallbackImpl, normalizeUsername, UserDurableObject, CL
 import { OverseerDurableObject, GatekeeperLoopback, CodeModeTailLoopback, AgentSpawnerGatekeeper, GatekeeperHookLoopback, GadgetTailLoopback, AgentSelfLoopback } from "./overseer";
 import { UserDirectoryDurableObject } from "./user-directory.js";
 import { ExternalMessageGateway } from "./external-message-gateway";
-import { RpcStub as NativeRpcStub } from "cloudflare:workers";
+import { RpcStub as NativeRpcStub, WorkerEntrypoint } from "cloudflare:workers";
+import { getModel } from "./ai-models.js";
+import { completeText } from "./ai-invoke.js";
 import { recordAnalytics } from "./analytics";
 import { handleClientErrorRequest } from "./client-errors.js";
 import { verifyCfAccessJwt } from "./access.js";
@@ -67,6 +69,46 @@ export { OverseerDurableObject, GatekeeperLoopback, GatekeeperHookLoopback,
 
 // Re-export service-binding entrypoint for external channel integrations.
 export { ExternalMessageGateway };
+
+/** Private service binding for Platform Foundation's bounded, deployment-configured AI requests. */
+@validateRpc()
+export class OneCAiModelRunner extends WorkerEntrypoint<Cloudflare.Env> {
+  async runText(input: { modelId: string; prompt: string; systemPrompt?: string })
+      : Promise<{ text: string }> {
+    if (!input || typeof input !== "object" ||
+        typeof input.modelId !== "string" || input.modelId.trim().length === 0 ||
+        input.modelId.length > 256 || typeof input.prompt !== "string" ||
+        input.prompt.trim().length === 0 || input.prompt.length > 100_000 ||
+        (input.systemPrompt !== undefined &&
+          (typeof input.systemPrompt !== "string" || input.systemPrompt.length > 20_000))) {
+      throw new Error("Invalid AI request.");
+    }
+
+    try {
+      // This private entrypoint intentionally accepts only models present in the deployment's
+      // AI Gateway catalog. It never accepts provider credentials or permits direct model routing.
+      let gateway = getAiGatewayConfig(this.env);
+      if (!gateway) throw new Error("AI Gateway is unavailable.");
+      let configured = gateway.resolveModel(input.modelId);
+      if (!configured) throw new Error("The requested AI model is unavailable.");
+
+      let handle = getModel(this.env, configured.config, {
+        type: "agent",
+        id: "1c-platform-foundation",
+        name: "1C Platform Foundation",
+      }, { metadata: { source: "model-binding" } });
+      let text = await completeText(handle, {
+        prompt: input.prompt,
+        systemPrompt: input.systemPrompt,
+      });
+      return { text };
+    } catch {
+      // Provider exceptions can include request details; return a stable message without logging
+      // prompts, generated text, identity data, or credentials.
+      throw new Error("The AI request failed.");
+    }
+  }
+}
 
 // Declare optional environment variables here since they may be omitted from wrangler.jsonc.
 type Env = Cloudflare.Env & {

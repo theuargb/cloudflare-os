@@ -1702,6 +1702,9 @@ export type ActionLogEntry = {
    */
   resolvedBy?: AiChatAuthorInfo;
 
+  /** Authenticated actor who initiated an agent action, when one was available at submission. */
+  requestedBy?: AiChatAuthorInfo;
+
   /**
    * True when the action was applied automatically by an auto-approval rule rather than by a human
    * clicking Approve. Only ever set alongside state "approved" (there is no automatic rejection).
