@@ -92,6 +92,20 @@ export type AppUiContext = {
   isAdmin: boolean;
 }
 
+/**
+ * Authenticated initiating actor facts supplied by the Workshop to an agent session. These facts
+ * identify the human whose authority the domain must check; `isAdmin` is freshly computed by the
+ * Workshop and is never a claim made by a gatekeeper or agent.
+ */
+export type AgentActionContext = {
+  /** Stable authenticated Workshop actor identifier. */
+  actorId: string;
+  /** Current display identity for audit and domain service calls. */
+  actor: { displayName: string; avatar?: AvatarImage };
+  /** Whether this actor currently has deployment administrator authority under `ADMINS`. */
+  isAdmin: boolean;
+}
+
 // The agent catalog is bounded discovery metadata a gatekeeper exposes via
 // Gatekeeper.getAgentCatalog() so the agent can see *what* is reachable through a session (e.g. the
 // titles of the Context Library collections it can search) without first reading everything. It is
@@ -938,7 +952,7 @@ export interface Gatekeeper<Session> extends DurableObject {
    * ignore this parameter (and can even omit the parameter from their `applyAction()`
    * declaration).
    */
-  applyAction(action: number, cache: RpcStub<GitCache>): Promise<void>;
+  applyAction(action: number, cache: RpcStub<GitCache>, context?: AgentActionContext): Promise<void>;
 
   /**
    * Indicates that an action was rejected by the user. The gatekeeper should clean up any
@@ -1066,6 +1080,12 @@ export interface SlashCommandProvider extends RpcTarget {
  * called before applying them.
  */
 export interface ApprovalQueue extends ObservationAuthorizer {
+  /**
+   * Resolves the authenticated actor initiating this agent session, including current workspace
+   * admin status. Returns undefined for non-agent sessions. Agent callers must fail closed when
+   * this is undefined; the result is authority context, not caller-provided input.
+   */
+  getAgentActionContext?(): Promise<AgentActionContext | undefined>;
   // TODO: Method to indicate that the gadget tried to perform an action that the gatekeeper itself
   //   hasn't been authorized to do (e.g. the user hasn't authorized the right OAuth scopes). The
   //   system should direct the user to the right UI to authorize the action.
