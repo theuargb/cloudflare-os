@@ -719,13 +719,9 @@ function describeToolCallCount(toolName: AiToolCall["toolName"], count: number):
     case "writeFile":
       return `Записано ${pluralize(count, "файл", "файли", "файлів")}`;
     case "editFile":
-<<<<<<< HEAD
       return count === 1 ? "Made 1 edit" : `Made ${count} edits`;
     case "grep":
       return count === 1 ? "Searched files" : `Searched files ${formatTimes(count)}`;
-=======
-      return `Внесено ${pluralize(count, "зміну", "зміни", "змін")}`;
->>>>>>> b3d9c8a2 (feat: uk i11n)
     case "webFetch":
       return `Отримано ${pluralize(count, "сторінку", "сторінки", "сторінок")}`;
     case "executeCode":
@@ -802,13 +798,9 @@ function getProvisionalToolLabel(toolName: AiToolCall["toolName"] | null | undef
     case "writeFile":
       return "Запис файлу";
     case "editFile":
-<<<<<<< HEAD
-      return "Editing file";
-    case "grep":
-      return "Searching files";
-=======
       return "Редагування файлу";
->>>>>>> b3d9c8a2 (feat: uk i11n)
+    case "grep":
+      return "Пошук файлів";
     case "describeBinding":
       return "Перевірка прив’язування";
     case "setBindingHook":
@@ -847,7 +839,6 @@ function getToolTarget(tc: AiToolCall): string | undefined {
 // Present-tense verb for an in-progress tool call.
 function getProvisionalToolVerb(toolName: AiToolCall["toolName"]): string {
   switch (toolName) {
-<<<<<<< HEAD
     case "readFile": return "Reading";
     case "writeFile": return "Writing";
     case "editFile": return "Editing";
@@ -865,24 +856,6 @@ function getProvisionalToolVerb(toolName: AiToolCall["toolName"]): string {
     case "listBlueprints": return "Listing blueprints";
     case "listConnectableResources": return "Listing connectable resources";
     case "requestConnection": return "Requesting a connection";
-=======
-    case "readFile": return "Читання";
-    case "writeFile": return "Запис";
-    case "editFile": return "Редагування";
-    case "describeBinding": return "Перевірка";
-    case "setBindingHook": return "Підключення";
-    case "setGadgetBinding": return "Налаштування";
-    case "saveCapsuleAsBinding": return "Збереження";
-    case "createGadget": return "Створення гаджета";
-    case "createWorktree": return "Створення робочого дерева";
-    case "executeCode": return "Виконується код";
-    case "webFetch": return "Завантаження";
-    case "observeUserChanges": return "Перевірка змін користувача";
-    case "giveUp": return "Зупинка";
-    case "listBlueprints": return "Перегляд шаблонів";
-    case "listConnectableResources": return "Перегляд доступних ресурсів";
-    case "requestConnection": return "Запит підключення";
->>>>>>> b3d9c8a2 (feat: uk i11n)
   }
   const _exhaustive: never = toolName;
   return _exhaustive;
@@ -892,42 +865,23 @@ function getProvisionalToolVerb(toolName: AiToolCall["toolName"]): string {
 function describeProvisionalToolCount(toolName: AiToolCall["toolName"], count: number): string {
   if (count <= 1) return getProvisionalToolLabel(toolName);
   switch (toolName) {
-<<<<<<< HEAD
-    case "readFile": return `Reading ${pluralize(count, "file")}`;
-    case "writeFile": return `Writing ${pluralize(count, "file")}`;
-    case "editFile": return `Making ${count} edits`;
-    case "grep": return `Searching files ${formatTimes(count)}`;
-    case "webFetch": return `Fetching ${pluralize(count, "page")}`;
-    case "executeCode": return count === 1 ? "Running code" : `Running code ${formatTimes(count)}`;
-    case "describeBinding": return `Inspecting ${pluralize(count, "binding")}`;
-    case "setBindingHook": return `Connecting ${pluralize(count, "binding")}`;
-    case "setGadgetBinding": return `Wiring up ${pluralize(count, "binding")}`;
-    case "saveCapsuleAsBinding": return `Saving ${pluralize(count, "resource")}`;
-    case "createGadget": return `Creating ${pluralize(count, "gadget")}`;
-    case "createWorktree": return `Creating ${pluralize(count, "worktree")}`;
-    case "observeUserChanges": return `Observing ${pluralize(count, "change set")}`;
-    case "giveUp": return "Stopping";
-    case "listBlueprints": return "Listing blueprints";
-    case "listConnectableResources": return "Listing connectable resources";
-    case "requestConnection": return `Requesting ${pluralize(count, "connection")}`;
-=======
-    case "readFile": return `Читання ${pluralize(count, "файлу", "файлів", "файлів")}`;
-    case "writeFile": return `Запис ${pluralize(count, "файлу", "файлів", "файлів")}`;
-    case "editFile": return `Редагування (${count})`;
-    case "webFetch": return `Отримання ${pluralize(count, "сторінки", "сторінок", "сторінок")}`;
-    case "executeCode": return count === 1 ? "Виконується код" : `Виконується код ${formatTimes(count)}`;
-    case "describeBinding": return `Перевірка ${pluralize(count, "зв’язку", "зв’язків", "зв’язків")}`;
-    case "setBindingHook": return `Підключення ${pluralize(count, "ресурсу", "ресурсів", "ресурсів")}`;
-    case "setGadgetBinding": return `Налаштування ${pluralize(count, "зв’язку", "зв’язків", "зв’язків")}`;
-    case "saveCapsuleAsBinding": return `Збереження ${pluralize(count, "ресурсу", "ресурсів", "ресурсів")}`;
-    case "createGadget": return `Створення ${pluralize(count, "гаджета", "гаджетів", "гаджетів")}`;
-    case "createWorktree": return `Створення ${pluralize(count, "робочого дерева", "робочих дерев", "робочих дерев")}`;
-    case "observeUserChanges": return `Перевірка ${pluralize(count, "набору змін", "наборів змін", "наборів змін")}`;
-    case "giveUp": return "Зупинка";
-    case "listBlueprints": return "Перегляд шаблонів";
-    case "listConnectableResources": return "Перегляд доступних ресурсів";
-    case "requestConnection": return `Запит підключення (${count})`;
->>>>>>> b3d9c8a2 (feat: uk i11n)
+    case "readFile": return `Читав ${pluralize(count, "файл", "файли", "файлів")}`;
+    case "writeFile": return `Записав ${pluralize(count, "файл", "файли", "файлів")}`;
+    case "editFile": return `Редагував ${pluralize(count, "редагування", "редагування", "редагувань")}`;
+    case "grep": return `Пошук файлів ${pluralize(count, "раз", "рази", "разів")}`;
+    case "webFetch": return `Завантажував ${pluralize(count, "сторінку", "сторінки", "сторінок")}`;
+    case "executeCode": return count === 1 ? "Запуск коду" : `Запуск коду ${pluralize(count, "раз", "рази", "разів")}`;
+    case "describeBinding": return `Переглядав ${pluralize(count, "прив'язку", "прив'язки", "прив'язок")}`;
+    case "setBindingHook": return `Підключився ${pluralize(count, "прив'язку", "прив'язки", "прив'язок")}`;
+    case "setGadgetBinding": return `Підключився ${pluralize(count, "прив'язку", "прив'язки", "прив'язок")}`;
+    case "saveCapsuleAsBinding": return `Зберіг ${pluralize(count, "ресурс", "ресурси", "ресурсів")}`;
+    case "createGadget": return `Створював ${pluralize(count, "gadget", "gadgets", "gadgets")}`;
+    case "createWorktree": return `Створював ${pluralize(count, "worktree", "worktrees", "worktrees")}`;
+    case "observeUserChanges": return `Наблюдав ${pluralize(count, "зміну", "зміни", "зміни")}`;
+    case "giveUp": return "Зупиняю";
+    case "listBlueprints": return "Переглядав блюдпринти";
+    case "listConnectableResources": return "Переглядав доступні ресурси";
+    case "requestConnection": return `Запитав ${pluralize(count, "підключення", "підключення", "підключень")}`;
   }
   const _exhaustive: never = toolName;
   return _exhaustive;
