@@ -6055,16 +6055,10 @@ class OverseerImpl implements AgentHooks {
       state: "pending",
       type: "action",
       description,
-<<<<<<< HEAD
-      requestedBy: requester ? { type: "user", id: requester.actorId, name: requester.actor.displayName } : undefined,
-      requestedActorUserId: caller.from === "agent"
-          ? this.storage.activeAgents.get(caller.chatId)?.initiatorUserId : undefined,
-=======
       requestedBy: { type: "user", id: requester.actorId, name: requester.actor.displayName },
       requestedActorUserId: caller.from === "agent"
           ? this.storage.activeAgents.get(caller.chatId)?.initiatorUserId
           : caller.from === "user" ? caller.userId : undefined,
->>>>>>> feat-ai-ui-parity-main
     };
 
     // The marking walk stamps the verified push closure "pending push" -- the read grant that
