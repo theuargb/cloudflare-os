@@ -42,23 +42,23 @@ interface ActivityProps {
 }
 
 /** Pending-status copy while the pending set is still being gathered (also in the popover). */
-export const PENDING_CHECKING_COPY = 'Checking for requests…'
+export const PENDING_CHECKING_COPY = 'Перевіряємо запити…'
 /** Pending-status copy when gathering the pending set failed (also in the popover). */
-export const PENDING_ERROR_COPY = 'Could not check for requests — reload the page to try again.'
+export const PENDING_ERROR_COPY = 'Не вдалося перевірити запити — перезавантажте сторінку та спробуйте ще раз.'
 
 const HISTORY_FILTERS: { value: HistoryViewFilter; label: string }[] = [
-  { value: 'all', label: 'All' },
-  { value: 'action', label: 'Actions' },
-  { value: 'observation', label: 'Observations' },
-  { value: 'bindHook', label: 'Hooks' },
+  { value: 'all', label: 'Усі' },
+  { value: 'action', label: 'Дії' },
+  { value: 'observation', label: 'Спостереження' },
+  { value: 'bindHook', label: 'Тригери' },
 ]
 
 function formatClockTime(date: Date): string {
-  return new Date(date).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  return new Date(date).toLocaleTimeString('uk-UA', { hour: 'numeric', minute: '2-digit' })
 }
 
 function formatFullDate(date: Date): string {
-  return new Date(date).toLocaleString([], {
+  return new Date(date).toLocaleString('uk-UA', {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
@@ -82,32 +82,32 @@ function startOfDay(date: Date): number {
 function dayLabel(date: Date): string {
   const value = new Date(date)
   const days = Math.round((startOfDay(new Date()) - startOfDay(value)) / 86_400_000)
-  if (days === 0) return 'Today'
-  if (days === 1) return 'Yesterday'
-  return value.toLocaleDateString([], { month: 'long', day: 'numeric', year: 'numeric' })
+  if (days === 0) return 'Сьогодні'
+  if (days === 1) return 'Учора'
+  return value.toLocaleDateString('uk-UA', { month: 'long', day: 'numeric', year: 'numeric' })
 }
 
 function activityStatus(
   record: ActionLogEntry,
 ): { label: string; dotClass: string; textClass: string } {
   if (record.type === 'observation') {
-    return { label: 'Observed', dotClass: 'bg-kumo-inactive', textClass: 'text-kumo-subtle' }
+    return { label: 'Зафіксовано', dotClass: 'bg-kumo-inactive', textClass: 'text-kumo-subtle' }
   }
   if (record.type === 'bindHook') {
     if (record.hookId === undefined) {
-      return { label: 'Deleted', dotClass: 'bg-kumo-inactive', textClass: 'text-kumo-subtle' }
+      return { label: 'Видалено', dotClass: 'bg-kumo-inactive', textClass: 'text-kumo-subtle' }
     }
     return record.enabled
-      ? { label: 'Enabled', dotClass: 'bg-kumo-success', textClass: 'text-kumo-subtle' }
-      : { label: 'Disabled', dotClass: 'bg-kumo-inactive', textClass: 'text-kumo-subtle' }
+      ? { label: 'Увімкнено', dotClass: 'bg-kumo-success', textClass: 'text-kumo-subtle' }
+      : { label: 'Вимкнено', dotClass: 'bg-kumo-inactive', textClass: 'text-kumo-subtle' }
   }
   if (record.state === 'pending') {
-    return { label: 'Pending', dotClass: 'bg-kumo-brand', textClass: 'text-kumo-strong' }
+    return { label: 'Очікує', dotClass: 'bg-kumo-brand', textClass: 'text-kumo-strong' }
   }
   if (record.state === 'rejected') {
-    return { label: 'Denied', dotClass: 'bg-kumo-danger', textClass: 'text-kumo-danger' }
+    return { label: 'Відхилено', dotClass: 'bg-kumo-danger', textClass: 'text-kumo-danger' }
   }
-  return { label: 'Approved', dotClass: 'bg-kumo-success', textClass: 'text-kumo-subtle' }
+  return { label: 'Схвалено', dotClass: 'bg-kumo-success', textClass: 'text-kumo-subtle' }
 }
 
 function TypeIcon({ record, className }: { record: ActionLogEntry; className?: string }) {
@@ -125,7 +125,7 @@ function LoadOlderButton({ history, className, label = 'Load older' }: {
   return (
     <WorkshopButton className={className} onClick={history.loadMore}
         disabled={history.isLoadingMore}>
-      {history.isLoadingMore ? 'Loading…' : label}
+      {history.isLoadingMore ? 'Завантаження…' : label}
     </WorkshopButton>
   )
 }
@@ -204,7 +204,7 @@ export default function Activity({
       else await overseer.disableHook(hookId)
     } catch (error) {
       console.error('Failed to toggle hook:', error)
-      toasts.add({ title: `Failed to ${enabled ? 'enable' : 'disable'} hook`, variant: 'error' })
+      toasts.add({ title: `Не вдалося ${enabled ? 'увімкнути' : 'вимкнути'} тригер`, variant: 'error' })
     } finally {
       setTogglingHooks(previous => {
         const next = new Set(previous)
@@ -227,9 +227,9 @@ export default function Activity({
         <>
           <div className={`${PANE_BAR} gap-2 px-5`}>
             <span className="text-[12.5px] font-medium leading-[17px] tracking-[-0.15px] text-kumo-default">
-              {pendingActions.length} {pendingActions.length === 1 ? 'request' : 'requests'} waiting
+              {pendingActions.length} {pendingActions.length === 1 ? 'запит очікує' : 'запити очікують'}
             </span>
-            <span className="ml-auto text-[11.5px] leading-[17px] text-kumo-inactive">Oldest first</span>
+            <span className="ml-auto text-[11.5px] leading-[17px] text-kumo-inactive">Спочатку найстаріші</span>
           </div>
           <div className="min-h-0 flex-1 overflow-auto">
             {pendingActions.map(record => {
@@ -268,12 +268,12 @@ export default function Activity({
             })}
             {pendingStatus === 'checking' && (
               <p className="m-0 px-5 py-3 text-center text-[12px] leading-4 text-kumo-inactive">
-                Still checking older activity…
+                Перевіряємо попередню активність…
               </p>
             )}
             {pendingStatus === 'error' && (
               <p className="m-0 px-5 py-3 text-center text-[12px] leading-4 text-kumo-inactive">
-                Could not finish checking for requests — reload the page to try again.
+                Не вдалося завершити перевірку запитів. Перезавантажте сторінку та спробуйте ще раз.
               </p>
             )}
           </div>
@@ -292,8 +292,8 @@ export default function Activity({
     if (pendingStatus === 'error') {
       return (
         <ActivityNotice
-          title="Could not check for requests"
-          description="Reload the page to try again."
+          title="Не вдалося перевірити запити"
+          description="Перезавантажте сторінку та спробуйте ще раз."
         />
       )
     }
@@ -301,11 +301,11 @@ export default function Activity({
     return (
       <ActivityNotice
         icon={<Check size={17} weight="bold" />}
-        title="Nothing to review"
-        description="Requests that need your approval show up here and in the workspace header."
+        title="Немає запитів на перевірку"
+        description="Запити, що потребують схвалення, відображаються тут і в заголовку робочого простору."
       >
         <WorkshopButton className="mt-4" onClick={() => onViewChange('history')}>
-          View history
+          Переглянути історію
         </WorkshopButton>
       </ActivityNotice>
     )
@@ -316,9 +316,9 @@ export default function Activity({
       return (
         <div className="min-h-0 flex-1 overflow-auto">
           <div className="grid grid-cols-[54px_minmax(0,1fr)_auto_16px] items-center gap-3 border-b border-kumo-line bg-kumo-elevated/50 px-5 py-1.5 text-[11px] font-medium uppercase tracking-[0.06em] text-kumo-inactive">
-            <span>Time</span>
-            <span>Event</span>
-            <span>Status</span>
+            <span>Час</span>
+            <span>Подія</span>
+            <span>Статус</span>
             <span />
           </div>
           {historyGroups.map(group => (
@@ -346,9 +346,9 @@ export default function Activity({
           {history.loadMoreFailed ? (
             <div className="flex items-center justify-center gap-3 py-3">
               <span className="text-[12px] leading-4 text-kumo-inactive">
-                Couldn't load older activity
+                Не вдалося завантажити попередню активність
               </span>
-              <LoadOlderButton history={history} label="Retry" />
+              <LoadOlderButton history={history} label="Повторити" />
             </div>
           ) : history.hasMore && (
             <div className="flex justify-center py-3">
@@ -361,8 +361,8 @@ export default function Activity({
 
     if (history.status === 'error') {
       return (
-        <ActivityNotice title="Could not load activity">
-          <LoadOlderButton className="mt-4" history={history} label="Retry" />
+        <ActivityNotice title="Не вдалося завантажити активність">
+          <LoadOlderButton className="mt-4" history={history} label="Повторити" />
         </ActivityNotice>
       )
     }
@@ -370,14 +370,14 @@ export default function Activity({
     if (history.status === 'loading') {
       return (
         <div className="flex flex-1 items-center justify-center text-[13px] text-kumo-subtle">
-          Loading activity…
+          Завантаження активності…
         </div>
       )
     }
 
     if (history.hasMore) {
       return (
-        <ActivityNotice title="Nothing in the most recent activity">
+        <ActivityNotice title="Останніх подій немає">
           <LoadOlderButton className="mt-4" history={history} />
         </ActivityNotice>
       )
@@ -386,20 +386,20 @@ export default function Activity({
     if (historyFilter === 'all') {
       return (
         <ActivityNotice
-          title="No activity yet"
-          description="Every resource an agent reads or changes is recorded here."
+          title="Активності поки немає"
+          description="Тут записуються всі ресурси, які агент читає або змінює."
         />
       )
     }
 
     return (
-      <ActivityNotice title="No matching events">
+      <ActivityNotice title="Відповідних подій не знайдено">
         <button
           type="button"
           onClick={() => setHistoryFilter('all')}
           className="mt-1.5 cursor-pointer text-[12px] font-medium text-kumo-subtle hover:text-kumo-default"
         >
-          Show all activity
+          Показати всю активність
         </button>
       </ActivityNotice>
     )
@@ -517,7 +517,7 @@ function AutoApprovalPanel({
   if (isLoading) {
     return (
       <div className="flex h-full items-center justify-center text-[13px] text-kumo-subtle">
-        Loading auto-approval…
+        Завантаження автоматичного схвалення…
       </div>
     )
   }
@@ -526,16 +526,16 @@ function AutoApprovalPanel({
     return (
       <div className="flex flex-1 flex-col items-center justify-center px-6 text-center">
         <p className="m-0 text-[13px] font-medium leading-[18px] tracking-[-0.25px] text-kumo-default">
-          {loadError ? 'Could not load auto-approval' : 'Nothing can run automatically'}
+          {loadError ? 'Не вдалося завантажити автоматичне схвалення' : 'Немає дій для автоматичного виконання'}
         </p>
         <p className="mt-1 max-w-xs text-[13px] leading-[18px] tracking-[-0.25px] text-kumo-subtle">
           {loadError
-            ? 'The current rules may be incomplete. Try loading them again.'
-            : 'Action types appear here once a connected resource offers one its author marked safe to apply without review.'}
+            ? 'Поточні правила можуть бути неповними. Спробуйте завантажити їх знову.'
+            : 'Типи дій з’являться тут, коли підключений ресурс запропонує дію, яку його розробник позначив як безпечну для виконання без перевірки.'}
         </p>
         {loadError && (
           <WorkshopButton className="mt-4" onClick={() => void refresh()}>
-            Retry
+            Повторити
           </WorkshopButton>
         )}
       </div>
@@ -547,8 +547,8 @@ function AutoApprovalPanel({
       <div className={`${PANE_BAR} gap-3 px-5`}>
         <p className="m-0 min-w-0 flex-1 truncate text-[12.5px] leading-[17px] tracking-[-0.2px] text-kumo-subtle">
           {loadError
-            ? 'Some auto-approval options could not be loaded.'
-            : 'Actions agents may take without asking. Everything else waits for your review.'}
+            ? 'Не вдалося завантажити деякі параметри автоматичного схвалення.'
+            : 'Дії, які агенти можуть виконувати без запиту. Решта очікує на вашу перевірку.'}
         </p>
         {loadError && (
           <button
@@ -556,7 +556,7 @@ function AutoApprovalPanel({
             onClick={() => void refresh()}
             className="cursor-pointer text-[12px] font-medium text-kumo-default hover:text-kumo-default-hover"
           >
-            Retry
+            Повторити
           </button>
         )}
       </div>
@@ -799,7 +799,7 @@ function HistoryRow({
                 rel="noopener noreferrer"
                 className="text-kumo-subtle hover:text-kumo-default hover:underline"
               >
-                Open resource
+                Відкрити ресурс
               </a>
             )}
             {record.type === 'bindHook' && record.hookId !== undefined && (

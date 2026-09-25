@@ -23,7 +23,9 @@ import { GatekeeperConnectCallbackImpl, normalizeUsername, UserDurableObject, CL
 import { OverseerDurableObject, GatekeeperLoopback, CodeModeTailLoopback, AgentSpawnerGatekeeper, GatekeeperHookLoopback, GadgetTailLoopback, AgentSelfLoopback } from "./overseer";
 import { UserDirectoryDurableObject } from "./user-directory.js";
 import { ExternalMessageGateway } from "./external-message-gateway";
-import { RpcStub as NativeRpcStub } from "cloudflare:workers";
+import { RpcStub as NativeRpcStub, WorkerEntrypoint } from "cloudflare:workers";
+import { getModel } from "./ai-models.js";
+import { completeText } from "./ai-invoke.js";
 import { recordAnalytics } from "./analytics";
 import { handleClientErrorRequest } from "./client-errors.js";
 import { verifyCfAccessJwt } from "./access.js";
@@ -67,6 +69,57 @@ export { OverseerDurableObject, GatekeeperLoopback, GatekeeperHookLoopback,
 
 // Re-export service-binding entrypoint for external channel integrations.
 export { ExternalMessageGateway };
+
+/** Private service binding for Platform Foundation's bounded, deployment-configured AI requests. */
+@validateRpc()
+export class OneCAiModelRunner extends WorkerEntrypoint<Cloudflare.Env> {
+  /** List only deployment-enabled AI Gateway models; labels contain no provider credentials. */
+  async listModels(): Promise<Array<{ id: string; label: string }>> {
+    try {
+      let gateway = getAiGatewayConfig(this.env);
+      if (!gateway) throw new Error("AI Gateway is unavailable.");
+      return gateway.getModelList().map(({ id, name }) => ({ id, label: name }));
+    } catch {
+      throw new Error("The AI model catalog is unavailable.");
+    }
+  }
+
+  async runText(input: { modelId: string; prompt: string; systemPrompt?: string })
+      : Promise<{ text: string }> {
+    if (!input || typeof input !== "object" ||
+        typeof input.modelId !== "string" || input.modelId.trim().length === 0 ||
+        input.modelId.length > 256 || typeof input.prompt !== "string" ||
+        input.prompt.trim().length === 0 || input.prompt.length > 100_000 ||
+        (input.systemPrompt !== undefined &&
+          (typeof input.systemPrompt !== "string" || input.systemPrompt.length > 20_000))) {
+      throw new Error("Invalid AI request.");
+    }
+
+    try {
+      // This private entrypoint intentionally accepts only models present in the deployment's
+      // AI Gateway catalog. It never accepts provider credentials or permits direct model routing.
+      let gateway = getAiGatewayConfig(this.env);
+      if (!gateway) throw new Error("AI Gateway is unavailable.");
+      let configured = gateway.resolveModel(input.modelId);
+      if (!configured) throw new Error("The requested AI model is unavailable.");
+
+      let handle = getModel(this.env, configured.config, {
+        type: "agent",
+        id: "1c-platform-foundation",
+        name: "1C Platform Foundation",
+      }, { metadata: { source: "model-binding" } });
+      let text = await completeText(handle, {
+        prompt: input.prompt,
+        systemPrompt: input.systemPrompt,
+      });
+      return { text };
+    } catch {
+      // Provider exceptions can include request details; return a stable message without logging
+      // prompts, generated text, identity data, or credentials.
+      throw new Error("The AI request failed.");
+    }
+  }
+}
 
 // Declare optional environment variables here since they may be omitted from wrangler.jsonc.
 type Env = Cloudflare.Env & {
@@ -143,6 +196,9 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
   }
   setOwnDisplayName(name: string): Promise<void> {
     return this.#user.setOwnDisplayName(name);
+  }
+  setOwnCommitEmail(email: string | null): Promise<void> {
+    return this.#user.setOwnCommitEmail(email);
   }
   async searchUsers(query: string, excludeIds: string[]): Promise<UserDirectoryRecord[]> {
     if (!(await this.#userSearchEnabled())) return [];
@@ -610,8 +666,12 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
     let accounts = await user.listProvidedAccounts();
     let app = accounts.find((account: (typeof accounts)[number]) => account.vendorId === id && account.description.providesUi);
     if (!app) return null;
-    // isAdmin is supplied fresh per open so admin-gated features reflect the user's current status.
-    return user.startAccountAppUi(app.accountId, { isAdmin: this.#isAdmin() });
+    // The actor and current authority are supplied fresh on every open.
+    return user.startAccountAppUi(app.accountId, {
+      actorId: this.#userId.toString(),
+      actor: {displayName: this.#userId.name ?? this.#userId.toString()},
+      isAdmin: this.#isAdmin(),
+    });
   }
 
   // --- Deployment admin ---

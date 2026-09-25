@@ -38,8 +38,8 @@ export default function DataTab() {
               {selectedIds.size} selected
             </span>
           )}
-          <Button variant="ghost" size="xs">Filter</Button>
-          <Button variant="ghost" size="xs">Sort</Button>
+          <Button variant="ghost" size="xs">Фільтр</Button>
+          <Button variant="ghost" size="xs">Сортувати</Button>
         </div>
       </div>
 
@@ -52,12 +52,12 @@ export default function DataTab() {
                 checked={selectedIds.size === sampleDataRows.length}
                 indeterminate={selectedIds.size > 0 && selectedIds.size < sampleDataRows.length}
                 onValueChange={toggleAll}
-                aria-label="Select all rows"
+                aria-label="Вибрати всі рядки"
               />
-              <Table.Head>Channel</Table.Head>
-              <Table.Head>Messages</Table.Head>
-              <Table.Head>Last Active</Table.Head>
-              <Table.Head>Status</Table.Head>
+              <Table.Head>Канал</Table.Head>
+              <Table.Head>Повідомлення</Table.Head>
+              <Table.Head>Остання активність</Table.Head>
+              <Table.Head>Статус</Table.Head>
             </Table.Row>
           </Table.Header>
           <Table.Body>
@@ -73,7 +73,7 @@ export default function DataTab() {
                 </Table.Cell>
                 <Table.Cell>
                   <span className="text-sm text-kumo-subtle tabular-nums">
-                    {row.messages.toLocaleString()}
+                    {row.messages.toLocaleString('uk-UA')}
                   </span>
                 </Table.Cell>
                 <Table.Cell>
@@ -81,9 +81,9 @@ export default function DataTab() {
                 </Table.Cell>
                 <Table.Cell>
                   {row.unread ? (
-                    <Badge variant="primary">Unread</Badge>
+                    <Badge variant="primary">Непрочитані</Badge>
                   ) : (
-                    <Badge variant="secondary">Read</Badge>
+                    <Badge variant="secondary">Прочитані</Badge>
                   )}
                 </Table.Cell>
               </Table.Row>
@@ -98,7 +98,7 @@ export default function DataTab() {
           {sampleDataRows.length} rows in channels
         </span>
         <span className="font-mono text-xs text-kumo-subtle">
-          {sampleDataRows.reduce((sum, r) => sum + r.messages, 0).toLocaleString()} total messages
+          {sampleDataRows.reduce((sum, r) => sum + r.messages, 0).toLocaleString('uk-UA')} total messages
         </span>
       </div>
     </div>

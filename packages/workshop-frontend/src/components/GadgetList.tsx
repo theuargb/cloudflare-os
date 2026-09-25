@@ -106,7 +106,7 @@ function AppRow({
             />
           ) : (
             <h3 className="text-sm font-medium text-kumo-default truncate">
-              {gadget.title || 'Untitled Workspace'}
+              {gadget.title || 'Untitled Робочий простір'}
             </h3>
           )}
         </div>
@@ -138,19 +138,19 @@ function AppRow({
         <DropdownMenu.Content className={MENU_CONTENT}>
           <DropdownMenu.Item onClick={startRenaming} className={MENU_ITEM}>
             <Pencil size={13} className="mr-2" />
-            Rename
+            Перейменувати
           </DropdownMenu.Item>
           <DropdownMenu.Item onClick={() => onTogglePin(gadget)} className={MENU_ITEM}>
             <Star size={13} className="mr-2" weight={gadget.pinned ? 'fill' : 'regular'} />
-            {gadget.pinned ? 'Unfavorite' : 'Favorite'}
+            {gadget.pinned ? 'Вилучити з обраного' : 'Додати до обраного'}
           </DropdownMenu.Item>
           <DropdownMenu.Item onClick={() => onInfo(gadget)} className={MENU_ITEM}>
             <Info size={13} className="mr-2" />
-            Information
+            Інформація
           </DropdownMenu.Item>
           <DropdownMenu.Item onClick={() => onShare(gadget)} className={MENU_ITEM}>
             <ShareNetwork size={13} className="mr-2" />
-            Share
+            Поділитися
           </DropdownMenu.Item>
           <DropdownMenu.Separator />
           <DropdownMenu.Item
@@ -159,7 +159,7 @@ function AppRow({
             className={MENU_ITEM_DANGER}
           >
             <Trash size={13} className="mr-2" />
-            {gadget.owner ? 'Dismiss' : 'Delete'}
+            {gadget.owner ? 'Закрити' : 'Видалити'}
           </DropdownMenu.Item>
         </DropdownMenu.Content>
       </DropdownMenu>
@@ -239,7 +239,7 @@ export default function GadgetList({ showHeader = true }: { showHeader?: boolean
     try {
       if (deleteTarget.owner) {
         await authenticatedApi.dismissSharedGadget(deleteTarget.id)
-        toasts.add({ title: 'Workspace removed from list', variant: 'success' })
+        toasts.add({ title: 'Робочий простір вилучено зі списку', variant: 'success' })
       } else {
         const overseer = await authenticatedApi.openGadget(deleteTarget.id)
         try {
@@ -247,12 +247,12 @@ export default function GadgetList({ showHeader = true }: { showHeader?: boolean
         } finally {
           overseer[Symbol.dispose]()
         }
-        toasts.add({ title: 'Workspace deleted', variant: 'success' })
+        toasts.add({ title: 'Робочий простір видалено', variant: 'success' })
       }
       setGadgets(prev => prev.filter(g => g.id !== deleteTarget.id))
     } catch (err) {
       console.error('Failed to delete workspace:', err)
-      toasts.add({ title: 'Failed to delete workspace', variant: 'error' })
+      toasts.add({ title: 'Не вдалося видалити робочий простір', variant: 'error' })
     } finally {
       setIsDeleting(false)
       setDeleteTarget(null)
@@ -270,7 +270,7 @@ export default function GadgetList({ showHeader = true }: { showHeader?: boolean
     } catch (err) {
       overseer?.[Symbol.dispose]()
       console.error('Failed to open workspace for sharing:', err)
-      toasts.add({ title: 'Failed to open share settings', variant: 'error' })
+      toasts.add({ title: 'Не вдалося відкрити налаштування спільного доступу', variant: 'error' })
     }
   }
 
@@ -299,7 +299,7 @@ export default function GadgetList({ showHeader = true }: { showHeader?: boolean
           return b.lastActive.getTime() - a.lastActive.getTime()
         })
       })
-      toasts.add({ title: 'Failed to update favorite status', variant: 'error' })
+      toasts.add({ title: 'Не вдалося оновити статус обраного', variant: 'error' })
     } finally {
       (await overseer)[Symbol.dispose]()
     }
@@ -315,7 +315,7 @@ export default function GadgetList({ showHeader = true }: { showHeader?: boolean
     } catch (err) {
       console.error('Failed to rename workspace:', err)
       setGadgets(prev => prev.map(g => g.id === gadget.id ? { ...g, title: gadget.title } : g))
-      toasts.add({ title: 'Failed to rename workspace', variant: 'error' })
+      toasts.add({ title: 'Не вдалося перейменувати робочий простір', variant: 'error' })
     } finally {
       (await overseer)[Symbol.dispose]()
     }
@@ -336,11 +336,11 @@ export default function GadgetList({ showHeader = true }: { showHeader?: boolean
       {showHeader && (
         <div className="px-6 sm:px-10 lg:px-10 pt-10 lg:pt-10 mb-4">
           <h2 className="text-lg font-semibold text-kumo-default">
-            Your workspaces
+            Ваші робочі простори
           </h2>
           {!loading && gadgets.length === 0 && !loadError && (
             <p className="mt-1 text-sm text-kumo-inactive">
-              You haven&apos;t created any workspaces yet
+              Ви ще не створили жодного робочого простору
             </p>
           )}
         </div>
@@ -358,7 +358,7 @@ export default function GadgetList({ showHeader = true }: { showHeader?: boolean
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search workspaces…"
+              placeholder="Пошук робочих просторів…"
               className="h-9 w-full rounded-lg border border-kumo-line bg-kumo-base pl-9 pr-4 text-[13px] tracking-[-0.25px] text-kumo-default placeholder:text-kumo-inactive transition-[border-color,box-shadow] duration-150 ease-out focus:border-kumo-ring focus:outline-none focus:ring-[3px] focus:ring-kumo-ring/15"
             />
           </div>
@@ -377,13 +377,13 @@ export default function GadgetList({ showHeader = true }: { showHeader?: boolean
           </>
         ) : loadError ? (
           <div className="text-center py-12 text-sm">
-            <p className="text-kumo-danger">Something went wrong loading your workspaces.</p>
-            <button onClick={loadGadgets} className="text-kumo-brand mt-1 underline">Try again</button>
+            <p className="text-kumo-danger">Під час завантаження робочих просторів сталася помилка.</p>
+            <button onClick={loadGadgets} className="text-kumo-brand mt-1 underline">Спробувати ще раз</button>
           </div>
         ) : filtered.length === 0 ? (
           search ? (
             <div className="text-center py-12 text-kumo-inactive text-sm">
-              No workspaces found
+              Робочих просторів не знайдено
             </div>
           ) : (
             <FeaturedBlueprintsGallery />
@@ -408,14 +408,14 @@ export default function GadgetList({ showHeader = true }: { showHeader?: boolean
         open={deleteTarget !== null}
         onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}
         isDeleting={isDeleting}
-        title={deleteTarget?.owner ? 'Remove workspace' : 'Delete workspace'}
+        title={deleteTarget?.owner ? 'Вилучити робочий простір' : 'Видалити робочий простір'}
         description={
           deleteTarget?.owner
-            ? `Remove "${deleteTarget?.title || 'Untitled Workspace'}" from your list? You can still access it via its link.`
-            : `Delete "${deleteTarget?.title || 'Untitled Workspace'}"? This cannot be undone.`
+            ? `Remove "${deleteTarget?.title || 'Untitled Робочий простір'}" from your list? You can still access it via its link.`
+            : `Delete "${deleteTarget?.title || 'Untitled Робочий простір'}"? This cannot be undone.`
         }
-        confirmLabel={deleteTarget?.owner ? 'Remove' : 'Delete'}
-        confirmingLabel={deleteTarget?.owner ? 'Removing...' : 'Deleting...'}
+        confirmLabel={deleteTarget?.owner ? 'Вилучити' : 'Видалити'}
+        confirmingLabel={deleteTarget?.owner ? 'Вилучення…' : 'Видалення…'}
         onConfirm={handleDeleteConfirm}
       />
 
@@ -426,29 +426,29 @@ export default function GadgetList({ showHeader = true }: { showHeader?: boolean
       >
         <Dialog className="p-8" size="sm">
           <Dialog.Title className="text-lg font-semibold">
-            {infoTarget?.title || 'Untitled Workspace'}
+            {infoTarget?.title || 'Untitled Робочий простір'}
           </Dialog.Title>
           <div className="mt-4 flex flex-col gap-3 text-sm">
             <div className="flex justify-between">
-              <span className="text-kumo-subtle">Author</span>
+              <span className="text-kumo-subtle">Автор</span>
               <span className="text-kumo-default">{infoTarget?.owner ? infoTarget.owner.name : 'You'}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-kumo-subtle">Total cost</span>
+              <span className="text-kumo-subtle">Загальна вартість</span>
               <span className="text-kumo-default">
                 {formatCost(infoTarget?.totalCost ?? 0)}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-kumo-subtle">Created</span>
+              <span className="text-kumo-subtle">Створено</span>
               <span className="text-kumo-default">
-                {infoTarget?.created?.toLocaleString()}
+                {infoTarget?.created?.toLocaleString('uk-UA')}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-kumo-subtle">Last active</span>
+              <span className="text-kumo-subtle">Остання активність</span>
               <span className="text-kumo-default">
-                {infoTarget?.lastActive?.toLocaleString()}
+                {infoTarget?.lastActive?.toLocaleString('uk-UA')}
               </span>
             </div>
           </div>
@@ -456,7 +456,7 @@ export default function GadgetList({ showHeader = true }: { showHeader?: boolean
             <Dialog.Close
               render={(props) => (
                 <Button variant="secondary" {...props}>
-                  Close
+                  Закрити
                 </Button>
               )}
             />
@@ -514,7 +514,7 @@ function HomeFeaturedBlueprintCard({
               {blueprint.metadata.title}
             </p>
             <p className={`mt-0.5 line-clamp-2 min-h-8 text-[12px] leading-4 tracking-[-0.2px] ${blueprint.metadata.description ? 'text-kumo-subtle' : 'text-kumo-inactive italic'}`}>
-              {blueprint.metadata.description || 'No description'}
+              {blueprint.metadata.description || 'Опис відсутній'}
             </p>
             {badges.length > 0 && (
               <div className="mt-2 flex flex-wrap gap-1">
@@ -574,7 +574,7 @@ function FeaturedBlueprintsGallery() {
     <div className="py-4 pr-4 sm:pr-6">
       <div className="mb-5">
         <h3 className="text-[13px] leading-[18px] font-medium tracking-[-0.25px] text-kumo-default">
-          Start from a featured blueprint.
+          Почніть із рекомендованого шаблону.
         </h3>
       </div>
 
@@ -593,7 +593,7 @@ function FeaturedBlueprintsGallery() {
             to="/explore"
             className="inline-flex items-center gap-1.5 text-xs font-medium text-kumo-brand hover:text-kumo-brand-hover transition-colors"
           >
-            Browse all blueprints
+            Переглянути всі шаблони
             <ArrowRight size={12} weight="bold" />
           </Link>
         </div>

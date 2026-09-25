@@ -23,15 +23,13 @@ import {
 import SidebarUtilityStrip from './SidebarUtilityStrip'
 
 /**
- * The persistent left rail. Three pinned regions sandwich a single scrolling region of lists, so
- * the user can always reach Search, primary nav, and the bottom utility strip no matter how many
- * workspaces they have.
+ * The persistent left rail. Brand/search and the bottom utility strip stay pinned; primary
+ * navigation and workspace lists share the bounded scrolling region so dynamic lists remain
+ * reachable at any viewport height.
  *
  * Layout (top → bottom):
  *   • brand row                            pinned
- *   • primary nav (Home, Workspaces, …)    pinned
- *   • workspace tools (⌘K search)          pinned
- *   • Favorites / Recent workspaces        SCROLLS
+ *   • primary nav + Favorites / Recent workspaces SCROLLS together
  *   • utility strip (plug, avatar)         pinned
  */
 export default function Sidebar({
@@ -49,7 +47,7 @@ export default function Sidebar({
 
   return (
     <aside
-      aria-label="Primary"
+      aria-label="Основне меню"
       className={[
         // Sidebar is the app chrome: a hair greyer than the (lighter) content canvas so the two
         // surfaces read as distinct without a heavy divider.
@@ -80,8 +78,8 @@ export default function Sidebar({
             <button
               type="button"
               onClick={() => openCommandPalette()}
-              aria-label="Search"
-              title="Search (⌘K)"
+              aria-label="Пошук"
+              title="Пошук (⌘K)"
               className="press flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-kumo-inactive transition-colors hover:bg-kumo-tint hover:text-kumo-default"
             >
               <MagnifyingGlass size={15} />
@@ -89,8 +87,8 @@ export default function Sidebar({
             <button
               type="button"
               onClick={onToggleCollapsed}
-              aria-label="Collapse sidebar"
-              title="Collapse sidebar"
+              aria-label="Згорнути бічну панель"
+              title="Згорнути бічну панель"
               className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-kumo-inactive transition-colors hover:bg-kumo-tint hover:text-kumo-default"
             >
               <SidebarSimple size={15} />
@@ -104,8 +102,8 @@ export default function Sidebar({
         <button
           type="button"
           onClick={onToggleCollapsed}
-          aria-label="Expand sidebar"
-          title="Expand sidebar"
+          aria-label="Розгорнути бічну панель"
+          title="Розгорнути бічну панель"
           className="mx-auto mt-2 flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-kumo-inactive transition-colors hover:bg-kumo-tint hover:text-kumo-default"
         >
           <SidebarSimple size={15} className="rotate-180" />
@@ -113,31 +111,35 @@ export default function Sidebar({
       )}
 
       <SidebarWorkspacesProvider>
-        {/* Pinned top stack. shrink-0 keeps it from squishing when the lists below grow. */}
-        <div className="flex shrink-0 flex-col gap-3 pt-3">
-          {/* Primary nav */}
-          <nav className="flex flex-col gap-0.5 px-2">
+        {/* Keep essential controls outside the scrolling content. */}
+        <div className="shrink-0 pt-2">
+          <SidebarWorkspacesTools collapsed={collapsed} />
+        </div>
+
+        {/* min-h-0 gives this region a bounded height between the pinned brand and profile rows. */}
+        <div className="sidebar-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+          <nav aria-label="Навігація" className="flex flex-col gap-0.5 px-2 pt-2">
             <SidebarItem
               to="/"
-              label="Home"
+              label="Головна"
               icon={<House size={14} weight="regular" />}
               collapsed={collapsed}
             />
             <SidebarItem
               to="/workspaces"
-              label="Workspaces"
+              label="Робочі простори"
               icon={<SquaresFour size={14} weight="regular" />}
               collapsed={collapsed}
             />
             <SidebarItem
               to="/blueprints"
-              label="Blueprints"
+              label="Шаблони"
               icon={<Blueprint size={14} weight="regular" />}
               collapsed={collapsed}
             />
             <SidebarItem
               to="/outputs"
-              label="Outputs"
+              label="Результати"
               icon={<Stack size={14} weight="regular" />}
               collapsed={collapsed}
             />
@@ -182,20 +184,15 @@ export default function Sidebar({
             })}
             <SidebarItem
               to="/explore"
-              label="Explore"
+              label="Огляд"
               icon={<Compass size={14} weight="regular" />}
               collapsed={collapsed}
             />
           </nav>
 
-          {/* Workspace tools: search. Pinned so it's always reachable. */}
-          <SidebarWorkspacesTools collapsed={collapsed} />
-        </div>
-
-        {/* Scrolling middle: only the Favorites / Recent workspaces / Recent blueprints lists.
-            min-h-0 lets flex children compute scroll height correctly. */}
-        <div className="sidebar-scroll mt-1 min-h-0 flex-1 overflow-y-auto">
-          <SidebarWorkspacesLists collapsed={collapsed} />
+          <div className="mt-1">
+            <SidebarWorkspacesLists collapsed={collapsed} />
+          </div>
         </div>
       </SidebarWorkspacesProvider>
 
