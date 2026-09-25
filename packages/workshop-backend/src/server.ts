@@ -73,6 +73,17 @@ export { ExternalMessageGateway };
 /** Private service binding for Platform Foundation's bounded, deployment-configured AI requests. */
 @validateRpc()
 export class OneCAiModelRunner extends WorkerEntrypoint<Cloudflare.Env> {
+  /** List only deployment-enabled AI Gateway models; labels contain no provider credentials. */
+  async listModels(): Promise<Array<{ id: string; label: string }>> {
+    try {
+      let gateway = getAiGatewayConfig(this.env);
+      if (!gateway) throw new Error("AI Gateway is unavailable.");
+      return gateway.getModelList().map(({ id, name }) => ({ id, label: name }));
+    } catch {
+      throw new Error("The AI model catalog is unavailable.");
+    }
+  }
+
   async runText(input: { modelId: string; prompt: string; systemPrompt?: string })
       : Promise<{ text: string }> {
     if (!input || typeof input !== "object" ||
