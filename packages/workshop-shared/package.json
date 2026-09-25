@@ -34,7 +34,8 @@
     "./theme": {
       "types": "./src/theme.ts",
       "import": "./src/theme.ts"
-    }
+    },
+    "./fonts.css": "./fonts/fonts.css"
   },
   "scripts": {
     "build": "tsc",
