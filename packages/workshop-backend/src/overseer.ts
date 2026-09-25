@@ -4,7 +4,7 @@ import { Overseer, GadgetMetadata, UiBundle, WorkpieceId, WorkpieceSummary, Work
 import { applyCodeChange, changedGadgets, codeChangeSerializedSize, composeCodeChange, diffFiles,
   transformCodeChange, validateCodeChangeContent, validateCodeChangeSchema,
   type CodeContent, type CodeChange } from "@gadgets/workshop-shared/code-change";
-import { type AgentCatalog, Gatekeeper, HookInitiator, ResourceDescription, ApprovalQueue, ActionDescription, ObservationAuthorizer, ObservationDescription, VendorDescription, SupportedResource, resolveRequestedResource, HookController, HookDescription, ActionKind, GitCache, GitPullHints } from "@gadgets/workshop-shared/gatekeeper";
+import { type AgentCatalog, type AgentActionContext, Gatekeeper, HookInitiator, ResourceDescription, ApprovalQueue, ActionDescription, ObservationAuthorizer, ObservationDescription, VendorDescription, SupportedResource, resolveRequestedResource, HookController, HookDescription, ActionKind, GitCache, GitPullHints } from "@gadgets/workshop-shared/gatekeeper";
 import {
   DurableObject, WorkerEntrypoint, RpcStub as NativeRpcStub,
   RpcTarget as NativeRpcTarget, restore,
@@ -45,6 +45,7 @@ import { reportIssue } from "@gadgets/backend-utils/error-reporting";
 import type { ProductAnalyticsConnectionType, ProductAnalyticsGadgetInput } from "./analytics";
 import { checkUsageAndBalance } from "./ai-gateway-billing/limits/usage-checker";
 import { normalizeAgentCatalog } from "./agent-catalog";
+import { isDeploymentAdmin } from "./admin-authorization";
 import { refreshCachedBalance } from "./ai-gateway-billing/cloudflare/connection-service";
 import { SharingManager, SharingCaller, CollaboratorRecord, ShareKeyRecord, roleRank }
     from "./sharing";
@@ -70,6 +71,7 @@ import {
 
 const logger = createWorkshopLogger("workshop.overseer");
 export const AGENT_RUNNING_ERROR_MESSAGE = "Agent is running, wait for it to finish.";
+
 
 let CODE_MODE_HARNESS =
 `import { WorkerEntrypoint, restore } from "cloudflare:workers";
@@ -680,6 +682,8 @@ export type ActionRecord = {
   action: number;  // action key assigned by the gatekeeper, passed back on apply/reject/revert
   description: ActionDescription;
   resolvedBy?: AiChatAuthorInfo;  // set when resolved (approved/rejected); absent while pending (or legacy)
+  requestedBy?: AiChatAuthorInfo; // authenticated agent initiator; separate from the approver
+  requestedActorUserId?: string; // Workshop user-DO id used to re-resolve authority at apply time
   autoApproved?: boolean;         // set when applied by an auto-approval rule rather than a human
 } | {
   type: "observation";
@@ -1015,6 +1019,7 @@ function actionRecordToLog(record: ActionRecord): ActionLogEntry {
         type: "action",
         description: record.description,
         resolvedBy: record.resolvedBy,
+        requestedBy: record.requestedBy,
         autoApproved: record.autoApproved,
       };
     case "bindHook":
@@ -5374,11 +5379,17 @@ class OverseerImpl implements AgentHooks {
   async applyPendingAction(record: ActionRecord & {type: "action"},
                            resolvedBy: AiChatAuthorInfo, autoApproved: boolean): Promise<void> {
     let gatekeeper = this.getGatekeeperFacet(record.gatekeeperId);
+    // A queued request can outlive the session that created it. Re-resolve the requesting user's
+    // identity and workspace membership at application time so revoked actors cannot retain
+    // authority through an old pending action. The approver remains a separate audit principal.
+    let actorContext = record.requestedActorUserId
+        ? await this.getActionContextForUser(record.requestedActorUserId)
+        : undefined;
     // The apply-time cache stub is scoped to the gatekeeper AND to this action (approval can
     // happen long after the session that queued it, so the queue-time stub is gone) -- the
     // binding that makes buildPack() serve exactly this action's pending-push closure.
     await gatekeeper.applyAction(record.action,
-        new GitCacheImpl(this.gitCache, record.gatekeeperId, record.id));
+        new GitCacheImpl(this.gitCache, record.gatekeeperId, record.id), actorContext);
     record.state = "approved";
     record.appliedAt = new Date();
     record.resolvedBy = resolvedBy;
@@ -5955,13 +5966,44 @@ class OverseerImpl implements AgentHooks {
     this.#associateAction(caller, actionId);
   }
 
+  /** Resolve a live agent's initiating user from Workshop-owned active-turn state. */
+  async getAgentActionContext(chatId: number): Promise<AgentActionContext> {
+    let active = this.storage.activeAgents.get(chatId);
+    if (!active) throw new Error("The initiating agent session is no longer active.");
+    return this.getActionContextForUser(active.initiatorUserId);
+  }
+
+  async getActionContextForUser(userIdString: string): Promise<AgentActionContext> {
+    let userId = this.users.idFromString(userIdString);
+    let profile = await retryOnDoReset(() => this.users.get(userId).whoamiIfExists(), this.logger);
+    if (!profile || profile.type !== "user" || !profile.id) {
+      throw new Error("The initiating agent has no verifiable authenticated actor.");
+    }
+    let owner = this.ownerId !== undefined && userId.toString() === this.ownerId;
+    let role = owner ? "build" : (await this.getSharingManager()).getEffectiveRole(profile.id);
+    if (!role) throw new Error("The initiating actor no longer has access to this workspace.");
+    return {
+      actorId: profile.id,
+      actor: { displayName: profile.name },
+      // `idFromString()` does not retain the Durable Object ID's original name, so use the
+      // authenticated profile's canonical ID (whoami above), which is the username checked by
+      // AuthenticatedApi.#isAdmin().
+      isAdmin: isDeploymentAdmin(this.env.ADMINS, profile.id),
+    };
+  }
+
   async submitAction(gatekeeperId: number, action: number,
                      description: ActionDescription, caller: GatekeeperCaller)
       : Promise<void> {
     // An in-flight facet RPC can outlive removeGatekeeper, and a pending action on a removed
     // connection could never be approved or rejected (both dereference the facet).
     let gatekeeper = this.storage.gatekeepers.get(gatekeeperId);
-    if (!gatekeeper) {
+    // Resolve identity before allocating an action id or persisting anything. Agent identities
+    // are derived from the active turn and current workspace membership, never from the RPC input.
+    let requester = caller.from === "agent"
+        ? await this.getAgentActionContext(caller.chatId)
+        : undefined;
+    if (!gatekeeper || this.storage.containsRestrictedData.get()) {
       throw new Error(
           "This action was blocked because the connection it was submitted through has been " +
           "removed from this workspace.");
@@ -6001,7 +6043,10 @@ class OverseerImpl implements AgentHooks {
       createdAt: new Date(),
       state: "pending",
       type: "action",
-      description
+      description,
+      requestedBy: requester ? { type: "user", id: requester.actorId, name: requester.actor.displayName } : undefined,
+      requestedActorUserId: caller.from === "agent"
+          ? this.storage.activeAgents.get(caller.chatId)?.initiatorUserId : undefined,
     };
 
     // The marking walk stamps the verified push closure "pending push" -- the read grant that
@@ -13030,13 +13075,18 @@ class ApprovalQueueImpl extends RpcTarget implements ApprovalQueue {
     return this.impl.authorizeObservation(this.gatekeeperId, description, this.caller);
   }
 
+  async getAgentActionContext(): Promise<AgentActionContext | undefined> {
+    if (this.hookId !== undefined || this.caller.from !== "agent") return undefined;
+    return this.impl.getAgentActionContext(this.caller.chatId);
+  }
+
   async getGitCache(): Promise<GitCache> {
     return new GitCacheImpl(this.impl.gitCache, this.gatekeeperId);
   }
 
-  submitAction(action: number, description: ActionDescription): Promise<void> {
+  async submitAction(action: number, description: ActionDescription): Promise<void> {
     if (this.hookId !== undefined) requireLiveHook(this.impl, this.hookId);
-    return this.impl.submitAction(this.gatekeeperId, action, description, this.caller);
+    await this.impl.submitAction(this.gatekeeperId, action, description, this.caller);
   }
 
   bindHook<Hook extends RpcTarget>(
