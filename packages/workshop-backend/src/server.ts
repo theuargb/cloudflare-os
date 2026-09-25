@@ -68,6 +68,57 @@ export { OverseerDurableObject, GatekeeperLoopback, GatekeeperHookLoopback,
 // Re-export service-binding entrypoint for external channel integrations.
 export { ExternalMessageGateway };
 
+/** Private service binding for Platform Foundation's bounded, deployment-configured AI requests. */
+@validateRpc()
+export class OneCAiModelRunner extends WorkerEntrypoint<Cloudflare.Env> {
+  /** List only deployment-enabled AI Gateway models; labels contain no provider credentials. */
+  async listModels(): Promise<Array<{ id: string; label: string }>> {
+    try {
+      let gateway = getAiGatewayConfig(this.env);
+      if (!gateway) throw new Error("AI Gateway is unavailable.");
+      return gateway.getModelList().map(({ id, name }) => ({ id, label: name }));
+    } catch {
+      throw new Error("The AI model catalog is unavailable.");
+    }
+  }
+
+  async runText(input: { modelId: string; prompt: string; systemPrompt?: string })
+      : Promise<{ text: string }> {
+    if (!input || typeof input !== "object" ||
+        typeof input.modelId !== "string" || input.modelId.trim().length === 0 ||
+        input.modelId.length > 256 || typeof input.prompt !== "string" ||
+        input.prompt.trim().length === 0 || input.prompt.length > 100_000 ||
+        (input.systemPrompt !== undefined &&
+          (typeof input.systemPrompt !== "string" || input.systemPrompt.length > 20_000))) {
+      throw new Error("Invalid AI request.");
+    }
+
+    try {
+      // This private entrypoint intentionally accepts only models present in the deployment's
+      // AI Gateway catalog. It never accepts provider credentials or permits direct model routing.
+      let gateway = getAiGatewayConfig(this.env);
+      if (!gateway) throw new Error("AI Gateway is unavailable.");
+      let configured = gateway.resolveModel(input.modelId);
+      if (!configured) throw new Error("The requested AI model is unavailable.");
+
+      let handle = getModel(this.env, configured.config, {
+        type: "agent",
+        id: "1c-platform-foundation",
+        name: "1C Platform Foundation",
+      }, { metadata: { source: "model-binding" } });
+      let text = await completeText(handle, {
+        prompt: input.prompt,
+        systemPrompt: input.systemPrompt,
+      });
+      return { text };
+    } catch {
+      // Provider exceptions can include request details; return a stable message without logging
+      // prompts, generated text, identity data, or credentials.
+      throw new Error("The AI request failed.");
+    }
+  }
+}
+
 // Declare optional environment variables here since they may be omitted from wrangler.jsonc.
 type Env = Cloudflare.Env & {
   // Set these if using Cloudflare Access for authentication, otherwise username/password is used.
