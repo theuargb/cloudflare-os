@@ -1,0 +1,48 @@
+/*
+ * Brand typefaces shared by every Workshop surface: the shell and the sandboxed gatekeeper apps.
+ * Import it from an app stylesheet; the bundler resolves these relative URLs, so the shell ships
+ * hashed font assets and the single-file gatekeeper apps inline them as `data:` URIs (their CSP is
+ * `font-src data:`). See LICENSE.md for provenance and the 500–600 → Medium mapping.
+ */
+
+@font-face {
+  font-family: "e-Ukraine";
+  src: url("./e-Ukraine/e-Ukraine-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "e-Ukraine";
+  src: url("./e-Ukraine/e-Ukraine-Medium.woff2") format("woff2");
+  font-weight: 500 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "e-Ukraine";
+  src: url("./e-Ukraine/e-Ukraine-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "e-Ukraine Head";
+  src: url("./e-UkraineHead/e-UkraineHead-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "e-Ukraine Head";
+  src: url("./e-UkraineHead/e-UkraineHead-Medium.woff2") format("woff2");
+  font-weight: 500 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "e-Ukraine Head";
+  src: url("./e-UkraineHead/e-UkraineHead-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}

@@ -1,12 +1,14 @@
 @source "../node_modules/@cloudflare/kumo/dist/**/*.{js,jsx,ts,tsx}";
 @import "@cloudflare/kumo/styles";
 @import "tailwindcss";
+@import "@gadgets/workshop-shared/fonts.css";
 @custom-variant dark (&:where([data-mode="dark"], [data-mode="dark"] *));
 
 @theme {
   /* ===== FONTS ===== */
-  --font-sans: "FT Kunst Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI",
+  --font-sans: "e-Ukraine", -apple-system, BlinkMacSystemFont, "Segoe UI",
     "Roboto", "Helvetica Neue", sans-serif;
+  --font-heading: "e-Ukraine Head", var(--font-sans);
   --font-mono: "Apercu Mono Pro", "SF Mono", Menlo, Monaco, Consolas, monospace;
 
   /* ===== TEXT SIZES (restore Tailwind defaults, overriding Kumo's 12/13/14/16px) ===== */
@@ -229,6 +231,12 @@ body,
 #root {
   height: 100%;
   min-height: 0;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-heading);
 }
 
 body {
