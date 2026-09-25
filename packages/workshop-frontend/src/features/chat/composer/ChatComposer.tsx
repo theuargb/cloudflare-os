@@ -461,15 +461,15 @@ export const ChatComposer = ({
 
     if (!inputValue.trim() && !selectedSlashCommand && readyAttachments.length === 0) return;
     if (hasUploadingAttachment) {
-      toasts.add({ title: "Please wait for attachment uploads to finish", variant: "error" });
+      toasts.add({ title: "Дочекайтеся завершення завантаження вкладень", variant: "error" });
       return;
     }
     if (hasFailedAttachment) {
-      toasts.add({ title: "Remove failed attachment uploads before sending", variant: "error" });
+      toasts.add({ title: "Вилучіть вкладення, завантажити які не вдалося, перш ніж надсилати повідомлення", variant: "error" });
       return;
     }
     if (isCreatingResource) {
-      toasts.add({ title: "Please wait for the resource connection to finish", variant: "error" });
+      toasts.add({ title: "Дочекайтеся завершення підключення ресурсу", variant: "error" });
       return;
     }
 
@@ -482,7 +482,7 @@ export const ChatComposer = ({
         hasAttachments: readyAttachments.length > 0,
       });
       if (!submissionResult.ok) {
-        toasts.add({ title: "Slash commands cannot include resources or attachments", variant: "error" });
+        toasts.add({ title: "Команди зі скісною рискою не можуть містити ресурси або вкладення", variant: "error" });
         return;
       }
       const { message, capsules: capsuleSpecifiers, formats: formatRefs } =
@@ -918,7 +918,7 @@ export const ChatComposer = ({
                   <button
                     type="button"
                     className="group flex h-10 w-10 flex-shrink-0 cursor-pointer items-center justify-center rounded-lg text-kumo-inactive transition-[background-color,color,transform] duration-150 ease-out hover:bg-kumo-tint hover:text-kumo-subtle focus-visible:bg-kumo-tint focus-visible:text-kumo-subtle focus-visible:outline-none active:scale-[0.96] data-[popup-open]:bg-kumo-tint data-[popup-open]:text-kumo-subtle sm:h-8 sm:w-8"
-                    aria-label="More chat options"
+                    aria-label="Інші параметри чату"
                   >
                     <DotsThree size={18} weight="bold" />
                   </button>
@@ -942,7 +942,7 @@ export const ChatComposer = ({
                       <Brain size={14} />
                     </span>
                     <span className="flex-1">
-                      {showThinkingTraces ? "Hide thinking" : "Show thinking"}
+                      {showThinkingTraces ? "Приховати хід міркувань" : "Показати хід міркувань"}
                     </span>
                   </DropdownMenu.Item>
                 )}
@@ -962,7 +962,7 @@ export const ChatComposer = ({
                   onClick={onStop}
                   tone="primary"
                   className="!h-10 !w-10 sm:!h-8 sm:!w-8"
-                  aria-label="Stop agent"
+                  aria-label="Зупинити агента"
                 >
                   <svg
                     width="14"
@@ -979,7 +979,7 @@ export const ChatComposer = ({
                   disabled={!canSend}
                   tone="primary"
                   className="!h-10 !w-10 disabled:cursor-not-allowed disabled:opacity-30 sm:!h-8 sm:!w-8"
-                  aria-label="Send message"
+                  aria-label="Надіслати повідомлення"
                 >
                   {/* Arrow-up icon */}
                   <svg

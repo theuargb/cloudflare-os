@@ -114,7 +114,7 @@ async function reconnect(): Promise<RpcStub<PublicApi>> {
     try {
       await withTimeout(candidate.ping(), RECONNECT_PROBE_TIMEOUT_MS);
     } catch (probeError) {
-      console.debug('Reconnect attempt failed:', probeError);
+      console.debug('Підключити знову attempt failed:', probeError);
       disposeQuietly(candidate);
       continue;
     }
