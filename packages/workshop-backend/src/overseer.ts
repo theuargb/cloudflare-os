@@ -5452,7 +5452,8 @@ class OverseerImpl implements AgentHooks {
   // the collaborator-facing mints, omitted for the owner's and for internal callers (see
   // GadgetClientImpl).
   async addGatekeeper(
-      cls: GatekeeperClass, creationSpec?: GatekeeperCreationSpec, joinAs?: SessionKind)
+      cls: GatekeeperClass, creationSpec?: GatekeeperCreationSpec, joinAs?: SessionKind,
+      requesterUserId?: string)
       : Promise<GatekeeperClient<any>> {
     let id = this.allocateWorkpieceId();
     let gatekeeperRecord: GatekeeperRecord = {
@@ -5503,7 +5504,8 @@ class OverseerImpl implements AgentHooks {
       }
     }
 
-    return new GatekeeperClientImpl<any>(this, id, facet, undefined, joinAs);
+    return new GatekeeperClientImpl<any>(this, id, facet,
+        requesterUserId ? {from: "user", userId: requesterUserId} : undefined, joinAs);
   }
 
   // Destroy a gatekeeper (connection) workpiece. Any binding edges pointing at it are severed so
@@ -6000,9 +6002,18 @@ class OverseerImpl implements AgentHooks {
     let gatekeeper = this.storage.gatekeepers.get(gatekeeperId);
     // Resolve identity before allocating an action id or persisting anything. Agent identities
     // are derived from the active turn and current workspace membership, never from the RPC input.
+    // Every action needs a verifiable initiating actor. Agent identity comes from the active
+    // turn's Workshop state; direct user capabilities carry the authenticated User DO ID minted
+    // by the API. Gadget and hook sessions do not have a per-submission authenticated principal,
+    // so they cannot queue business actions. Resolve before allocating an id or persisting.
     let requester = caller.from === "agent"
         ? await this.getAgentActionContext(caller.chatId)
-        : undefined;
+        : caller.from === "user" && caller.userId
+          ? await this.getActionContextForUser(caller.userId)
+          : undefined;
+    if (!requester) {
+      throw new Error("This action submission has no verifiable authenticated initiating actor.");
+    }
     if (!gatekeeper || this.storage.containsRestrictedData.get()) {
       throw new Error(
           "This action was blocked because the connection it was submitted through has been " +
@@ -6044,9 +6055,16 @@ class OverseerImpl implements AgentHooks {
       state: "pending",
       type: "action",
       description,
+<<<<<<< HEAD
       requestedBy: requester ? { type: "user", id: requester.actorId, name: requester.actor.displayName } : undefined,
       requestedActorUserId: caller.from === "agent"
           ? this.storage.activeAgents.get(caller.chatId)?.initiatorUserId : undefined,
+=======
+      requestedBy: { type: "user", id: requester.actorId, name: requester.actor.displayName },
+      requestedActorUserId: caller.from === "agent"
+          ? this.storage.activeAgents.get(caller.chatId)?.initiatorUserId
+          : caller.from === "user" ? caller.userId : undefined,
+>>>>>>> feat-ai-ui-parity-main
     };
 
     // The marking walk stamps the verified push closure "pending push" -- the read grant that
@@ -10427,6 +10445,9 @@ type GatekeeperCaller = {
   gadgetId?: WorkpieceId;
 } | {
   from: "user";
+  // Present only on user capabilities minted by an authenticated Workshop API session. Slash
+  // command observation authorizers use an un-attributed user caller and cannot submit actions.
+  userId?: string;
   chatId?: number;
 } | {
   from: "hook";
@@ -11071,7 +11092,7 @@ class OverseerClientInterface extends RpcTarget implements Overseer {
     // sessions that restart is about to sever (see #gatekeepersPendingRestart).
     this.impl.assertGatekeeperUsable(id);
     return new GatekeeperClientImpl(this.impl, id, this.impl.getGatekeeperFacet(id),
-        undefined, this.#mintedCapabilityKind());
+        {from: "user", userId: this.clientUserId}, this.#mintedCapabilityKind());
   }
 
   private async recordConnectionCreated(
@@ -11097,7 +11118,8 @@ class OverseerClientInterface extends RpcTarget implements Overseer {
       resourceUrl,
       typeUrlPattern,
     };
-    let result = await this.impl.addGatekeeper(cls, creationSpec, this.#mintedCapabilityKind());
+    let result = await this.impl.addGatekeeper(
+        cls, creationSpec, this.#mintedCapabilityKind(), this.clientUserId);
     await this.recordConnectionCreated(result, "gatekeeper", vendorId);
     return result;
   }
@@ -11121,7 +11143,7 @@ class OverseerClientInterface extends RpcTarget implements Overseer {
 
     let result = await this.impl.addGatekeeper(
         this.impl.ctx.exports.LanguageModelGatekeeper({props}), creationSpec,
-        this.#mintedCapabilityKind());
+        this.#mintedCapabilityKind(), this.clientUserId);
     await this.recordConnectionCreated(result, "ai_model");
     return result;
   }
@@ -11176,7 +11198,7 @@ class OverseerClientInterface extends RpcTarget implements Overseer {
 
     let result = await this.impl.addGatekeeper(
         this.impl.ctx.exports.AgentSpawnerGatekeeper({props}), creationSpec,
-        this.#mintedCapabilityKind());
+        this.#mintedCapabilityKind(), this.clientUserId);
     await this.recordConnectionCreated(result, "agent_spawner");
     return result;
   }
@@ -12638,7 +12660,7 @@ class GadgetClientImpl extends RpcTarget implements GadgetClient {
     // The child capability counts exactly as this one does: it can outlive this object.
     return new GatekeeperClientImpl(
         this.impl, edge.target, this.impl.getGatekeeperFacet(edge.target),
-        undefined, this.joinedAs);
+        {from: "user", userId: this.clientUserId}, this.joinedAs);
   }
 
   async bind(name: string, target: WorkpieceId, chatId?: number): Promise<void> {
