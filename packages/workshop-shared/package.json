@@ -46,7 +46,8 @@
     "./ui-page": {
       "types": "./src/ui-page.ts",
       "import": "./src/ui-page.ts"
-    }
+    },
+    "./fonts.css": "./fonts/fonts.css"
   },
   "scripts": {
     "build": "tsc",
