@@ -981,6 +981,8 @@ export type GatekeeperAppInfo = {
   title: string;
   /** Optional icon. */
   icon?: AvatarImage;
+  /** Sidebar section title (AccountDescription.providesUi.group); ungrouped apps list at the top level. */
+  group?: string;
 };
 
 /**
