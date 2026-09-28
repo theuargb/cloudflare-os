@@ -24,7 +24,9 @@ import { GatekeeperConnectCallbackImpl, normalizeUsername, UserDurableObject, CL
 import { OverseerDurableObject, GatekeeperLoopback, CodeModeTailLoopback, AgentSpawnerGatekeeper, GatekeeperHookLoopback, GadgetTailLoopback, AgentSelfLoopback } from "./overseer";
 import { UserDirectoryDurableObject } from "./user-directory.js";
 import { ExternalMessageGateway } from "./external-message-gateway";
-import { RpcStub as NativeRpcStub } from "cloudflare:workers";
+import { RpcStub as NativeRpcStub, WorkerEntrypoint } from "cloudflare:workers";
+import { getModel } from "./ai-models.js";
+import type { Message } from "@earendil-works/pi-ai";
 import { recordAnalytics } from "./analytics";
 import { handleClientErrorRequest } from "./client-errors.js";
 import { verifyCfAccessJwt } from "./access.js";
@@ -68,6 +70,136 @@ export { OverseerDurableObject, GatekeeperLoopback, GatekeeperHookLoopback,
 
 // Re-export service-binding entrypoint for external channel integrations.
 export { ExternalMessageGateway };
+
+/** Private service binding for Platform Foundation's bounded, deployment-configured AI requests. */
+@validateRpc()
+export class SemantykaModelRunner extends WorkerEntrypoint<Cloudflare.Env> {
+  /** List only deployment-enabled AI Gateway models; labels contain no provider credentials. */
+  async listModels(): Promise<Array<{ id: string; label: string }>> {
+    try {
+      let gateway = getAiGatewayConfig(this.env);
+      if (!gateway) throw new Error("AI Gateway is unavailable.");
+      return gateway.getModelList().map(({ id, name }) => ({ id, label: name }));
+    } catch {
+      throw new Error("The AI model catalog is unavailable.");
+    }
+  }
+
+  /**
+   * Run a model request with multimodal messages, optional structured output, and real initiator
+   * attribution. Errors carry stable `.code`: AI_UNAVAILABLE, AI_LIMIT, AI_INPUT_REJECTED.
+   */
+  async run(req: {
+    modelId: string;
+    system?: string;
+    messages: Array<{
+      role: "user" | "assistant";
+      parts: Array<
+        | { type: "text"; text: string }
+        | { type: "file"; mime: string; bytes: Uint8Array }
+      >;
+    }>;
+    responseSchema?: Record<string, unknown>;
+    maxOutputTokens?: number;
+    initiator: { actorId: string; organizationId?: string };
+  }): Promise<{ text: string; json?: unknown; usage: { inputTokens: number; outputTokens: number } }> {
+    if (!req?.modelId?.trim() || !req.messages?.length) {
+      throw Object.assign(new Error("Invalid AI request."), { code: "AI_INPUT_REJECTED" });
+    }
+
+    let gateway = getAiGatewayConfig(this.env);
+    if (!gateway) {
+      throw Object.assign(new Error("AI Gateway is unavailable."), { code: "AI_UNAVAILABLE" });
+    }
+    let configured = gateway.resolveModel(req.modelId);
+    if (!configured) {
+      throw Object.assign(new Error("The requested AI model is unavailable."), { code: "AI_UNAVAILABLE" });
+    }
+
+    // Build system prompt; inject JSON schema instruction when no native structured output
+    let systemPrompt = req.system ?? "";
+    if (req.responseSchema) {
+      const instruction = "\n\nYou MUST respond with valid JSON matching this schema:\n" +
+        JSON.stringify(req.responseSchema) +
+        "\nReturn ONLY the JSON object, no markdown fences or other text.";
+      systemPrompt = systemPrompt ? systemPrompt + instruction : instruction.trimStart();
+    }
+
+    // Convert messages to pi-ai format (ImageContent carries files incl. PDFs)
+    const piMessages: Message[] = req.messages.map((msg) => {
+      const parts: Array<{ type: "text"; text: string } | { type: "image"; data: string; mimeType: string }> = [];
+      for (const part of msg.parts) {
+        if (part.type === "text") {
+          parts.push({ type: "text", text: part.text });
+        } else {
+          const b64 = part.bytes instanceof Uint8Array
+            ? Buffer.from(part.bytes).toString("base64")
+            : String(part.bytes);
+          parts.push({ type: "image", data: b64, mimeType: part.mime });
+        }
+      }
+      const content = parts.length === 1 && parts[0].type === "text" ? parts[0].text : parts;
+      return { role: msg.role, content, timestamp: Date.now() } as Message;
+    });
+
+    try {
+      const handle = getModel(this.env, configured.config, {
+        type: "agent",
+        id: req.initiator.actorId,
+        name: req.initiator.actorId,
+      }, { metadata: { source: "model-binding" } });
+
+      const stream = await handle.stream(handle.model, {
+        systemPrompt: systemPrompt || undefined,
+        messages: piMessages,
+      }, {
+        maxTokens: req.maxOutputTokens,
+        thinking: false,
+      });
+
+      const message = await stream.result();
+      if (message.stopReason === "error" || message.stopReason === "aborted") {
+        const status = handle.lastResponse?.status;
+        if (status === 429) {
+          throw Object.assign(new Error("AI rate limit exceeded."), { code: "AI_LIMIT" });
+        }
+        if (status && status >= 400 && status < 500) {
+          throw Object.assign(new Error("AI input rejected."), { code: "AI_INPUT_REJECTED" });
+        }
+        throw Object.assign(new Error("The AI request failed."), { code: "AI_UNAVAILABLE" });
+      }
+
+      const text = message.content
+        .filter((block): block is { type: "text"; text: string } =>
+          typeof block === "object" && "type" in block && block.type === "text")
+        .map((block) => block.text)
+        .join("");
+
+      // pi Usage: { input, output, cacheRead, cacheWrite, totalTokens, cost }
+      const piUsage = "usage" in message
+        ? (message as unknown as { usage: { input: number; output: number } }).usage
+        : undefined;
+      const usage = {
+        inputTokens: piUsage?.input ?? 0,
+        outputTokens: piUsage?.output ?? 0,
+      };
+
+      let json: unknown;
+      if (req.responseSchema) {
+        try {
+          const trimmed = text.trim();
+          const fenced = trimmed.match(/^```(?:json)?\s*\n?([\s\S]*?)\n?\s*```$/);
+          json = JSON.parse(fenced ? fenced[1] : trimmed);
+        } catch { /* json stays undefined — caller handles missing structured output */ }
+      }
+
+      return { text, json, usage };
+    } catch (error) {
+      if (error instanceof Error && "code" in error) throw error;
+      throw Object.assign(new Error("The AI request failed."), { code: "AI_UNAVAILABLE" });
+    }
+  }
+}
 
 // Declare optional environment variables here since they may be omitted from wrangler.jsonc.
 type Env = Cloudflare.Env & {
