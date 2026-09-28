@@ -403,8 +403,8 @@ export function SidebarWorkspacesLists({ collapsed = false }: { collapsed?: bool
   )
 }
 
-// A collapsible group header used by SidebarWorkspacesLists.
-function SidebarSection({
+// A collapsible group header used by SidebarWorkspacesLists and the gatekeeper app groups.
+export function SidebarSection({
   label,
   count,
   icon,
