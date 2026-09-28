@@ -18,6 +18,7 @@ import {
   parseGatekeeperAppWorkspaceTarget,
   type GatekeeperAppWorkspaceTarget,
 } from './gatekeeperAppNavigation'
+import { readGatekeeperAppPreference, writeGatekeeperAppPreference } from './gatekeeperAppPreferences'
 
 // The content-pane rect, in viewport coordinates, that the app pins its page to while the iframe
 // is full-viewport.
@@ -139,6 +140,15 @@ class GatekeeperAppHostImpl extends RpcTarget {
 
   openPrompt(prompt: string): void {
     this.#openPrompt(normalizeGatekeeperAppPrompt(prompt))
+  }
+
+  // UI preferences shared across gatekeeper apps, persisted by Workshop (see gatekeeperAppPreferences).
+  getAppPreference(key: string): string | null {
+    return readGatekeeperAppPreference(key)
+  }
+
+  setAppPreference(key: string, value: string): void {
+    writeGatekeeperAppPreference(key, value)
   }
 
   // The app calls this once to learn the current theme and register a receiver for later changes.

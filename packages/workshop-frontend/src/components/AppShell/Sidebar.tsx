@@ -1,7 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import {
   Blueprint,
-  BookOpen,
   Compass,
   Hexagon,
   House,
@@ -21,6 +20,7 @@ import {
   SidebarWorkspacesLists,
 } from './SidebarWorkspaces'
 import SidebarUtilityStrip from './SidebarUtilityStrip'
+import { GatekeeperAppItem, SidebarAppGroups } from './SidebarGatekeeperApps'
 
 /**
  * The persistent left rail. Three pinned regions sandwich a single scrolling region of lists, so
@@ -141,45 +141,12 @@ export default function Sidebar({
               icon={<Stack size={14} weight="regular" />}
               collapsed={collapsed}
             />
-            {/* Gatekeeper management apps (e.g. the Context Library), listed dynamically. */}
-            {gatekeeperApps.map((app) => {
-              // Escape the icon URL for safe interpolation into a CSS url("…") string.
-              const maskUrl = app.icon
-                ? `url("${app.icon.url.replace(/[\\"]/g, '\\$&')}")`
-                : undefined
-              return (
-              <SidebarItem
-                key={app.id}
-                to="/gatekeepers/$appId"
-                params={{ appId: app.id }}
-                label={app.title}
-                icon={
-                  maskUrl ? (
-                    // Render the (monochrome) app icon as a CSS mask filled with the row's current
-                    // text color, so it tints like the Phosphor icons — subtle by default, accent
-                    // when active, darker on hover.
-                    <span
-                      aria-hidden
-                      className="h-3.5 w-3.5 bg-current"
-                      style={{
-                        maskImage: maskUrl,
-                        WebkitMaskImage: maskUrl,
-                        maskRepeat: 'no-repeat',
-                        WebkitMaskRepeat: 'no-repeat',
-                        maskPosition: 'center',
-                        WebkitMaskPosition: 'center',
-                        maskSize: 'contain',
-                        WebkitMaskSize: 'contain',
-                      }}
-                    />
-                  ) : (
-                    <BookOpen size={14} weight="regular" />
-                  )
-                }
-                collapsed={collapsed}
-              />
-              )
-            })}
+            {/* Ungrouped gatekeeper management apps (e.g. the Context Library), listed dynamically. */}
+            {gatekeeperApps
+              .filter((app) => !app.group)
+              .map((app) => (
+                <GatekeeperAppItem key={app.id} app={app} collapsed={collapsed} />
+              ))}
             <SidebarItem
               to="/explore"
               label="Explore"
@@ -196,6 +163,8 @@ export default function Sidebar({
             min-h-0 lets flex children compute scroll height correctly. */}
         <div className="sidebar-scroll mt-1 min-h-0 flex-1 overflow-y-auto">
           <SidebarWorkspacesLists collapsed={collapsed} />
+          <SidebarAppGroups apps={gatekeeperApps} collapsed={collapsed} />
+
         </div>
       </SidebarWorkspacesProvider>
 
