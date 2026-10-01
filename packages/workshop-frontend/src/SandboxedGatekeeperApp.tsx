@@ -7,6 +7,7 @@ import type {
   GatekeeperAppTheme,
   GatekeeperAppThemeReceiver,
 } from '@gadgets/workshop-shared/theme'
+import { isAppId, isAppRoute, type GatekeeperAppRouteReceiver } from '@gadgets/workshop-shared/app-host'
 import { isHexColor } from '@gadgets/workshop-shared/api'
 import { createRateLimitedCapability } from './rateLimitedCapability'
 import { useTheme } from './ThemeContext'
@@ -35,6 +36,13 @@ type OpenTarget = (target: GatekeeperAppWorkspaceTarget) => void
 // can no longer see. Deliberately a lookup, not an enumeration: the app learns nothing new.
 type ResolveWorkspaceTitles = (ids: string[]) => Promise<(string | null)[]>
 type OpenPrompt = (prompt: string) => void
+// The app's route as mirrored in the Workshop URL ('' = the app's start screen), and navigation to
+// another app's route (an inbox card, a cross-module link).
+type AppRouting = {
+  current: () => string,
+  report: (route: string) => void,
+  openApp: (appId: string, route: string) => void,
+}
 
 type OverlayState = 'full' | null
 
@@ -85,9 +93,13 @@ class GatekeeperAppHostImpl extends RpcTarget {
   readonly #openTarget: OpenTarget
   readonly #openPrompt: OpenPrompt
   readonly #resolveWorkspaceTitles: ResolveWorkspaceTitles
+  readonly #routing: AppRouting
   #presenting = false
   #theme: GatekeeperAppTheme
   #themeReceiver: RpcStub<GatekeeperAppThemeReceiver> | null = null
+  #routeReceiver: RpcStub<GatekeeperAppRouteReceiver> | null = null
+  // Last route both sides agree on; suppresses echoing a reported route back to the app.
+  #route = ''
   // Presentation changes are coalesced to a single apply per animation frame (see #applyPending).
   #pendingActive: boolean | null = null
   #pendingResolvers: ((ack: PresentAck) => void)[] = []
@@ -100,6 +112,7 @@ class GatekeeperAppHostImpl extends RpcTarget {
     openTarget: OpenTarget,
     openPrompt: OpenPrompt,
     resolveWorkspaceTitles: ResolveWorkspaceTitles,
+    routing: AppRouting,
   ) {
     super()
     this.#theme = theme
@@ -116,6 +129,7 @@ class GatekeeperAppHostImpl extends RpcTarget {
     this.#openTarget = openTarget
     this.#openPrompt = openPrompt
     this.#resolveWorkspaceTitles = resolveWorkspaceTitles
+    this.#routing = routing
   }
 
   get ui(): RpcStub<RpcTarget> {
@@ -169,6 +183,47 @@ class GatekeeperAppHostImpl extends RpcTarget {
     }
   }
 
+  // The app calls this once on start: registers for launcher navigation and learns the route to
+  // open (from the Workshop URL, so reloads and shared links restore the screen).
+  subscribeRoute(receiver: RpcStub<GatekeeperAppRouteReceiver>): string {
+    this.#routeReceiver?.[Symbol.dispose]?.()
+    this.#routeReceiver = receiver.dup()
+    this.#route = this.#routing.current()
+    return this.#route
+  }
+
+  // The app reports each in-app navigation; the Workshop mirrors it into its URL.
+  reportRoute(route: string): void {
+    if (!isAppRoute(route)) throw new TypeError('Invalid app route.')
+    if (route === this.#route) return
+    this.#route = route
+    this.#routing.report(route)
+  }
+
+  // Deliver a Workshop-side navigation (a launcher pick) to the already-open app.
+  pushRoute(route: string) {
+    const receiver = this.#routeReceiver
+    if (!receiver || route === this.#route) return
+    this.#route = route
+    try {
+      Promise.resolve(receiver.setRoute(route)).catch(() => this.#dropRouteReceiver(receiver))
+    } catch {
+      this.#dropRouteReceiver(receiver)
+    }
+  }
+
+  #dropRouteReceiver(receiver: RpcStub<GatekeeperAppRouteReceiver>) {
+    if (this.#routeReceiver !== receiver) return
+    receiver[Symbol.dispose]?.()
+    this.#routeReceiver = null
+  }
+
+  // Open another gatekeeper app at a route. Both parts are validated: the app is untrusted.
+  openApp(appId: string, route: string): void {
+    if (!isAppId(appId) || !isAppRoute(route)) throw new TypeError('Invalid app link.')
+    this.#routing.openApp(appId, route)
+  }
+
   // Queue a presentation change; the latest requested state is applied on the next frame.
   setPresenting(active: boolean): Promise<PresentAck> {
     return new Promise((resolve) => {
@@ -197,6 +252,8 @@ class GatekeeperAppHostImpl extends RpcTarget {
     this.#disposeRateLimiter()
     this.#themeReceiver?.[Symbol.dispose]?.()
     this.#themeReceiver = null
+    this.#routeReceiver?.[Symbol.dispose]?.()
+    this.#routeReceiver = null
     if (this.#frameId !== null) {
       cancelAnimationFrame(this.#frameId)
       this.#frameId = null
@@ -216,9 +273,13 @@ class GatekeeperAppHostImpl extends RpcTarget {
  * talks to the gatekeeper only through the `ui` capability carried over the MessagePort RPC session.
  * The iframe fills its parent container.
  */
-export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId }: {
+export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, route = '', onRouteChange }: {
   frame: GatekeeperUiFrame,
   gatekeeperVendorId: string,
+  /** The app route held in the Workshop URL; changes are pushed into the open app. */
+  route?: string,
+  /** Called with each route the app navigates to, to mirror it into the Workshop URL. */
+  onRouteChange?: (route: string) => void,
 }) {
   const navigate = useNavigate()
   const { authenticatedApi } = useAuthenticatedApi()
@@ -240,6 +301,14 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId }: {
   useEffect(() => {
     hostRef.current?.updateTheme({ mode: resolvedThemeMode, accentColor })
   }, [resolvedThemeMode, accentColor])
+  // The URL route is read when the app subscribes and pushed on later changes (launcher picks).
+  const routeRef = useRef(route)
+  routeRef.current = route
+  const onRouteChangeRef = useRef(onRouteChange)
+  onRouteChangeRef.current = onRouteChange
+  useEffect(() => {
+    hostRef.current?.pushRoute(route)
+  }, [route])
 
   const setOverlayPhase = useCallback((next: OverlayState) => {
     if (overlayRef.current === next) return
@@ -325,6 +394,11 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId }: {
         openTarget,
         openPrompt,
         resolveWorkspaceTitles,
+        {
+          current: () => routeRef.current,
+          report: (next) => onRouteChangeRef.current?.(next),
+          openApp: (appId, at) => navigate({ to: '/gatekeepers/$appId', params: { appId }, search: at ? { at } : {} }),
+        },
       )
       hostRef.current = host
       sessionRef.current = newMessagePortRpcSession(port, host)
@@ -357,7 +431,7 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId }: {
     }
     // Re-establish the session if either the HTML or the `ui` capability changes, so a new frame
     // carrying a fresh stub (even with identical HTML) never keeps talking through the stale one.
-  }, [frame.iframeHtml, frame.ui, gatekeeperVendorId, openPrompt, openTarget,
+  }, [frame.iframeHtml, frame.ui, gatekeeperVendorId, navigate, openPrompt, openTarget,
       present, resolveWorkspaceTitles, setOverlayPhase])
 
   return (
