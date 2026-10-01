@@ -16,7 +16,7 @@ import { deploymentOutputForBlueprint, listFormatOffers, readAdminConfig } from 
 export { PendingLogin, LoginConnectCallbackImpl };
 import { GatekeeperUiFrame } from "@gadgets/workshop-shared/gatekeeper";
 import type { AppUiContext } from "@gadgets/workshop-shared/gatekeeper";
-import type { GatekeeperAppActions } from "@gadgets/workshop-shared/api";
+import type { GatekeeperAppActions, GatekeeperInbox } from "@gadgets/workshop-shared/api";
 import { LanguageModelGatekeeper } from "./ai-models";
 import { getAiGatewayConfig } from "./ai-gateway.js";
 import { AdminSettings, AdminApiImpl } from "./admin-settings.js";
@@ -623,6 +623,17 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
 
   async listAppActions(): Promise<GatekeeperAppActions[]> {
     return this.#user.listAppActions(this.#appUiContext());
+  }
+
+  async getInbox(): Promise<GatekeeperInbox | null> {
+    return this.#user.getInbox(this.#appUiContext());
+  }
+
+  async markInboxRead(ids: string[]): Promise<void> {
+    if (!Array.isArray(ids) || ids.length > 100 || !ids.every((id) => typeof id === "string")) {
+      throw new TypeError("Invalid inbox ids.");
+    }
+    await this.#user.markInboxRead(this.#appUiContext(), ids);
   }
 
   async getGatekeeperApp(id: string): Promise<GatekeeperUiFrame | null> {

@@ -6,6 +6,7 @@ import ReconnectingChip from '../ReconnectingChip'
 import { useConnectionLost } from '../../RpcContext'
 import Sidebar from './Sidebar'
 import Spotlight, { SpotlightTrigger } from '../Spotlight/Spotlight'
+import InboxBell from '../Inbox/InboxBell'
 import { OPEN_COMMAND_PALETTE_EVENT } from './commandPaletteBus'
 
 const STORAGE_KEY_COLLAPSED = 'gadgets:sidebar-collapsed'
@@ -150,7 +151,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
       >
         {/* Top bar. Same height as the sidebar's brand row (h-14) so they read as one continuous
             chrome strip across the top. Carries the mobile hamburger on the left, any admin
-            TopBarNotice centered, and the search field and the reconnecting chip on the right. */}
+            TopBarNotice centered, and the search field, the inbox bell and the reconnecting chip
+            on the right. */}
         <div className="relative flex h-14 shrink-0 items-center justify-between border-b border-kumo-line bg-kumo-base px-3">
           <button
             type="button"
@@ -168,6 +170,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           <div className="relative ml-auto flex items-center gap-2">
             {connectionLost && <ReconnectingChip />}
             <SpotlightTrigger />
+            <InboxBell />
           </div>
         </div>
 

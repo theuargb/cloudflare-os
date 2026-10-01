@@ -1,8 +1,8 @@
 import { RpcStub } from "capnweb";
 import { GadgetMetadataWithTimestamps, AiChatAuthorInfo, AiModelConfig, RedactedAiModelConfig, SUGGESTED_MODELS, CollaboratorRole, ConnectedAccountsSubscriber, ConnectedAccountsFilter, GatekeeperVendorFilter, GadgetMetadata, BlueprintMetadata, BlueprintLibrarySummary, BlueprintSource, BlueprintUserSummary, BLUEPRINT_SCREENSHOT_R2_PREFIX, GatekeeperVendorInfo, OutputSummary, ListOutputsResult, AUTH_ERROR_CODES, createAuthError, ConnectFlowStart, validateCommitEmail } from '@gadgets/workshop-shared/api';
-import type { GatekeeperAppActions } from '@gadgets/workshop-shared/api';
+import type { GatekeeperAppActions, GatekeeperInbox } from '@gadgets/workshop-shared/api';
 import { Gatekeeper, GatekeeperUser, GatekeeperUserVerifier, GatekeeperVendor, AccountDescription, VendorDescription, GatekeeperConnectCallback, ConnectHandoff, SupportedResource, ResourceConfiguratorFrame, AppUiContext, GatekeeperUiFrame } from "@gadgets/workshop-shared/gatekeeper";
-import { sanitizeAppActions } from "@gadgets/workshop-shared/app-host";
+import { sanitizeAppActions, sanitizeAppInbox, MAX_INBOX_ITEMS } from "@gadgets/workshop-shared/app-host";
 import { shouldAutoProvisionAccount, ambientGatekeeperMode } from "./provisioning-policy.js";
 import { CloudflareGatekeeperUser } from "@gadgets/workshop-shared/cloudflare-gatekeeper";
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
@@ -47,7 +47,7 @@ export type ProvidedAccountInfo = {
 // shape keeps the methods' declared return types (e.g. createAccount's Fetcher<GatekeeperUser>)
 // usable directly, the way the runtime stub actually behaves.
 type AccountCreatorStub = Required<Pick<GatekeeperVendor, "createAccount">>;
-type SingletonAccountStub = Required<Pick<GatekeeperUser, "getSingletonGatekeeperClass" | "startAppUi" | "listAppActions">>;
+type SingletonAccountStub = Required<Pick<GatekeeperUser, "getSingletonGatekeeperClass" | "startAppUi" | "listAppActions" | "getInbox" | "markInboxRead">>;
 
 /** Per-app deadline for listAppActions; slow apps must not hold the launcher. */
 const APP_ACTIONS_TIMEOUT_MS = 1500;
@@ -1367,6 +1367,28 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
         return { appId: account.vendorId, actions: [] };
       }
     }));
+  }
+
+  /** The account feeding the topbar inbox: the first one whose description sets providesInbox. */
+  async #inboxProvider(): Promise<{ appId: string, stub: SingletonAccountStub } | null> {
+    let accounts = await this.listProvidedAccounts();
+    let provider = accounts.find((account) => account.description.providesInbox);
+    if (!provider) return null;
+    let stub = this.storage.connectedAccounts.get(provider.accountId)!.account as unknown as SingletonAccountStub;
+    return { appId: provider.vendorId, stub };
+  }
+
+  /** Topbar inbox (AuthenticatedApi.getInbox); the provider's entries are untrusted and sanitized. */
+  async getInbox(context: AppUiContext): Promise<GatekeeperInbox | null> {
+    let provider = await this.#inboxProvider();
+    if (!provider) return null;
+    return { ...sanitizeAppInbox(await provider.stub.getInbox(context, MAX_INBOX_ITEMS)), appId: provider.appId };
+  }
+
+  async markInboxRead(context: AppUiContext, ids: string[]): Promise<void> {
+    let provider = await this.#inboxProvider();
+    if (!provider) return;
+    await provider.stub.markInboxRead(context, ids);
   }
 
   async ensureAccountResources(accountId: number, resourceUrlPatterns: string[])
