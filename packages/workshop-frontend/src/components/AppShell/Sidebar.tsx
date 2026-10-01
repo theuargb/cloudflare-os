@@ -1,20 +1,9 @@
 import { Link } from '@tanstack/react-router'
-import {
-  ArrowLeft,
-  Blueprint,
-  Compass,
-  Hexagon,
-  House,
-  MagnifyingGlass,
-  SidebarSimple,
-  SquaresFour,
-  Stack,
-} from '@phosphor-icons/react'
+import { ArrowLeft, Hexagon, MagnifyingGlass, SidebarSimple } from '@phosphor-icons/react'
 import { useSiteName } from '../../ServerConfigContext'
 import SiteLogo from '../SiteLogo'
 import { useGatekeeperApps } from '../../useGatekeeperApps'
 import { openCommandPalette } from './commandPaletteBus'
-import SidebarItem from './SidebarItem'
 import {
   SidebarWorkspacesProvider,
   SidebarWorkspacesTools,
@@ -22,8 +11,7 @@ import {
 } from './SidebarWorkspaces'
 import SidebarUtilityStrip from './SidebarUtilityStrip'
 import { inNativeApp, returnToInstalls } from '../../features/native-app/nativeApp'
-
-import { GatekeeperAppItem, SidebarAppGroups } from './SidebarGatekeeperApps'
+import { SidebarNav } from '../../features/sidebar-customization/SidebarNav'
 
 /**
  * The persistent left rail. Brand/search and the bottom utility strip stay pinned; primary
@@ -121,49 +109,11 @@ export default function Sidebar({
 
         {/* min-h-0 gives this region a bounded height between the pinned brand and profile rows. */}
         <div className="sidebar-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
-          <nav aria-label="Primary" className="flex flex-col gap-0.5 px-2 pt-2">
-            <SidebarItem
-              to="/"
-              label="Home"
-              icon={<House size={14} weight="regular" />}
-              collapsed={collapsed}
-            />
-            <SidebarItem
-              to="/workspaces"
-              label="Workspaces"
-              icon={<SquaresFour size={14} weight="regular" />}
-              collapsed={collapsed}
-            />
-            <SidebarItem
-              to="/blueprints"
-              label="Blueprints"
-              icon={<Blueprint size={14} weight="regular" />}
-              collapsed={collapsed}
-            />
-            <SidebarItem
-              to="/outputs"
-              label="Outputs"
-              icon={<Stack size={14} weight="regular" />}
-              collapsed={collapsed}
-            />
-            {/* Ungrouped gatekeeper management apps (e.g. the Context Library), listed dynamically. */}
-            {gatekeeperApps
-              .filter((app) => !app.group)
-              .map((app) => (
-                <GatekeeperAppItem key={app.id} app={app} collapsed={collapsed} />
-              ))}
-            <SidebarItem
-              to="/explore"
-              label="Explore"
-              icon={<Compass size={14} weight="regular" />}
-              collapsed={collapsed}
-            />
-          </nav>
+          <SidebarNav apps={gatekeeperApps} collapsed={collapsed} />
 
           <div className="mt-1">
             <SidebarWorkspacesLists collapsed={collapsed} />
           </div>
-          <SidebarAppGroups apps={gatekeeperApps} collapsed={collapsed} />
         </div>
       </SidebarWorkspacesProvider>
 

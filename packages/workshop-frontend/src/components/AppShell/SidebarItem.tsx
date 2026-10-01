@@ -16,6 +16,8 @@ export type SidebarItemProps = {
   collapsed?: boolean
   /** When true, match this item active when the current path starts with `to`. */
   matchPrefix?: boolean
+  /** Hover-revealed control rendered beside, not inside, the link (a button in an anchor is invalid). */
+  endAction?: ReactNode
 }
 
 export default function SidebarItem({
@@ -26,6 +28,7 @@ export default function SidebarItem({
   trailing,
   collapsed = false,
   matchPrefix = false,
+  endAction,
 }: SidebarItemProps) {
   // Resolve the active path manually so we can style the icon as well as the row. For parameterized
   // routes (e.g. "/gatekeepers/$appId"), substitute the params so the resolved path can match.
@@ -43,7 +46,7 @@ export default function SidebarItem({
   // Kept loose: the generated route-tree union is stricter than is convenient for a generic row.
   const linkProps = { to, params } as unknown as LinkProps
 
-  return (
+  const link = (
     <Link
       {...linkProps}
       title={collapsed ? label : undefined}
@@ -52,6 +55,7 @@ export default function SidebarItem({
         isActive
           ? 'bg-kumo-fill font-medium text-kumo-strong'
           : 'font-normal text-kumo-default hover:bg-kumo-tint',
+        endAction ? 'pr-9' : '',
       ].join(' ')}
     >
       <span
@@ -69,5 +73,12 @@ export default function SidebarItem({
         </>
       )}
     </Link>
+  )
+  if (!endAction) return link
+  return (
+    <div className="group/item relative">
+      {link}
+      <div className="absolute inset-y-0 right-1.5 flex items-center">{endAction}</div>
+    </div>
   )
 }
