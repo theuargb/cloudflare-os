@@ -7,15 +7,33 @@
 //
 // The same worker doubles as the dev router (`pnpm dev-server` at the repo root): dev has no
 // `ASSETS` binding, so frontend requests fall through to the backend instead.
+//
+// Public prefixes carry no Workshop session. Their target Gatekeeper authenticates every request
+// itself, and Cloudflare Access must bypass these paths.
 
 // gatekeeper-email's entrypoint: a WorkerEntrypoint whose optional email() handler is present.
 type EmailEntrypoint = CloudflareWorkersModule.WorkerEntrypoint &
     Required<Pick<CloudflareWorkersModule.WorkerEntrypoint, "email">>;
 
+type PublicRoute = { prefix: string; binding: string };
+
+const publicRouteCache = new Map<string, PublicRoute[]>();
+
+function publicRoutes(raw: string | undefined): PublicRoute[] {
+  if (!raw) return [];
+  const cached = publicRouteCache.get(raw);
+  if (cached) return cached;
+  const routes = JSON.parse(raw) as PublicRoute[];
+  publicRouteCache.set(raw, routes);
+  return routes;
+}
+
 export interface Env {
   WORKSHOP_BACKEND: Fetcher;
   /** Present in production (wrangler.jsonc assets stanza); absent in dev. */
   ASSETS?: Fetcher;
+  /** JSON `Array<{ prefix, binding }>` for unauthenticated public Gatekeeper paths. */
+  PUBLIC_ROUTES?: string;
   /** Dormant until custom domains + Email Routing exist; the handler ships anyway. */
   GATEKEEPER_EMAIL?: Service<EmailEntrypoint>;
   [key: string]: unknown;
@@ -24,6 +42,13 @@ export interface Env {
 export default {
   async fetch(req, env) {
     const url = new URL(req.url);
+
+    for (const { prefix, binding } of publicRoutes(env.PUBLIC_ROUTES)) {
+      if (url.pathname.startsWith(prefix) || url.pathname === prefix.slice(0, -1)) {
+        const gatekeeper = env[binding];
+        return gatekeeper ? (gatekeeper as Fetcher).fetch(req) : new Response("Not found", { status: 404 });
+      }
+    }
 
     for (const key of Object.keys(env)) {
       if (!key.startsWith("GATEKEEPER_")) continue;
