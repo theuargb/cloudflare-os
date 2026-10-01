@@ -2345,13 +2345,3 @@ export class GatekeeperUserSelectionExchangeImpl
         .redeemGatekeeperUserSelection(appAccountId, ticket);
   }
 }
-
-export function normalizeUsername(username: string) {
-  username = username.toLowerCase();
-
-  if (!username.match(/^[a-z][a-z0-9_]*$/)) {
-    throw new Error("Invalid username. Must be alphanumeric starting with a letter.")
-  }
-
-  return username;
-}
