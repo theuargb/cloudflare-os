@@ -26,7 +26,7 @@
 import { RpcCompatible, RpcStub, RpcTarget } from "capnweb";
 import { AccountDescription, ActionKind, ActionDescription, AvatarImage, GatekeeperUiFrame, ObservationDescription, ResourceDescription, ResourceConfiguratorFrame, SupportedResource, VendorDescription, HookDescription } from "./gatekeeper.js";
 import type { CodeChange } from "./code-change.js";
-import type { AppAction } from "./app-host.js";
+import type { AppAction, AppInbox } from "./app-host.js";
 import type { UiFeatureFlags } from "./feature-flags.js";
 
 export const SERVICE_SALT = new Uint8Array([
@@ -881,6 +881,15 @@ export interface AuthenticatedApi extends RpcTarget {
    */
   listAppActions(): Promise<GatekeeperAppActions[]>;
 
+  /**
+   * The topbar inbox from the deployment's inbox provider (the first account whose description sets
+   * `providesInbox`), validated and truncated; null when there is no provider.
+   */
+  getInbox(): Promise<GatekeeperInbox | null>;
+
+  /** Mark entries of the topbar inbox read at the provider; an empty `ids` marks all of them. */
+  markInboxRead(ids: string[]): Promise<void>;
+
   // --- Deployment admin ---
 
   /**
@@ -921,6 +930,12 @@ export type GatekeeperAppActions = {
   appId: string;
   /** Empty when the app has no actions, failed, or did not answer in time. */
   actions: AppAction[];
+};
+
+/** The topbar inbox (AuthenticatedApi.getInbox) with the provider app it came from. */
+export type GatekeeperInbox = AppInbox & {
+  /** The provider's vendor id (same as GatekeeperAppInfo.id): "All notifications" opens this app. */
+  appId: string;
 };
 
 // ---------------------------------------------------------------------------

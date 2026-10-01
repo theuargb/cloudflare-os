@@ -85,3 +85,58 @@ export function sanitizeAppActions(raw: unknown): AppAction[] {
   }
   return result;
 }
+
+export type AppInboxSeverity = "info" | "warning" | "error";
+
+/**
+ * One topbar inbox entry (GatekeeperUser.getInbox of the account whose description sets
+ * `providesInbox`). A click marks it read and, when `appId` and `route` are set, opens that app at
+ * that route. Plain data from an untrusted app: the host validates and truncates it.
+ */
+export type AppInboxItem = {
+  id: string;
+  title: string;
+  body?: string;
+  severity: AppInboxSeverity;
+  /** ISO timestamp. */
+  createdAt: string;
+  unread: boolean;
+  appId?: string;
+  route?: string;
+};
+
+/** The actor's inbox as shown by the topbar bell: the unread total and the latest entries. */
+export type AppInbox = { unread: number; items: AppInboxItem[] };
+
+/** Most entries the host asks for and keeps. */
+export const MAX_INBOX_ITEMS = 20;
+const MAX_INBOX_ID = 64;
+const MAX_INBOX_BODY = 280;
+const INBOX_SEVERITIES: Record<AppInboxSeverity, true> = { info: true, warning: true, error: true };
+
+/** Keep well-formed inbox entries from an untrusted provider; a link survives only when both parts are valid. */
+export function sanitizeAppInbox(raw: unknown): AppInbox {
+  if (typeof raw !== "object" || raw === null) return { unread: 0, items: [] };
+  let { unread, items } = raw as Record<string, unknown>;
+  let result: AppInboxItem[] = [];
+  for (let item of Array.isArray(items) ? items : []) {
+    if (result.length >= MAX_INBOX_ITEMS) break;
+    if (typeof item !== "object" || item === null) continue;
+    let { id, title, body, severity, createdAt, unread: itemUnread, appId, route } = item as Record<string, unknown>;
+    if (typeof id !== "string" || !id || id.length > MAX_INBOX_ID || typeof title !== "string" || !title.trim()) continue;
+    if (typeof severity !== "string" || !Object.hasOwn(INBOX_SEVERITIES, severity)) continue;
+    if (typeof createdAt !== "string" || Number.isNaN(Date.parse(createdAt))) continue;
+    let link = isAppId(appId) && isAppRoute(route) ? { appId, route } : {};
+    result.push({
+      id,
+      title: title.slice(0, MAX_TEXT),
+      body: typeof body === "string" && body ? body.slice(0, MAX_INBOX_BODY) : undefined,
+      severity: severity as AppInboxSeverity,
+      createdAt,
+      unread: itemUnread === true,
+      ...link,
+    });
+  }
+  let count = typeof unread === "number" && Number.isFinite(unread) ? Math.max(0, Math.floor(unread)) : 0;
+  return { unread: count, items: result };
+}
