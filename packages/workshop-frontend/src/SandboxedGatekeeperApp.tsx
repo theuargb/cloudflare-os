@@ -8,6 +8,7 @@ import type {
   GatekeeperAppThemeReceiver,
 } from '@gadgets/workshop-shared/theme'
 import { isAppId, isAppRoute, type GatekeeperAppRouteReceiver } from '@gadgets/workshop-shared/app-host'
+import { openCommandPalette } from './components/AppShell/commandPaletteBus'
 import { isHexColor } from '@gadgets/workshop-shared/api'
 import { createRateLimitedCapability } from './rateLimitedCapability'
 import { useTheme } from './ThemeContext'
@@ -216,6 +217,11 @@ class GatekeeperAppHostImpl extends RpcTarget {
     if (this.#routeReceiver !== receiver) return
     receiver[Symbol.dispose]?.()
     this.#routeReceiver = null
+  }
+
+  // Keystrokes inside the iframe never reach the Workshop, so the app forwards ⌘K here.
+  openSearch(): void {
+    openCommandPalette()
   }
 
   // Open another gatekeeper app at a route. Both parts are validated: the app is untrusted.

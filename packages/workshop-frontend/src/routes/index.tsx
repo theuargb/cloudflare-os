@@ -1,10 +1,11 @@
 import { classifyRpcError, logRpcFailure } from "../rpcErrors";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useDeferredValue } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useKumoToastManager } from "@cloudflare/kumo";
 import { ChatComposer } from "../features/chat/composer/ChatComposer";
 import MeshBackground from "../components/MeshBackground";
 import HomeTaskSuggestions from "../components/AppShell/HomeTaskSuggestions";
+import QuickActions from "../components/Spotlight/QuickActions";
 import { useAuthenticatedApi } from "../AuthContext";
 import { RpcStub } from "capnweb";
 import {
@@ -50,6 +51,9 @@ export function HomePageContent({ prompt }: HomeSearch) {
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   // Bumped each time a task suggestion is picked; the composer re-seeds its text off the nonce.
   const [seed, setSeed] = useState<{ text: string; nonce: number } | null>(null);
+  // Live composer text: Home's quick actions filter by it (deferred so typing never waits on ranking).
+  const [draft, setDraft] = useState("");
+  const actionQuery = useDeferredValue(draft);
 
   useEffect(() => {
     if (!prompt) return;
@@ -195,10 +199,14 @@ export function HomePageContent({ prompt }: HomeSearch) {
           minRows={3}
           seedText={seed?.text}
           seedNonce={seed?.nonce}
+          onTextChange={setDraft}
           draftStorageKey={currentUser
             ? composerDraftStorageKey(currentUser.id, "home")
             : undefined}
         />
+
+        {/* Quick actions: recent and featured module actions; the full catalog is ⌘K. */}
+        <QuickActions query={actionQuery} />
 
         {/* A few example work tasks to spark ideas. Picking one seeds the composer above. */}
         <HomeTaskSuggestions
