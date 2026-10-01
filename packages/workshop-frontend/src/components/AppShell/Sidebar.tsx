@@ -1,26 +1,16 @@
 import { Link } from '@tanstack/react-router'
-import {
-  Blueprint,
-  Compass,
-  Hexagon,
-  House,
-  MagnifyingGlass,
-  SidebarSimple,
-  SquaresFour,
-  Stack,
-} from '@phosphor-icons/react'
+import { Hexagon, MagnifyingGlass, SidebarSimple } from '@phosphor-icons/react'
 import { useSiteName } from '../../ServerConfigContext'
 import SiteLogo from '../SiteLogo'
 import { useGatekeeperApps } from '../../useGatekeeperApps'
 import { openCommandPalette } from './commandPaletteBus'
-import SidebarItem from './SidebarItem'
 import {
   SidebarWorkspacesProvider,
   SidebarWorkspacesTools,
   SidebarWorkspacesLists,
 } from './SidebarWorkspaces'
 import SidebarUtilityStrip from './SidebarUtilityStrip'
-import { GatekeeperAppItem, SidebarAppGroups } from './SidebarGatekeeperApps'
+import { SidebarNav } from '../../features/sidebar-customization/SidebarNav'
 
 /**
  * The persistent left rail. Three pinned regions sandwich a single scrolling region of lists, so
@@ -115,45 +105,7 @@ export default function Sidebar({
       <SidebarWorkspacesProvider>
         {/* Pinned top stack. shrink-0 keeps it from squishing when the lists below grow. */}
         <div className="flex shrink-0 flex-col gap-3 pt-3">
-          {/* Primary nav */}
-          <nav className="flex flex-col gap-0.5 px-2">
-            <SidebarItem
-              to="/"
-              label="Home"
-              icon={<House size={14} weight="regular" />}
-              collapsed={collapsed}
-            />
-            <SidebarItem
-              to="/workspaces"
-              label="Workspaces"
-              icon={<SquaresFour size={14} weight="regular" />}
-              collapsed={collapsed}
-            />
-            <SidebarItem
-              to="/blueprints"
-              label="Blueprints"
-              icon={<Blueprint size={14} weight="regular" />}
-              collapsed={collapsed}
-            />
-            <SidebarItem
-              to="/outputs"
-              label="Outputs"
-              icon={<Stack size={14} weight="regular" />}
-              collapsed={collapsed}
-            />
-            {/* Ungrouped gatekeeper management apps (e.g. the Context Library), listed dynamically. */}
-            {gatekeeperApps
-              .filter((app) => !app.group)
-              .map((app) => (
-                <GatekeeperAppItem key={app.id} app={app} collapsed={collapsed} />
-              ))}
-            <SidebarItem
-              to="/explore"
-              label="Explore"
-              icon={<Compass size={14} weight="regular" />}
-              collapsed={collapsed}
-            />
-          </nav>
+          <SidebarNav apps={gatekeeperApps} collapsed={collapsed} />
 
           {/* Workspace tools: search. Pinned so it's always reachable. */}
           <SidebarWorkspacesTools collapsed={collapsed} />
@@ -163,8 +115,6 @@ export default function Sidebar({
             min-h-0 lets flex children compute scroll height correctly. */}
         <div className="sidebar-scroll mt-1 min-h-0 flex-1 overflow-y-auto">
           <SidebarWorkspacesLists collapsed={collapsed} />
-          <SidebarAppGroups apps={gatekeeperApps} collapsed={collapsed} />
-
         </div>
       </SidebarWorkspacesProvider>
 
