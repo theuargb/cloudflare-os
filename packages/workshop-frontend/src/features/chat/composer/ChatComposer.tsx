@@ -96,6 +96,7 @@ export const ChatComposer = ({
   minRows = 2,
   seedText,
   seedNonce,
+  onTextChange,
   draftStorageKey,
   draftUpdateBanner,
   blockedReason,
@@ -143,6 +144,8 @@ export const ChatComposer = ({
    * whenever `seedNonce` changes, so the same text can be re-seeded by bumping the nonce. */
   seedText?: string;
   seedNonce?: number;
+  /** Live prompt text, for parents that react to typing (Home filters its quick actions). */
+  onTextChange?: (text: string) => void;
   /** Session-storage key used to recover this composer's draft prompt after a page refresh. */
   draftStorageKey?: string;
   /** Optional label for the attach menu item. */
@@ -241,6 +244,11 @@ export const ChatComposer = ({
   // Keep inputValue in a ref so handleCursorChange can read it without re-binding.
   const inputValueRef = useRef(inputValue);
   inputValueRef.current = inputValue;
+  const onTextChangeRef = useRef(onTextChange);
+  onTextChangeRef.current = onTextChange;
+  useEffect(() => {
+    onTextChangeRef.current?.(inputValue);
+  }, [inputValue]);
   const {
     activeUrl,
     attachCreated,
@@ -785,7 +793,7 @@ export const ChatComposer = ({
                   : isAgentActive
                     ? "Waiting for agent…"
                     : newChat
-                      ? "Start a new conversation…"
+                      ? "Chat with AI or find a quick action…"
                       : "Ask a follow-up…"
               }
               autoFocus={autoFocus}

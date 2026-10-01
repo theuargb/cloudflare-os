@@ -1,6 +1,8 @@
 import { RpcStub } from "capnweb";
 import { GadgetMetadataWithTimestamps, AiChatAuthorInfo, AiModelConfig, RedactedAiModelConfig, CollaboratorRole, ConnectedAccountsSubscriber, ConnectedAccountsFilter, GatekeeperVendorFilter, GadgetMetadata, BlueprintMetadata, BlueprintLibrarySummary, BlueprintSource, BlueprintUserSummary, BLUEPRINT_SCREENSHOT_R2_PREFIX, GatekeeperVendorInfo, OutputSummary, ListOutputsResult, AUTH_ERROR_CODES, createAuthError, ConnectFlowStart, validateCommitEmail, NotificationSubscriber, UserNotification } from '@gadgets/workshop-shared/api';
+import type { GatekeeperAppActions } from '@gadgets/workshop-shared/api';
 import { ActionDescription, Gatekeeper, GatekeeperUser, GatekeeperUserVerifier, GatekeeperVendor, AccountDescription, VendorDescription, GatekeeperConnectCallback, ConnectHandoff, SupportedResource, ResourceConfiguratorFrame, AppUiContext, GatekeeperUiFrame } from "@gadgets/workshop-shared/gatekeeper";
+import { sanitizeAppActions } from "@gadgets/workshop-shared/app-host";
 import { shouldAutoProvisionAccount, ambientGatekeeperMode } from "./provisioning-policy.js";
 import { CloudflareGatekeeperUser } from "@gadgets/workshop-shared/cloudflare-gatekeeper";
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
@@ -48,7 +50,10 @@ export type ProvidedAccountInfo = {
 // usable directly, the way the runtime stub actually behaves.
 type AccountCreatorStub = Required<Pick<GatekeeperVendor, "createAccount">>;
 type ResourceCreatorStub = Required<Pick<GatekeeperVendor, "createResource">>;
-type SingletonAccountStub = Required<Pick<GatekeeperUser, "getSingletonGatekeeperClass" | "startAppUi">>;
+type SingletonAccountStub = Required<Pick<GatekeeperUser, "getSingletonGatekeeperClass" | "startAppUi" | "listAppActions">>;
+
+/** Per-app deadline for listAppActions; slow apps must not hold the launcher. */
+const APP_ACTIONS_TIMEOUT_MS = 1500;
 
 function areCredentialsValid(record: ConnectedAccountRecord): boolean {
   if (record.credentialsExpired) return false;
@@ -1399,6 +1404,29 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
     let record = this.storage.connectedAccounts.get(accountId);
     if (!record?.description.providesUi) throw new Error("No such app.");
     return (record.account as unknown as SingletonAccountStub).startAppUi(context);
+  }
+
+  /**
+   * Launcher actions of every management app (AuthenticatedApi.listAppActions): all providesUi
+   * accounts are asked in parallel, each bounded by APP_ACTIONS_TIMEOUT_MS. A missing method, an
+   * error or a timeout yields no actions for that app. Entries are untrusted: invalid ones are
+   * dropped and the rest are capped.
+   */
+  async listAppActions(context: AppUiContext): Promise<GatekeeperAppActions[]> {
+    let accounts = await this.listProvidedAccounts();
+    return Promise.all(accounts.filter((account) => account.description.providesUi).map(async (account) => {
+      let stub = this.storage.connectedAccounts.get(account.accountId)!.account as unknown as SingletonAccountStub;
+      try {
+        let raw = await Promise.race([
+          stub.listAppActions(context),
+          scheduler.wait(APP_ACTIONS_TIMEOUT_MS).then(() => { throw new Error("timeout"); }),
+        ]);
+        return { appId: account.vendorId, actions: sanitizeAppActions(raw) };
+      } catch (err) {
+        logger.warn("app actions unavailable", { event: "gatekeeper.app.actions.failed", vendorId: account.vendorId, error: err });
+        return { appId: account.vendorId, actions: [] };
+      }
+    }));
   }
 
   async ensureAccountResources(accountId: number, resourceUrlPatterns: string[])

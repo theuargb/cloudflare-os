@@ -16,6 +16,7 @@ import { deploymentOutputForBlueprint, listFormatOffers, readAdminConfig } from 
 export { PendingLogin, LoginConnectCallbackImpl };
 import { GatekeeperUiFrame } from "@gadgets/workshop-shared/gatekeeper";
 import type { AppUiContext } from "@gadgets/workshop-shared/gatekeeper";
+import type { GatekeeperAppActions } from "@gadgets/workshop-shared/api";
 import { LanguageModelGatekeeper } from "./ai-models";
 import { getGatewayModels } from "./ai-gateway.js";
 import { AdminSettings, AdminApiImpl } from "./admin-settings.js";
@@ -601,6 +602,10 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
           title: account.description.providesUi!.title,
           icon: account.description.providesUi!.icon,
         }));
+  }
+
+  async listAppActions(): Promise<GatekeeperAppActions[]> {
+    return this.#user.listAppActions(await this.#appUiContext());
   }
 
   async getGatekeeperApp(id: string): Promise<GatekeeperUiFrame | null> {
