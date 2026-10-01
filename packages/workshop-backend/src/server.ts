@@ -27,6 +27,9 @@ import { ExternalMessageGateway } from "./external-message-gateway";
 import { RpcStub as NativeRpcStub, WorkerEntrypoint } from "cloudflare:workers";
 import { getModel } from "./ai-models.js";
 import type { Message } from "@earendil-works/pi-ai";
+import type { AiModelKind, DecisionAnswer, DecisionQuestion, DecisionState } from "@gadgets/workshop-shared/api";
+import type { AiGatewayConfig } from "./ai-gateway.js";
+import { decodeJevResponse } from "./jev-response.js";
 import { recordAnalytics } from "./analytics";
 import { handleClientErrorRequest } from "./client-errors.js";
 import { verifyCfAccessJwt } from "./access.js";
@@ -74,15 +77,107 @@ export { ExternalMessageGateway };
 /** Private service binding for Platform Foundation's bounded, deployment-configured AI requests. */
 @validateRpc()
 export class SemantykaModelRunner extends WorkerEntrypoint<Cloudflare.Env> {
-  /** List only deployment-enabled AI Gateway models; labels contain no provider credentials. */
-  async listModels(): Promise<Array<{ id: string; label: string }>> {
+  /** List only deployment-enabled AI Gateway models, generative and decision; labels contain
+   * no provider credentials. */
+  async listModels(): Promise<Array<{
+    id: string; label: string; kind: AiModelKind; input?: "text" | "multimodal";
+  }>> {
     try {
       let gateway = getAiGatewayConfig(this.env);
       if (!gateway) throw new Error("AI Gateway is unavailable.");
-      return gateway.getModelList().map(({ id, name }) => ({ id, label: name }));
+      return [
+        ...gateway.getGenerativeModelList().map(({ id, name, input }) =>
+            ({ id, label: name, kind: "generative" as const, input })),
+        ...gateway.getDecisionModelList().map(({ id, name, input }) =>
+            ({ id, label: name, kind: "decision" as const, input })),
+      ];
     } catch {
       throw new Error("The AI model catalog is unavailable.");
     }
+  }
+
+  /**
+   * Run a decision model: evaluate one `state` against typed questions and return calibrated
+   * answers. Runs the Workers AI model through the gateway (binding transport when available,
+   * else HTTPS with the API token). Errors carry stable `.code`: AI_UNAVAILABLE, AI_LIMIT,
+   * AI_INPUT_REJECTED — like `run`.
+   */
+  async decide(req: {
+    modelId: string;
+    state: DecisionState;
+    questions: Record<string, DecisionQuestion>;
+    initiator: { actorId: string; organizationId?: string };
+  }): Promise<{
+    model: string;
+    answers: Record<string, DecisionAnswer>;
+    usage: { inputTokens: number; outputTokens: number };
+  }> {
+    const questionCount = req?.questions ? Object.keys(req.questions).length : 0;
+    if (!req?.modelId?.trim() || !questionCount || questionCount > 64) {
+      throw Object.assign(new Error("Invalid AI decision request."), { code: "AI_INPUT_REJECTED" });
+    }
+
+    let gateway = getAiGatewayConfig(this.env);
+    if (!gateway) {
+      throw Object.assign(new Error("AI Gateway is unavailable."), { code: "AI_UNAVAILABLE" });
+    }
+    let configured = gateway.resolveDecisionModel(req.modelId);
+    if (!configured) {
+      throw Object.assign(new Error("The requested decision model is unavailable."),
+        { code: "AI_UNAVAILABLE" });
+    }
+
+    const metadata = { tool: "decide", automated: true, actor: req.initiator.actorId };
+    const input = { state: req.state, questions: req.questions };
+    const binding = gateway.bindingFor("cloudflare");
+    let raw: unknown;
+    try {
+      raw = binding
+          ? await binding.run(req.modelId, input, { gateway: { id: gateway.gateway, metadata } })
+          : await runDecisionModelOverHttps(gateway, req.modelId, input, metadata);
+    } catch (error) {
+      if (error instanceof Error && "code" in error) throw error;
+      throw Object.assign(new Error("The AI decision request failed."), { code: "AI_UNAVAILABLE" });
+    }
+    return decodeJevResponse(raw, req.questions);
+  }
+
+  /**
+   * Convert a document (PDF text layer, DOCX, XLSX, HTML, images, ...) to Markdown via the
+   * Workers AI binding's toMarkdown conversion, giving text-only decision models a state for
+   * files. Requires the WORKERS_AI binding; without it the call fails with AI_UNAVAILABLE.
+   */
+  async toMarkdown(req: {
+    name: string; mime: string; bytes: Uint8Array;
+  }): Promise<{ markdown: string }> {
+    if (!req?.name?.trim() || !req.mime || !req.bytes?.length) {
+      throw Object.assign(new Error("Invalid document for Markdown conversion."),
+        { code: "AI_INPUT_REJECTED" });
+    }
+    const binding = (this.env as { WORKERS_AI?: Ai }).WORKERS_AI;
+    if (!binding) {
+      throw Object.assign(new Error("The Workers AI binding is unavailable."),
+        { code: "AI_UNAVAILABLE" });
+    }
+    let result: ConversionResponse;
+    try {
+      const gateway = getAiGatewayConfig(this.env);
+      const options = gateway?.sameAccountGateway
+          ? { gateway: {
+              id: gateway.sameAccountGateway,
+              metadata: { tool: "toMarkdown", automated: true },
+            } }
+          : undefined;
+      result = await binding.toMarkdown(
+        { name: req.name, blob: new Blob([req.bytes], { type: req.mime }) }, options);
+    } catch (error) {
+      if (error instanceof Error && "code" in error) throw error;
+      throw Object.assign(new Error("Markdown conversion failed."), { code: "AI_UNAVAILABLE" });
+    }
+    if (result.format === "error") {
+      throw Object.assign(new Error("Markdown conversion failed."), { code: "AI_UNAVAILABLE" });
+    }
+    return { markdown: result.data };
   }
 
   /**
@@ -199,6 +294,64 @@ export class SemantykaModelRunner extends WorkerEntrypoint<Cloudflare.Env> {
       throw Object.assign(new Error("The AI request failed."), { code: "AI_UNAVAILABLE" });
     }
   }
+}
+
+/**
+ * Run a decision model over JEV's documented HTTPS request shape:
+ * https://developers.cloudflare.com/ai/models/typesafe/jev/. The endpoint returns Cloudflare's
+ * `{ success, result }` REST envelope, documented at
+ * https://developers.cloudflare.com/workers-ai/get-started/rest-api/; unwrap its outer envelope
+ * before passing the result to the shared decoder, which accepts both bare and completed JEV
+ * response shapes. The `cf-aig-gateway-id` header routes through the configured gateway and
+ * `cf-aig-metadata` carries attribution. The token is guaranteed by the AiGatewayConfig
+ * constructor whenever the binding transport is unavailable.
+ */
+async function runDecisionModelOverHttps(
+    gateway: AiGatewayConfig,
+    modelId: string,
+    input: { state: DecisionState; questions: Record<string, DecisionQuestion> },
+    metadata: { tool: string; automated: boolean; actor: string },
+): Promise<unknown> {
+  let response: Response;
+  try {
+    response = await fetch(
+        "https://api.cloudflare.com/client/v4/accounts/" +
+        `${encodeURIComponent(gateway.accountId)}/ai/run`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${gateway.apiToken!}`,
+        "cf-aig-gateway-id": gateway.gateway,
+        "cf-aig-metadata": JSON.stringify(metadata),
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ model: modelId, input }),
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch {
+    throw Object.assign(new Error("The AI decision request failed."), { code: "AI_UNAVAILABLE" });
+  }
+  if (!response.ok) {
+    if (response.status === 429) {
+      throw Object.assign(new Error("AI rate limit exceeded."), { code: "AI_LIMIT" });
+    }
+    if (response.status >= 400 && response.status < 500) {
+      throw Object.assign(new Error("AI decision input rejected."), { code: "AI_INPUT_REJECTED" });
+    }
+    throw Object.assign(new Error("The AI decision request failed."), { code: "AI_UNAVAILABLE" });
+  }
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    throw Object.assign(new Error("The AI decision request failed."), { code: "AI_UNAVAILABLE" });
+  }
+  if (typeof body !== "object" || body === null || Array.isArray(body) ||
+      !("success" in body) || body.success !== true || !("result" in body)) {
+    throw Object.assign(new Error(
+      "The AI decision response was malformed: REST envelope without success/result."),
+    { code: "AI_UNAVAILABLE" });
+  }
+  return body.result;
 }
 
 // Declare optional environment variables here since they may be omitted from wrangler.jsonc.
