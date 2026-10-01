@@ -72,7 +72,7 @@ export function AssistantRow({ query, icon, ...row }: Omit<RowProps, 'children'>
     <Row {...row}>
       <span aria-hidden className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-kumo-brand/10 text-kumo-brand">{icon}</span>
       <span className="min-w-0 flex-1 truncate text-[13.5px] leading-5 tracking-[-0.2px] text-kumo-default">
-        Ask the assistant: <span className="text-kumo-strong">"{query}"</span>
+        Запитати асистента: <span className="text-kumo-strong">«{query}»</span>
       </span>
       <kbd className={['hidden w-5 shrink-0 text-center font-sans text-[12px] text-kumo-inactive sm:block', row.active ? 'visible' : 'invisible'].join(' ')}>↵</kbd>
     </Row>

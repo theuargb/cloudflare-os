@@ -34,20 +34,20 @@ export default function QuickActions({ query = '' }: { query?: string }) {
   }
 
   return (
-    <section aria-label="Quick actions" className="flex flex-col gap-2.5">
+    <section aria-label="Швидкі дії" className="flex flex-col gap-2.5">
       <div className="flex items-center justify-between px-1">
-        <h2 className="text-[12px] font-medium uppercase tracking-[0.4px] text-kumo-inactive">{needle ? 'Matching actions' : 'Quick actions'}</h2>
+        <h2 className="text-[12px] font-medium uppercase tracking-[0.4px] text-kumo-inactive">{needle ? 'Дії за запитом' : 'Швидкі дії'}</h2>
         <button
           type="button"
           onClick={openCommandPalette}
           className="press flex cursor-pointer items-center gap-1.5 rounded-md px-1.5 py-1 text-[12.5px] text-kumo-subtle transition-colors hover:bg-kumo-tint hover:text-kumo-default"
         >
-          All actions
+          Усі дії
           <kbd className="rounded border border-kumo-line px-1 py-0.5 font-sans text-[10px] leading-none text-kumo-inactive">{shortcut}</kbd>
         </button>
       </div>
       {needle && items.length === 0 ? (
-        <p className="px-1 text-[12.5px] text-kumo-inactive">No action matches — send it to the assistant.</p>
+        <p className="px-1 text-[12.5px] text-kumo-inactive">Жодна дія не відповідає запиту — надішліть його асистенту.</p>
       ) : (
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         {items.map((entry) => (

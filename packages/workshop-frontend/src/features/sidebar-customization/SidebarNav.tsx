@@ -44,8 +44,8 @@ const DropLine = ({ indicator, id, inset }: { indicator: DropIndicator | null; i
 const RenameButton = ({ label, group, onClick }: { label: string; group?: 'section'; onClick: () => void }) => (
   <button
     type="button"
-    aria-label={`Rename "${label}"`}
-    title="Rename"
+    aria-label={`Перейменувати «${label}»`}
+    title="Перейменувати"
     onClick={(event) => {
       event.preventDefault()
       event.stopPropagation()
@@ -156,11 +156,11 @@ const SidebarNavContent = ({
   if (collapsed) {
     return (
       <>
-        <nav aria-label="Primary" className="flex flex-col gap-0.5 px-2 pt-2">
+        <nav aria-label="Навігація" className="flex flex-col gap-0.5 px-2 pt-2">
           {rows(resolved.main)}
         </nav>
         {resolved.groups.some((group) => group.items.length > 0) && (
-          <nav aria-label="Modules" className="flex flex-col gap-0.5 px-2 pt-2">
+          <nav aria-label="Модулі" className="flex flex-col gap-0.5 px-2 pt-2">
             {resolved.groups.flatMap((group) => rows(group.items))}
           </nav>
         )}
@@ -173,14 +173,14 @@ const SidebarNavContent = ({
   return (
     <>
       <nav
-        aria-label="Primary"
+        aria-label="Навігація"
         className="flex flex-col gap-0.5 px-2 pt-2"
         {...dragProps(drag.containerProps(MAIN_CONTAINER))}
       >
         {rows(resolved.main)}
       </nav>
 
-      <nav aria-label="Modules" className={resolved.groups.length > 0 ? 'flex flex-col' : 'hidden'}>
+      <nav aria-label="Модулі" className={resolved.groups.length > 0 ? 'flex flex-col' : 'hidden'}>
         {resolved.groups.map((group) => {
           const title = defaults.groupTitles.get(group.key) ?? group.key
           const label = layout.labels[group.key] ?? title
@@ -240,7 +240,7 @@ const SidebarNavContent = ({
                   {rows(group.items)}
                   {customizable && group.items.length === 0 && (
                     <div className="flex h-8 items-center rounded-lg border border-dashed border-kumo-line px-2.5 text-[12px] text-kumo-inactive">
-                      Drag an item here
+                      Перетягніть пункт сюди
                     </div>
                   )}
                 </div>

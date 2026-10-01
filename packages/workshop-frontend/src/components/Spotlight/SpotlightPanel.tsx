@@ -103,14 +103,14 @@ export default function SpotlightPanel({ onDone }: { onDone: () => void }) {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={onKeyDown}
-          placeholder="What do you need to do? Create a sale, close the month…"
-          aria-label="Search actions"
+          placeholder="Що потрібно зробити? Створити реалізацію, закрити місяць…"
+          aria-label="Пошук дій"
           className="h-14 w-full bg-transparent text-[15px] leading-5 tracking-[-0.25px] text-kumo-default placeholder:text-kumo-inactive focus:outline-none"
         />
         <kbd className="hidden shrink-0 rounded border border-kumo-line px-1.5 py-0.5 font-sans text-[10px] leading-none text-kumo-inactive sm:block">ESC</kbd>
       </div>
 
-      <div role="tablist" aria-label="Action type" className="flex gap-1.5 overflow-x-auto border-b border-kumo-line px-4 pb-3">
+      <div role="tablist" aria-label="Тип дії" className="flex gap-1.5 overflow-x-auto border-b border-kumo-line px-4 pb-3">
         {FILTERS.map((filter) => {
           const selected = filter === kind
           const count = counts[filter ?? 'all']
@@ -128,7 +128,7 @@ export default function SpotlightPanel({ onDone }: { onDone: () => void }) {
               ].join(' ')}
             >
               {filter && <span aria-hidden className={`h-2 w-2 rounded-full ${ACTION_KINDS[filter].dot}`} />}
-              {filter ? ACTION_KINDS[filter].filter : 'All'}
+              {filter ? ACTION_KINDS[filter].filter : 'Усі'}
               <span className={selected ? 'opacity-70' : 'text-kumo-inactive'}>{count}</span>
             </button>
           )
@@ -157,7 +157,7 @@ export default function SpotlightPanel({ onDone }: { onDone: () => void }) {
         })}
         {flat.length === 0 && recordHits.length === 0 && (
           <p className="px-3 py-6 text-center text-[13px] text-kumo-inactive">
-            {needle ? 'Nothing found.' : 'Module actions appear here once modules register them.'}
+            {needle ? 'Нічого не знайдено.' : 'Дії модулів з’являться тут, щойно модулі їх зареєструють.'}
           </p>
         )}
         {records.map((group) => {
@@ -192,10 +192,10 @@ export default function SpotlightPanel({ onDone }: { onDone: () => void }) {
       </div>
 
       <div className="hidden items-center gap-4 border-t border-kumo-line px-4 py-2.5 text-[11px] text-kumo-inactive sm:flex">
-        <span className="flex items-center gap-1"><Key>↑</Key><Key>↓</Key> navigate</span>
-        <span className="flex items-center gap-1"><Key>Tab</Key> action type</span>
-        <span className="flex items-center gap-1"><Key>↵</Key> run</span>
-        <span className="flex items-center gap-1"><Key>esc</Key> close</span>
+        <span className="flex items-center gap-1"><Key>↑</Key><Key>↓</Key> переміщення</span>
+        <span className="flex items-center gap-1"><Key>Tab</Key> тип дії</span>
+        <span className="flex items-center gap-1"><Key>↵</Key> виконати</span>
+        <span className="flex items-center gap-1"><Key>esc</Key> закрити</span>
       </div>
     </div>
   )

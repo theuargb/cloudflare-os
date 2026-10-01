@@ -11,11 +11,11 @@ const SEVERITY_ICONS: Record<AppInboxSeverity, { icon: typeof InfoIcon, classNam
   error: { icon: WarningOctagonIcon, className: 'text-kumo-danger' },
 }
 
-const relative = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto', style: 'short' })
+const relative = new Intl.RelativeTimeFormat('uk', { numeric: 'auto', style: 'short' })
 
 function timeAgo(iso: string): string {
   const minutes = Math.round((Date.parse(iso) - Date.now()) / 60_000)
-  if (minutes > -1) return 'just now'
+  if (minutes > -1) return 'щойно'
   if (minutes > -60) return relative.format(minutes, 'minute')
   const hours = Math.round(minutes / 60)
   if (hours > -24) return relative.format(hours, 'hour')
@@ -51,8 +51,8 @@ export default function InboxBell() {
         render={
           <button
             type="button"
-            aria-label={inbox.unread > 0 ? `Notifications: ${badge} unread` : 'Notifications'}
-            title="Notifications"
+            aria-label={inbox.unread > 0 ? `Сповіщення: ${badge} непрочитаних` : 'Сповіщення'}
+            title="Сповіщення"
             className="press relative flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-kumo-inactive transition-colors hover:bg-kumo-tint hover:text-kumo-default"
           >
             <BellIcon size={17} />
@@ -72,20 +72,20 @@ export default function InboxBell() {
         className="themed-floating-shadow !z-[1100] !w-[min(380px,calc(100vw-24px))] !min-w-0 overflow-hidden rounded-xl border border-kumo-line bg-kumo-base !p-0 !outline-none [&>:first-child]:hidden"
       >
         <div className="flex items-center justify-between border-b border-kumo-line px-3.5 py-2.5">
-          <Popover.Title className="text-[13px] font-medium text-kumo-default">Notifications</Popover.Title>
+          <Popover.Title className="text-[13px] font-medium text-kumo-default">Сповіщення</Popover.Title>
           {inbox.unread > 0 && (
             <button
               type="button"
               onClick={() => markRead([])}
               className="cursor-pointer rounded-md px-1.5 py-0.5 text-[12px] text-kumo-link hover:bg-kumo-tint"
             >
-              Mark all as read
+              Позначити всі прочитаними
             </button>
           )}
         </div>
         <div className="max-h-[60vh] overflow-y-auto">
           {inbox.items.length === 0 && (
-            <p className="px-3.5 py-6 text-center text-[12.5px] text-kumo-subtle">No new notifications</p>
+            <p className="px-3.5 py-6 text-center text-[12.5px] text-kumo-subtle">Нових сповіщень немає</p>
           )}
           {inbox.items.map((item) => {
             const { icon: Icon, className } = SEVERITY_ICONS[item.severity]
@@ -104,7 +104,7 @@ export default function InboxBell() {
                   {item.body && <span className="line-clamp-2 text-[12px] text-kumo-subtle">{item.body}</span>}
                   <span className="text-[11px] text-kumo-inactive">{timeAgo(item.createdAt)}</span>
                 </span>
-                {item.unread && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-kumo-brand" aria-label="Unread" />}
+                {item.unread && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-kumo-brand" aria-label="Непрочитане" />}
               </button>
             )
           })}
@@ -114,7 +114,7 @@ export default function InboxBell() {
           onClick={openAll}
           className="w-full cursor-pointer border-t border-kumo-line px-3.5 py-2 text-center text-[12.5px] font-medium text-kumo-link hover:bg-kumo-tint"
         >
-          All notifications
+          Усі сповіщення
         </button>
       </Popover.Content>
     </Popover>

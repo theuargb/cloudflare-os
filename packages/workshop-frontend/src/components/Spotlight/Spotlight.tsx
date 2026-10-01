@@ -14,7 +14,7 @@ export default function Spotlight({ open, onClose }: { open: boolean; onClose: (
       className="fixed inset-0 z-[1500] flex items-stretch justify-center sm:items-start sm:px-4 sm:pt-[8vh]"
       role="dialog"
       aria-modal="true"
-      aria-label="Search"
+      aria-label="Пошук"
       onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}
     >
       <div className="absolute inset-0 bg-black/20" aria-hidden="true" onMouseDown={onClose} />
@@ -32,12 +32,12 @@ export function SpotlightTrigger() {
     <button
       type="button"
       onClick={openCommandPalette}
-      aria-label="Search"
-      title={`Search (${shortcut})`}
+      aria-label="Пошук"
+      title={`Пошук (${shortcut})`}
       className="press flex h-9 cursor-pointer items-center gap-2 rounded-lg text-[13px] text-kumo-inactive transition-colors hover:bg-kumo-tint hover:text-kumo-default max-md:w-9 max-md:justify-center md:w-[min(420px,40vw)] md:border md:border-kumo-line md:px-3"
     >
       <MagnifyingGlassIcon size={15} className="shrink-0" />
-      <span className="hidden flex-1 truncate text-left md:inline">Search actions: create, report, journal…</span>
+      <span className="hidden flex-1 truncate text-left md:inline">Пошук дій: створити, звіт, журнал…</span>
       <kbd className="hidden shrink-0 rounded border border-kumo-line px-1.5 py-0.5 font-sans text-[10px] leading-none md:inline">{shortcut}</kbd>
     </button>
   )

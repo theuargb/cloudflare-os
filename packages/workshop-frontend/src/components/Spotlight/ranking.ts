@@ -76,15 +76,15 @@ export function rankEntries(
     const shown = Object.fromEntries(recent.map((entry) => [entry.id, true]))
     const current = currentAppId ? entries.filter((entry) => entry.appId === currentAppId) : []
     const scope = current.length ? current : entries
-    const sections: SpotlightSection[] = [{ id: 'recent', heading: 'Recent', items: recent.map(unranked) }]
+    const sections: SpotlightSection[] = [{ id: 'recent', heading: 'Нещодавні', items: recent.map(unranked) }]
     if (kind) {
       // A kind picked without a query browses every action of that kind.
-      sections.push({ id: 'results', heading: 'Actions', items: scope.filter((entry) => ofKind(entry) && !shown[entry.id]).map(unranked) })
+      sections.push({ id: 'results', heading: 'Дії', items: scope.filter((entry) => ofKind(entry) && !shown[entry.id]).map(unranked) })
     } else if (current.length) {
-      sections.push({ id: 'current', heading: 'In this module', items: current.filter((entry) => ofKind(entry) && !shown[entry.id]).map(unranked) })
+      sections.push({ id: 'current', heading: 'У цьому модулі', items: current.filter((entry) => ofKind(entry) && !shown[entry.id]).map(unranked) })
     } else {
       const featured = featuredEntries(entries).filter((entry) => !shown[entry.id]).slice(0, FEATURED_LIMIT)
-      sections.push({ id: 'featured', heading: 'Featured', items: featured.map(unranked) })
+      sections.push({ id: 'featured', heading: 'Рекомендовані', items: featured.map(unranked) })
     }
     return { sections: sections.filter((section) => section.items.length > 0), counts: countKinds(scope) }
   }
@@ -104,7 +104,7 @@ export function rankEntries(
   matched.sort((a, b) => b.score - a.score)
   const items = matched.filter(({ entry }) => ofKind(entry)).slice(0, RESULTS_LIMIT).map(({ entry }) => entry)
   return {
-    sections: items.length ? [{ id: 'results', heading: 'Actions', items }] : [],
+    sections: items.length ? [{ id: 'results', heading: 'Дії', items }] : [],
     counts: countKinds(matched.map(({ entry }) => entry)),
   }
 }

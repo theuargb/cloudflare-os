@@ -31,8 +31,8 @@ export const SidebarLabelEditor = ({
       defaultValue={initialValue}
       maxLength={MAX_SIDEBAR_LABEL_LENGTH}
       placeholder={defaultLabel}
-      aria-label="Menu item name"
-      title="Leave empty to restore the default name"
+      aria-label="Назва пункту меню"
+      title="Порожнє значення повертає стандартну назву"
       onFocus={(event) => event.currentTarget.select()}
       onKeyDown={onKeyDown}
       onBlur={(event) => finish(() => onCommit(event.currentTarget.value))}

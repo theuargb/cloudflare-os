@@ -15,7 +15,7 @@ type SpotlightData = { formats: OutputFormatOffer[]; actions: GatekeeperAppActio
 // are also kept in localStorage so the first ⌘K after a reload already finds them.
 const CACHE_TTL_MS = 30_000
 const ACTIONS_STORAGE_KEY = 'gadgets:spotlight-actions'
-const CORE_MODULE = 'Workspaces'
+const CORE_MODULE = 'Робочі простори'
 let cache: { data: SpotlightData; fetchedAt: number } | null = null
 
 function readStoredActions(): GatekeeperAppActions[] {
@@ -87,8 +87,8 @@ export function useSpotlightEntries(): SpotlightEntry[] {
       kind: 'create',
       module: CORE_MODULE,
       moduleIcon: coreIcon,
-      title: 'Create workspace',
-      keywords: ['new chat', 'assistant', 'conversation', 'dialog'],
+      title: 'Створити робочий простір',
+      keywords: ['новий чат', 'асистент', 'розмова', 'діалог'],
       featured: true,
       run: () => navigate({ to: '/' }),
     })
@@ -98,7 +98,7 @@ export function useSpotlightEntries(): SpotlightEntry[] {
         kind: 'create',
         module: CORE_MODULE,
         moduleIcon: coreIcon,
-        title: `Create: ${format.output.noun}`,
+        title: `Створити: ${format.output.noun}`,
         run: () => { void createFormat(format) },
       })
     }

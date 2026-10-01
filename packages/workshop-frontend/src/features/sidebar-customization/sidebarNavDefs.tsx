@@ -27,11 +27,11 @@ const builtin = (id: string, label: string, to: LinkProps['to'], icon: ReactNode
   icon,
 })
 
-const HOME = builtin('home', 'Home', '/', <House size={14} weight="regular" />)
-const WORKSPACES = builtin('workspaces', 'Workspaces', '/workspaces', <SquaresFour size={14} weight="regular" />)
-const BLUEPRINTS = builtin('blueprints', 'Blueprints', '/blueprints', <Blueprint size={14} weight="regular" />)
-const OUTPUTS = builtin('outputs', 'Outputs', '/outputs', <Stack size={14} weight="regular" />)
-const EXPLORE = builtin('explore', 'Explore', '/explore', <Compass size={14} weight="regular" />)
+const HOME = builtin('home', 'Головна', '/', <House size={14} weight="regular" />)
+const WORKSPACES = builtin('workspaces', 'Робочі простори', '/workspaces', <SquaresFour size={14} weight="regular" />)
+const BLUEPRINTS = builtin('blueprints', 'Шаблони', '/blueprints', <Blueprint size={14} weight="regular" />)
+const OUTPUTS = builtin('outputs', 'Результати', '/outputs', <Stack size={14} weight="regular" />)
+const EXPLORE = builtin('explore', 'Огляд', '/explore', <Compass size={14} weight="regular" />)
 
 const appItem = (app: GatekeeperAppInfo): SidebarItemDef => ({
   key: `app:${app.id}`,
