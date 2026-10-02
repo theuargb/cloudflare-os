@@ -45,6 +45,7 @@ import {
   type AiGatewayLogRoute,
 } from "./ai-gateway";
 import { AgentGadgetInfo, AgentHooks, CHAT_CHANGE_MESSAGE_BUDGET, SeedBindingInfo, formatMissingBlueprintBindings, runAgent, summarizeArgs, type AgentStepChange, type AiChatMessageBodyWithModelData, type ChatHistory, type WorktreeTurnAccess, GIT_BINDING_NAME } from "./agent";
+import { ATTACHMENTS_BINDING_NAME } from "./agent";
 import { WorktreeSessionImpl } from "./worktree-session";
 import { GitImpl } from "./git-binding";
 import { scanWorkpieceForGrep, type GrepScan } from "./grep";
@@ -2449,6 +2450,7 @@ class OverseerImpl implements AgentHooks {
     // Before the chat's bindings, so a chat binding named GIT shadows it -- matching
     // describeBinding (see describeBinding in agent.ts).
     env[GIT_BINDING_NAME] = this.makeBindingLoopback({type: "git"}, caller);
+    env[ATTACHMENTS_BINDING_NAME] = this.makeBindingLoopback({type: "attachments"}, caller);
 
     for (let [name, entry] of Object.entries(bindings)) {
       try {
@@ -4987,6 +4989,12 @@ class OverseerImpl implements AgentHooks {
 
       case "git":
         return Promise.resolve(new GitImpl(this, () => this.#gitAuthorFor(caller)));
+
+      case "attachments":
+        if (caller.from !== "agent") {
+          throw new Error("Chat attachments are only available to the agent's executeCode.");
+        }
+        return Promise.resolve(new ChatAttachmentsSession(this, caller.chatId));
 
       default:
         target satisfies never;
@@ -10033,7 +10041,43 @@ type BindingLoopbackTarget = {
 } | {
   // The `env.GIT` binding (see git-binding.ts).
   type: "git";
+} | {
+  // The `env.ATTACHMENTS` binding of an agent's executeCode environment.
+  type: "attachments";
 };
+
+/** Chat attachments available to the agent's current executeCode environment. */
+@validateRpc()
+class ChatAttachmentsSession extends NativeRpcTarget {
+  constructor(private overseer: OverseerImpl, private chatId: number) {
+    super();
+  }
+
+  async list(): Promise<Array<{ id: string; name: string | null; mime: string; size: number }>> {
+    let result: Array<{ id: string; name: string | null; mime: string; size: number }> = [];
+    let ids = new Set<string>();
+    for (let message of this.overseer.storage.chats.list({prefix: `${keyString(this.chatId)}.`})) {
+      if (message.type !== "message") continue;
+      for (let attachment of message.attachments ?? []) {
+        if (ids.has(attachment.id)) continue;
+        ids.add(attachment.id);
+        result.push({
+          id: attachment.id,
+          name: attachment.name ?? null,
+          mime: attachment.mimeType,
+          size: attachment.size,
+        });
+      }
+    }
+    return result;
+  }
+
+  async get(id: string): Promise<{ id: string; name: string | null; mime: string; bytes: Uint8Array }> {
+    let attachment = (await this.list()).find(candidate => candidate.id === id);
+    if (!attachment) throw new Error("attachment not found in this chat");
+    return {...attachment, bytes: await this.overseer.getChatAttachmentData(this.chatId, id)};
+  }
+}
 
 /**
  * Horrible hack: At present the `env` of a dynamic isolate can contain ServiceStubs but cannot

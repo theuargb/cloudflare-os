@@ -323,11 +323,12 @@ describe("env.GIT presence", () => {
   it("is in the agent's executeCode env, beneath a chat binding of the same name",
       () => withImpl(async impl => {
     impl.makeBindingLoopback = (target: unknown) => target;
-    expect(impl.getEnvForAgent(1, {}, "exec-1")).toEqual({ GIT: { type: "git" } });
+    expect(impl.getEnvForAgent(1, {}, "exec-1"))
+        .toEqual({ GIT: { type: "git" }, ATTACHMENTS: { type: "attachments" } });
 
     impl.storage.gatekeepers.put({ id: 1, resourceTitle: "Conn", class: {} as any });
     expect(impl.getEnvForAgent(1, { GIT: { type: "workpiece", id: 1 } }, "exec-1"))
-        .toEqual({ GIT: { type: "gatekeeper", id: 1 } });
+        .toEqual({ GIT: { type: "gatekeeper", id: 1 }, ATTACHMENTS: { type: "attachments" } });
   }));
 
   it("reserves the name for new gadget bindings", () => withImpl(async impl => {
