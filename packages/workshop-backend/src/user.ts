@@ -2,7 +2,7 @@ import { RpcStub } from "capnweb";
 import { GadgetMetadataWithTimestamps, AiChatAuthorInfo, AiModelConfig, RedactedAiModelConfig, CollaboratorRole, ConnectedAccountsSubscriber, ConnectedAccountsFilter, GatekeeperVendorFilter, GadgetMetadata, BlueprintMetadata, BlueprintLibrarySummary, BlueprintSource, BlueprintUserSummary, BLUEPRINT_SCREENSHOT_R2_PREFIX, GatekeeperVendorInfo, OutputSummary, ListOutputsResult, AUTH_ERROR_CODES, createAuthError, ConnectFlowStart, validateCommitEmail, NotificationSubscriber, UserNotification } from '@gadgets/workshop-shared/api';
 import type { GatekeeperAppActions, GatekeeperInbox } from '@gadgets/workshop-shared/api';
 import { ActionDescription, Gatekeeper, GatekeeperUser, GatekeeperUserVerifier, GatekeeperVendor, AccountDescription, VendorDescription, GatekeeperConnectCallback, ConnectHandoff, SupportedResource, ResourceConfiguratorFrame, AppUiContext, GatekeeperUiFrame } from "@gadgets/workshop-shared/gatekeeper";
-import { sanitizeAppActions, sanitizeAppInbox, MAX_INBOX_ITEMS } from "@gadgets/workshop-shared/app-host";
+import { sanitizeAppActions, sanitizeAppInbox, sanitizeAppSearchHits, MAX_INBOX_ITEMS } from "@gadgets/workshop-shared/app-host";
 import { shouldAutoProvisionAccount, ambientGatekeeperMode } from "./provisioning-policy.js";
 import { CloudflareGatekeeperUser } from "@gadgets/workshop-shared/cloudflare-gatekeeper";
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
@@ -50,10 +50,13 @@ export type ProvidedAccountInfo = {
 // usable directly, the way the runtime stub actually behaves.
 type AccountCreatorStub = Required<Pick<GatekeeperVendor, "createAccount">>;
 type ResourceCreatorStub = Required<Pick<GatekeeperVendor, "createResource">>;
-type SingletonAccountStub = Required<Pick<GatekeeperUser, "getSingletonGatekeeperClass" | "startAppUi" | "listAppActions" | "getInbox" | "markInboxRead">>;
+type SingletonAccountStub = Required<Pick<GatekeeperUser, "getSingletonGatekeeperClass" | "startAppUi" | "listAppActions" | "searchApp" | "getInbox" | "markInboxRead">>;
 
 /** Per-app deadline for listAppActions; slow apps must not hold the launcher. */
 const APP_ACTIONS_TIMEOUT_MS = 1500;
+
+/** Per-app deadline for record search; slow apps must not hold Spotlight. */
+const APP_SEARCH_TIMEOUT_MS = 800;
 
 function areCredentialsValid(record: ConnectedAccountRecord): boolean {
   if (record.credentialsExpired) return false;
@@ -1427,6 +1430,31 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
         return { appId: account.vendorId, actions: [] };
       }
     }));
+  }
+
+  /**
+   * Record search of one management app (AuthenticatedApi.searchApp). The account is selected by
+   * vendor id, constrained to UI providers, and cannot stall Spotlight beyond APP_SEARCH_TIMEOUT_MS.
+   */
+  async searchApp(context: AppUiContext, appId: string, query: string) {
+    query = query.trim();
+    if (query.length < 2 || query.length > 100) return [];
+    let account = (await this.listProvidedAccounts()).find(
+        candidate => candidate.vendorId === appId && candidate.description.providesUi);
+    if (!account) return [];
+    let stub = this.storage.connectedAccounts.get(account.accountId)!.account as unknown as SingletonAccountStub;
+    try {
+      let raw = await Promise.race([
+        stub.searchApp(context, { query, limit: 5 }),
+        scheduler.wait(APP_SEARCH_TIMEOUT_MS).then(() => { throw new Error("timeout"); }),
+      ]);
+      return sanitizeAppSearchHits(raw);
+    } catch (err) {
+      logger.warn("app search unavailable", {
+        event: "gatekeeper.app.search.failed", vendorId: account.vendorId, error: err,
+      });
+      return [];
+    }
   }
 
   /** The account feeding the topbar inbox: the first one whose description sets providesInbox. */

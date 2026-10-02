@@ -26,7 +26,7 @@
 import { RpcCompatible, RpcStub, RpcTarget } from "capnweb";
 import { AccountDescription, ActionKind, ActionDescription, AvatarImage, GatekeeperUiFrame, ObservationDescription, ResourceDescription, ResourceConfiguratorFrame, SupportedResource, VendorDescription, HookDescription } from "./gatekeeper.js";
 import type { CodeChange } from "./code-change.js";
-import type { AppAction, AppInbox } from "./app-host.js";
+import type { AppAction, AppInbox, AppSearchHit } from "./app-host.js";
 import type { UiFeatureFlags } from "./feature-flags.js";
 
 export const SERVICE_SALT = new Uint8Array([
@@ -880,6 +880,12 @@ export interface AuthenticatedApi extends RpcTarget {
    * empty `actions` array. Each app's actions are validated and truncated.
    */
   listAppActions(): Promise<GatekeeperAppActions[]>;
+
+  /**
+   * Search records in one UI-providing gatekeeper. Invalid queries, unavailable apps, and app
+   * errors return no hits. Each app response is validated and truncated.
+   */
+  searchApp(appId: string, query: string): Promise<AppSearchHit[]>;
 
   /**
    * The topbar inbox from the deployment's inbox provider (the first account whose description sets

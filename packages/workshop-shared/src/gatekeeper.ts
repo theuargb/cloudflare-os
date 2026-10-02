@@ -17,7 +17,7 @@
 // `Adapter` type is the root interface implemented by the service binding.
 
 import type { WorkerEntrypoint, DurableObject, RpcTarget, RpcStub } from "cloudflare:workers";
-import type { AppAction, AppInbox } from "./app-host.js";
+import type { AppAction, AppInbox, AppSearchHit } from "./app-host.js";
 
 /**
  * A pagination cursor.
@@ -786,6 +786,12 @@ export interface GatekeeperUser extends WorkerEntrypoint {
    * fresh per open (not baked into the account) so admin-gated features reflect current status.
    */
   startAppUi?(context: AppUiContext): Promise<GatekeeperUiFrame>;
+
+  /**
+   * Search records in the account's management app. The account filters results by the actor's
+   * current access. Accounts without the method contribute no results.
+   */
+  searchApp?(context: AppUiContext, request: { query: string; limit: number }): Promise<AppSearchHit[]>;
 
   /**
    * Launcher actions of the account's management UI (the Workshop search / ⌘K). Called on demand,

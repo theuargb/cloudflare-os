@@ -1,3 +1,4 @@
+import type { AppSearchHit } from '@gadgets/workshop-shared/app-host'
 import type { ReactNode } from 'react'
 import { KindPill, KindTile } from './kinds'
 import { highlightIndices } from './matcher'
@@ -45,6 +46,21 @@ export function ActionRow({ entry, ...row }: Omit<RowProps, 'children' | 'onPick
         </span>
       </span>
       <KindPill kind={entry.kind} />
+      <kbd className={['hidden w-5 shrink-0 text-center font-sans text-[12px] text-kumo-inactive sm:block', row.active ? 'visible' : 'invisible'].join(' ')}>↵</kbd>
+    </Row>
+  )
+}
+
+/** A record found by an app's `searchApp`: title, subtitle and kind chip. */
+export function RecordRow({ hit, icon, ...row }: Omit<RowProps, 'children'> & { hit: AppSearchHit; icon: ReactNode }) {
+  return (
+    <Row {...row}>
+      <span aria-hidden className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-kumo-tint">{icon}</span>
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="truncate text-[13.5px] leading-5 tracking-[-0.2px] text-kumo-default">{hit.title}</span>
+        {hit.subtitle && <span className="truncate text-[11.5px] leading-4 text-kumo-inactive">{hit.subtitle}</span>}
+      </span>
+      {hit.kind && <span className="shrink-0 rounded-full border border-kumo-line px-2 py-0.5 text-[11px] leading-none text-kumo-subtle">{hit.kind}</span>}
       <kbd className={['hidden w-5 shrink-0 text-center font-sans text-[12px] text-kumo-inactive sm:block', row.active ? 'visible' : 'invisible'].join(' ')}>↵</kbd>
     </Row>
   )
