@@ -883,6 +883,8 @@ export type GatekeeperAppInfo = {
   title: string;
   /** Optional icon. */
   icon?: AvatarImage;
+  /** Sidebar section title (AccountDescription.providesUi.group); ungrouped apps list at the top level. */
+  group?: string;
 };
 
 /** One management app's launcher actions (⌘K); app title and icon come from GatekeeperAppInfo. */
