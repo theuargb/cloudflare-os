@@ -1,5 +1,5 @@
 import {
-  AiChatAuthorInfo, AiModelConfig, HTTPS_ONLY_PROVIDERS, SUGGESTED_MODELS,
+  AiChatAuthorInfo, AiModelConfig, DECISION_MODELS, HTTPS_ONLY_PROVIDERS, SUGGESTED_MODELS,
 } from "@gadgets/workshop-shared/api";
 import type { UserAiModelRecord } from "./storage-schema/user-storage.js";
 
@@ -99,6 +99,24 @@ export class AiGatewayConfig {
   }
 
   /**
+   * Get the generative models available through AI Gateway with their input modality (whether
+   * they accept images and PDF files), for consumers that must pick a model by capability. Hidden
+   * models are left out, as in getModelList.
+   */
+  getGenerativeModelList(): Array<{ id: string; name: string; input: "text" | "multimodal" }> {
+    let result: Array<{ id: string; name: string; input: "text" | "multimodal" }> = [];
+    for (let [provider, models] of Object.entries(SUGGESTED_MODELS)) {
+      if (this.providers.has(provider)) {
+        for (let [id, model] of Object.entries(models)) {
+          if (model.hidden) continue;
+          result.push({ id, name: model.name, input: model.input });
+        }
+      }
+    }
+    return result;
+  }
+
+  /**
    * Look up an AI Gateway model by ID. Returns a UserAiModelRecord if the model is a
    * SUGGESTED_MODEL for an enabled gateway provider, or undefined otherwise.
    */
@@ -116,6 +134,36 @@ export class AiGatewayConfig {
             apiToken: "",
           },
         };
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Get the decision models available through AI Gateway: DECISION_MODELS entries for enabled
+   * gateway providers.
+   */
+  getDecisionModelList(): Array<{ id: string; name: string; input: "text" | "multimodal" }> {
+    let result: Array<{ id: string; name: string; input: "text" | "multimodal" }> = [];
+    for (let [provider, models] of Object.entries(DECISION_MODELS)) {
+      if (this.providers.has(provider)) {
+        for (let [id, model] of Object.entries(models)) {
+          result.push({ id, name: model.name, input: model.input });
+        }
+      }
+    }
+    return result;
+  }
+
+  /**
+   * Look up a decision model by ID. Returns its DECISION_MODELS catalog entry if it is one for
+   * an enabled gateway provider, or undefined otherwise.
+   */
+  resolveDecisionModel(modelId: string):
+      { provider: string; name: string; input: "text" | "multimodal" } | undefined {
+    for (let [provider, models] of Object.entries(DECISION_MODELS)) {
+      if (this.providers.has(provider) && modelId in models) {
+        return { provider, name: models[modelId].name, input: models[modelId].input };
       }
     }
     return undefined;
