@@ -17,6 +17,7 @@
 // `Adapter` type is the root interface implemented by the service binding.
 
 import type { WorkerEntrypoint, DurableObject, RpcTarget, RpcStub } from "cloudflare:workers";
+import type { AppAction, AppInbox, AppSearchHit } from "./app-host.js";
 
 /**
  * A pagination cursor.
@@ -198,6 +199,12 @@ export type AccountDescription = {
    * as returned by the gatekeeper's getTypeScriptTypes().
    */
   singleton?: { tsType: string };
+
+  /**
+   * If set, this account feeds the Workshop topbar inbox (bell) through GatekeeperUser.getInbox and
+   * .markInboxRead. The first account declaring it is the deployment's inbox provider.
+   */
+  providesInbox?: boolean;
 
   /**
    * If set, this account has a full-page management UI (see GatekeeperUser.startAppUi). The Workshop
@@ -765,6 +772,28 @@ export interface GatekeeperUser extends WorkerEntrypoint {
    * fresh per open (not baked into the account) so admin-gated features reflect current status.
    */
   startAppUi?(context: AppUiContext): Promise<GatekeeperUiFrame>;
+
+  /**
+   * Search records in the account's management app. The account filters results by the actor's
+   * current access. Accounts without the method contribute no results.
+   */
+  searchApp?(context: AppUiContext, request: { query: string; limit: number }): Promise<AppSearchHit[]>;
+
+  /**
+   * Launcher actions of the account's management UI (the Workshop search / ⌘K). Called on demand,
+   * not declared in describe(), because the stored description is not refreshed on redeploy. The
+   * account filters by the actor's access. Accounts without the method contribute no actions.
+   */
+  listAppActions?(context: AppUiContext): Promise<AppAction[]>;
+
+  /**
+   * The actor's inbox for the topbar bell: the unread total and at most `limit` latest entries.
+   * Called only on accounts whose description sets `providesInbox`.
+   */
+  getInbox?(context: AppUiContext, limit: number): Promise<AppInbox>;
+
+  /** Mark the actor's inbox entries read; an empty `ids` marks all of them. */
+  markInboxRead?(context: AppUiContext, ids: string[]): Promise<void>;
 
   // TODO:
   // - Query whether account has scope to access a particular URL.

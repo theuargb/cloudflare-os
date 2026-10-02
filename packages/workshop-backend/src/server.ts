@@ -15,6 +15,9 @@ import { deploymentOutputForBlueprint, listFormatOffers, readAdminConfig } from 
 // Re-export the optional-feature Durable Objects + entrypoints so they can be bound in wrangler.
 export { PendingLogin, LoginConnectCallbackImpl };
 import { GatekeeperUiFrame } from "@gadgets/workshop-shared/gatekeeper";
+import type { AppUiContext } from "@gadgets/workshop-shared/gatekeeper";
+import type { AppSearchHit } from "@gadgets/workshop-shared/app-host";
+import type { GatekeeperAppActions, GatekeeperInbox } from "@gadgets/workshop-shared/api";
 import { LanguageModelGatekeeper } from "./ai-models";
 import { getAiGatewayConfig } from "./ai-gateway.js";
 import { AdminSettings, AdminApiImpl } from "./admin-settings.js";
@@ -608,6 +611,36 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
         }));
   }
 
+  /**
+   * The actor and current authority handed to gatekeeper apps, supplied fresh on every call. The
+   * actor id is the canonical login identity (username or Access email), the same id agent sessions
+   * carry.
+   */
+  #appUiContext(): AppUiContext {
+    let actorId = this.#userId.name;
+    if (!actorId) throw new Error("The authenticated user has no canonical identity.");
+    return { actorId, actor: {displayName: actorId}, isAdmin: this.#isAdmin() };
+  }
+
+  async listAppActions(): Promise<GatekeeperAppActions[]> {
+    return this.#user.listAppActions(this.#appUiContext());
+  }
+
+  async searchApp(appId: string, query: string): Promise<AppSearchHit[]> {
+    return this.#user.searchApp(this.#appUiContext(), appId, query);
+  }
+
+  async getInbox(): Promise<GatekeeperInbox | null> {
+    return this.#user.getInbox(this.#appUiContext());
+  }
+
+  async markInboxRead(ids: string[]): Promise<void> {
+    if (!Array.isArray(ids) || ids.length > 100 || !ids.every((id) => typeof id === "string")) {
+      throw new TypeError("Invalid inbox ids.");
+    }
+    await this.#user.markInboxRead(this.#appUiContext(), ids);
+  }
+
   async getGatekeeperApp(id: string): Promise<GatekeeperUiFrame | null> {
     // Self-sufficient: listProvidedAccounts provisions auto-provisioned accounts first (idempotent),
     // so a direct URL load of /gatekeepers/$id works without racing the Header's listGatekeeperApps.
@@ -615,15 +648,7 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
     let accounts = await user.listProvidedAccounts();
     let app = accounts.find((account: (typeof accounts)[number]) => account.vendorId === id && account.description.providesUi);
     if (!app) return null;
-    // The actor and current authority are supplied fresh on every open. The actor id is the
-    // canonical login identity (username or Access email), the same id agent sessions carry.
-    let actorId = this.#userId.name;
-    if (!actorId) throw new Error("The authenticated user has no canonical identity.");
-    return user.startAccountAppUi(app.accountId, {
-      actorId,
-      actor: {displayName: actorId},
-      isAdmin: this.#isAdmin(),
-    });
+    return user.startAccountAppUi(app.accountId, this.#appUiContext());
   }
 
   // --- Deployment admin ---

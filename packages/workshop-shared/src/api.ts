@@ -26,6 +26,7 @@
 import { RpcCompatible, RpcStub, RpcTarget } from "capnweb";
 import { AccountDescription, ActionKind, ActionDescription, AvatarImage, GatekeeperUiFrame, ObservationDescription, ResourceDescription, ResourceConfiguratorFrame, SupportedResource, VendorDescription, HookDescription } from "./gatekeeper.js";
 import type { CodeChange } from "./code-change.js";
+import type { AppAction, AppInbox, AppSearchHit } from "./app-host.js";
 import type { UiFeatureFlags } from "./feature-flags.js";
 
 export const SERVICE_SALT = new Uint8Array([
@@ -827,6 +828,29 @@ export interface AuthenticatedApi extends RpcTarget {
    */
   getGatekeeperApp(id: string): Promise<GatekeeperUiFrame | null>;
 
+  /**
+   * Launcher actions of every UI-providing gatekeeper: the Workshop search (⌘K) fans out to each
+   * providesUi account's `listAppActions()` in parallel with a per-app timeout, returning whichever
+   * apps respond. An app that is missing the method, throws, or exceeds the deadline contributes an
+   * empty `actions` array. Each app's actions are validated and truncated.
+   */
+  listAppActions(): Promise<GatekeeperAppActions[]>;
+
+  /**
+   * Search records in one UI-providing gatekeeper. Invalid queries, unavailable apps, and app
+   * errors return no hits. Each app response is validated and truncated.
+   */
+  searchApp(appId: string, query: string): Promise<AppSearchHit[]>;
+
+  /**
+   * The topbar inbox from the deployment's inbox provider (the first account whose description sets
+   * `providesInbox`), validated and truncated; null when there is no provider.
+   */
+  getInbox(): Promise<GatekeeperInbox | null>;
+
+  /** Mark entries of the topbar inbox read at the provider; an empty `ids` marks all of them. */
+  markInboxRead(ids: string[]): Promise<void>;
+
   // --- Deployment admin ---
 
   /**
@@ -859,6 +883,20 @@ export type GatekeeperAppInfo = {
   title: string;
   /** Optional icon. */
   icon?: AvatarImage;
+};
+
+/** One management app's launcher actions (⌘K); app title and icon come from GatekeeperAppInfo. */
+export type GatekeeperAppActions = {
+  /** The vendor id (same as GatekeeperAppInfo.id). */
+  appId: string;
+  /** Empty when the app has no actions, failed, or did not answer in time. */
+  actions: AppAction[];
+};
+
+/** The topbar inbox (AuthenticatedApi.getInbox) with the provider app it came from. */
+export type GatekeeperInbox = AppInbox & {
+  /** The provider's vendor id (same as GatekeeperAppInfo.id): "All notifications" opens this app. */
+  appId: string;
 };
 
 // ---------------------------------------------------------------------------
