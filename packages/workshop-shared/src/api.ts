@@ -26,11 +26,26 @@
 import { RpcCompatible, RpcStub, RpcTarget } from "capnweb";
 import { AccountDescription, ActionKind, ActionDescription, AvatarImage, GatekeeperUiFrame, ObservationDescription, ResourceDescription, ResourceConfiguratorFrame, SupportedResource, VendorDescription, HookDescription } from "./gatekeeper.js";
 import type { CodeChange } from "./code-change.js";
+import type { AppAction, AppInbox, AppSearchHit } from "./app-host.js";
 import type { UiFeatureFlags } from "./feature-flags.js";
 
 export const SERVICE_SALT = new Uint8Array([
   0xd9, 0x4e, 0x54, 0x1d, 0x29, 0xc1, 0x03, 0x74, 0x73, 0x7e, 0xb3, 0xe3, 0x34, 0x6d, 0x8f, 0x21
 ]);
+
+/**
+ * Canonical form of a username: the key of the user's account and the salt input for password
+ * hashing. Throws if the username isn't alphanumeric/underscore starting with a letter.
+ */
+export function normalizeUsername(username: string): string {
+  username = username.toLowerCase();
+
+  if (!username.match(/^[a-z][a-z0-9_]*$/)) {
+    throw new Error("Invalid username. Must be alphanumeric starting with a letter.")
+  }
+
+  return username;
+}
 
 /**
  * How a connect, reconnect, ensure-resources or sign-in flow starts, as returned by
@@ -121,7 +136,7 @@ export interface PublicApi extends RpcTarget {
    *
    *     argon2id({
    *       password,
-   *       salt: SERVICE_SALT + encode(username, 'utf8'),
+   *       salt: SERVICE_SALT + encode(normalizeUsername(username), 'utf8'),
    *       parallelism: 1,
    *       iterations: 3,
    *       memorySize: 64MiB,
@@ -827,6 +842,29 @@ export interface AuthenticatedApi extends RpcTarget {
    */
   getGatekeeperApp(id: string): Promise<GatekeeperUiFrame | null>;
 
+  /**
+   * Launcher actions of every UI-providing gatekeeper: the Workshop search (⌘K) fans out to each
+   * providesUi account's `listAppActions()` in parallel with a per-app timeout, returning whichever
+   * apps respond. An app that is missing the method, throws, or exceeds the deadline contributes an
+   * empty `actions` array. Each app's actions are validated and truncated.
+   */
+  listAppActions(): Promise<GatekeeperAppActions[]>;
+
+  /**
+   * Search records in one UI-providing gatekeeper. Invalid queries, unavailable apps, and app
+   * errors return no hits. Each app response is validated and truncated.
+   */
+  searchApp(appId: string, query: string): Promise<AppSearchHit[]>;
+
+  /**
+   * The topbar inbox from the deployment's inbox provider (the first account whose description sets
+   * `providesInbox`), validated and truncated; null when there is no provider.
+   */
+  getInbox(): Promise<GatekeeperInbox | null>;
+
+  /** Mark entries of the topbar inbox read at the provider; an empty `ids` marks all of them. */
+  markInboxRead(ids: string[]): Promise<void>;
+
   // --- Deployment admin ---
 
   /**
@@ -859,6 +897,22 @@ export type GatekeeperAppInfo = {
   title: string;
   /** Optional icon. */
   icon?: AvatarImage;
+  /** Sidebar section title (AccountDescription.providesUi.group); ungrouped apps list at the top level. */
+  group?: string;
+};
+
+/** One management app's launcher actions (⌘K); app title and icon come from GatekeeperAppInfo. */
+export type GatekeeperAppActions = {
+  /** The vendor id (same as GatekeeperAppInfo.id). */
+  appId: string;
+  /** Empty when the app has no actions, failed, or did not answer in time. */
+  actions: AppAction[];
+};
+
+/** The topbar inbox (AuthenticatedApi.getInbox) with the provider app it came from. */
+export type GatekeeperInbox = AppInbox & {
+  /** The provider's vendor id (same as GatekeeperAppInfo.id): "All notifications" opens this app. */
+  appId: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -1387,73 +1441,92 @@ type SuggestedModel = {
    * a newer one, which chats, spawners, and preferences created earlier may still name.
    */
   hidden?: true;
+
+  /**
+   * Input the model accepts: `multimodal` takes images and PDF files next to text. Only models
+   * known to do so are marked; Platform Foundation offers just those for document recognition.
+   */
+  input: "text" | "multimodal";
 };
 
 // The literal is kept apart from the export so SuggestedModelId can derive the model ids from it.
 const SUGGESTED_MODEL_CATALOG = {
   "cloudflare": {
     "@cf/moonshotai/kimi-k2.7-code": {
-      name: "Kimi K2.7 Code (Workers AI)", contextWindow: 262144,
+      name: "Kimi K2.7 Code (Workers AI)", contextWindow: 262144, input: "multimodal",
       outputLimit: WORKERS_AI_OUTPUT_LIMIT,
     },
     "@cf/zai-org/glm-5.2": {
-      name: "GLM 5.2 (Workers AI)", contextWindow: 262144, outputLimit: WORKERS_AI_OUTPUT_LIMIT,
+      name: "GLM 5.2 (Workers AI)", contextWindow: 262144, input: "text",
+      outputLimit: WORKERS_AI_OUTPUT_LIMIT, hidden: true,
     },
     "@cf/zai-org/glm-5.3-flash": {
-      name: "GLM 5.3 Flash (Workers AI)", contextWindow: 1048576,
+      name: "GLM 5.3 Flash (Workers AI)", contextWindow: 1048576, input: "multimodal",
       outputLimit: WORKERS_AI_OUTPUT_LIMIT,
     },
     "@cf/deepseek-ai/deepseek-v4-pro-0813": {
-      name: "DeepSeek V4 Pro 0813 (Workers AI)", contextWindow: 1048576,
+      name: "DeepSeek V4 Pro 0813 (Workers AI)", contextWindow: 1048576, input: "text",
+      outputLimit: WORKERS_AI_OUTPUT_LIMIT, hidden: true,
+    },
+    "@cf/qwen/qwen3.8-27b": {
+      name: "Qwen 3.8 27B (Workers AI)", contextWindow: 262144, input: "multimodal",
+      outputLimit: WORKERS_AI_OUTPUT_LIMIT,
+    },
+    "@cf/openai/gpt-oss-20b": {
+      name: "GPT OSS 20B (Workers AI)", contextWindow: 131072, input: "text",
       outputLimit: WORKERS_AI_OUTPUT_LIMIT,
     },
   },
   "anthropic": {
-    "claude-opus-5-5": {name: "Claude Opus 5.5", contextWindow: 1000000},
-    "claude-sonnet-5-5": {name: "Claude Sonnet 5.5", contextWindow: 1000000},
-    "claude-fable-5-1": {name: "Claude Fable 5.1", contextWindow: 1000000},
-    "claude-opus-5": {name: "Claude Opus 5", contextWindow: 1000000, hidden: true},
-    "claude-sonnet-5": {name: "Claude Sonnet 5", contextWindow: 1000000, hidden: true},
-    "claude-haiku-4-5": {name: "Claude Haiku 4.5", contextWindow: 200000},
+    "claude-opus-5-5": {name: "Claude Opus 5.5", contextWindow: 1000000, input: "multimodal"},
+    "claude-sonnet-5-5": {name: "Claude Sonnet 5.5", contextWindow: 1000000, input: "multimodal"},
+    "claude-fable-5-1": {name: "Claude Fable 5.1", contextWindow: 1000000, input: "multimodal"},
+    "claude-opus-5": {
+      name: "Claude Opus 5", contextWindow: 1000000, input: "multimodal", hidden: true,
+    },
+    "claude-sonnet-5": {
+      name: "Claude Sonnet 5", contextWindow: 1000000, input: "multimodal", hidden: true,
+    },
+    "claude-haiku-4-5": {name: "Claude Haiku 4.5", contextWindow: 200000, input: "multimodal"},
   },
   "openai": {
     // pi's GPT-6 catalog reports a 272K window, but these models support 1.05M. Use 272K as the
     // preferred compaction budget, not as the hard context limit.
     "gpt-6.1-sol": {
-      name: "GPT-6.1 Sol", contextWindow: 1050000, outputLimit: 128000,
+      name: "GPT-6.1 Sol", contextWindow: 1050000, outputLimit: 128000, input: "multimodal",
       compactionInputBudget: 272000,
     },
     "gpt-6-sol": {
-      name: "GPT-6 Sol", contextWindow: 1050000, outputLimit: 128000,
+      name: "GPT-6 Sol", contextWindow: 1050000, outputLimit: 128000, input: "multimodal",
       compactionInputBudget: 272000,
       hidden: true,
     },
     "gpt-6-luna": {
-      name: "GPT-6 Luna", contextWindow: 1050000, outputLimit: 128000,
+      name: "GPT-6 Luna", contextWindow: 1050000, outputLimit: 128000, input: "multimodal",
       compactionInputBudget: 272000,
     },
     "gpt-6-astra": {
-      name: "GPT-6 Astra", contextWindow: 1050000, outputLimit: 128000,
+      name: "GPT-6 Astra", contextWindow: 1050000, outputLimit: 128000, input: "multimodal",
       compactionInputBudget: 272000,
     },
     "gpt-5.6-sol": {
-      name: "GPT 5.6 Sol", contextWindow: 1050000, outputLimit: 128000,
+      name: "GPT 5.6 Sol", contextWindow: 1050000, outputLimit: 128000, input: "multimodal",
       compactionInputBudget: 272000,
       hidden: true,
     },
     "gpt-5.6-luna": {
-      name: "GPT 5.6 Luna", contextWindow: 1050000, outputLimit: 128000,
+      name: "GPT 5.6 Luna", contextWindow: 1050000, outputLimit: 128000, input: "multimodal",
       compactionInputBudget: 272000,
       hidden: true,
     },
     "gpt-5.6-terra": {
-      name: "GPT 5.6 Terra", contextWindow: 1050000, outputLimit: 128000,
+      name: "GPT 5.6 Terra", contextWindow: 1050000, outputLimit: 128000, input: "multimodal",
       compactionInputBudget: 272000,
       hidden: true,
     },
   },
   "google": {
-    "gemini-3.6-flash": {name: "Gemini 3.6 Flash", contextWindow: 1048576},
+    "gemini-3.6-flash": {name: "Gemini 3.6 Flash", contextWindow: 1048576, input: "multimodal"},
   },
   "ollama": {
   },
@@ -1481,6 +1554,53 @@ export type SuggestedModelId<P extends AiModelProvider = AiModelProvider> =
  * https://github.com/earendil-works/pi/blob/v0.84.2/packages/ai/src/api/google-vertex.ts#L98
  */
 export const HTTPS_ONLY_PROVIDERS: ReadonlySet<string> = new Set<AiModelProvider>(["google"]);
+
+/** The kind of an AI model: generative (chat/text) or decision (structured evaluation). */
+export type AiModelKind = "generative" | "decision";
+
+/**
+ * Workers AI structured-evaluation models by provider; enabled with the provider. A decision
+ * model evaluates one state against typed Noul / Choice / Score questions and returns calibrated
+ * answers with probabilities — it never generates free text. Only models with a documented
+ * Workers AI model id belong here (catalog: https://developers.cloudflare.com/ai/models/).
+ */
+export const DECISION_MODELS: Record<string, Record<string, { name: string; input: "text" | "multimodal" }>> = {
+  "cloudflare": {
+    // https://developers.cloudflare.com/ai/models/typesafe/jev/ — text-only.
+    "typesafe/jev": { name: "TypeSafe Jev", input: "text" },
+    // https://developers.cloudflare.com/workers-ai/models/clef/ and …/clef-flash/ — same
+    // state/questions → answers contract as Jev. The models accept images, but `decide` sends a
+    // text/JSON state only, so the catalog lists them as text.
+    "@cf/cloudflare/clef": { name: "Cloudflare Clef", input: "text" },
+    "@cf/cloudflare/clef-flash": { name: "Cloudflare Clef Flash", input: "text" },
+  },
+};
+
+/**
+ * One typed question a decision model answers against a `DecisionState`. `noul` is a yes/no
+ * judgement (the answer's `noul` is the probability it is yes), `choice` picks one of
+ * `criteria`'s keys, and `score` places the state on the ordered scale `criteria`.
+ */
+export type DecisionQuestion =
+  | { type: "noul"; instructions: string; criteria?: { true: string; false: string } }
+  | { type: "choice"; instructions: string; criteria: Record<string, string> }
+  | { type: "score"; instructions: string; criteria: string[] };
+
+/**
+ * The model's calibrated answer to one `DecisionQuestion`, keyed by question id in a decide()
+ * result. `confidence` is the model's self-reported calibration (0..1); `probabilities` spread
+ * the same mass across every offered option.
+ */
+export type DecisionAnswer =
+  | { type: "noul"; noul: number }
+  | { type: "choice"; choice: string; confidence: number; probabilities: Record<string, number> }
+  | { type: "score"; score: number; confidence: number; probabilities: Record<string, number>; legend: Record<string, string> };
+
+/**
+ * The material a decision model evaluates: a free-form string, a structured object, or an array.
+ * Never contains instructions — those live in the questions.
+ */
+export type DecisionState = string | Record<string, unknown> | unknown[];
 
 /**
  * Metadata about a workspace (one Overseer DO and everything in it). Includes everything needed
@@ -1816,6 +1936,9 @@ export type ActionLogEntry = {
    * authority (see `autoApproved`).
    */
   resolvedBy?: AiChatAuthorInfo;
+
+  /** Authenticated actor who initiated an agent action, when one was available at submission. */
+  requestedBy?: AiChatAuthorInfo;
 
   /**
    * True when the action was applied automatically by an auto-approval rule rather than by a human

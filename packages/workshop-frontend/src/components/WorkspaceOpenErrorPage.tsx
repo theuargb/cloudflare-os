@@ -11,26 +11,26 @@ export type WorkspaceOpenFailureKind =
 
 const CONTENT = {
   'access-denied': {
-    title: "You don't have access to this workspace",
-    message: 'Ask the workspace owner to grant you access, then try again.',
+    title: 'У вас немає доступу до цього робочого простору',
+    message: 'Попросіть власника надати вам доступ і спробуйте ще раз.',
     Icon: Lock,
     retryable: true,
   },
   'not-found': {
-    title: 'Workspace not found',
-    message: 'The link may be incorrect, or the workspace may have been deleted.',
+    title: 'Робочий простір не знайдено',
+    message: 'Можливо, посилання неправильне або робочий простір видалено.',
     Icon: MagnifyingGlass,
     retryable: false,
   },
   'share-links-disabled': {
-    title: 'Share links are turned off for this workspace',
-    message: 'Ask the workspace owner to add you directly, then try again.',
+    title: 'Посилання для спільного доступу вимкнено для цього робочого простору',
+    message: 'Попросіть власника додати вас безпосередньо й спробуйте ще раз.',
     Icon: LinkBreak,
     retryable: true,
   },
   unexpected: {
-    title: "We couldn't load this workspace",
-    message: 'Try again. If the problem continues, return to your workspaces.',
+    title: 'Не вдалося завантажити робочий простір',
+    message: 'Спробуйте ще раз. Якщо проблема не зникне, поверніться до списку робочих просторів.',
     Icon: WarningCircle,
     retryable: true,
   },
@@ -97,11 +97,11 @@ export default function WorkspaceOpenErrorPage({ kind, onRetry, onGoToWorkspaces
             className="!h-9"
             onClick={onGoToWorkspaces}
           >
-            Go to workspaces
+            До робочих просторів
           </WorkshopButton>
           {retryable && (
             <WorkshopButton tone="primary" onClick={onRetry}>
-              Try again
+              Спробувати ще раз
             </WorkshopButton>
           )}
         </div>

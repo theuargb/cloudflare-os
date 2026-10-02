@@ -153,11 +153,11 @@ export default function FileBrowser({
   const handleCreateFile = () => {
     const path = newFileName.trim()
     if (!path) {
-      toasts.add({ title: 'Filename cannot be empty', variant: 'error' })
+      toasts.add({ title: 'Вкажіть назву файлу', variant: 'error' })
       return
     }
     if (tree.leaves.has(path)) {
-      toasts.add({ title: 'A file with this name already exists', variant: 'error' })
+      toasts.add({ title: 'Файл із такою назвою вже існує', variant: 'error' })
       return
     }
     onFileCreate(path)
@@ -175,7 +175,7 @@ export default function FileBrowser({
     }
     const nextPath = resolveRenamePath(path, trimmed)
     if (nextPath === null) {
-      toasts.add({ title: 'Invalid file path', variant: 'error' })
+      toasts.add({ title: 'Неприпустимий шлях до файлу', variant: 'error' })
       return
     }
     if (nextPath === path) {
@@ -183,7 +183,7 @@ export default function FileBrowser({
       return
     }
     if (tree.leaves.has(nextPath)) {
-      toasts.add({ title: 'A file with this name already exists', variant: 'error' })
+      toasts.add({ title: 'Файл із такою назвою вже існує', variant: 'error' })
       return
     }
     onFileRename(path, nextPath)
@@ -192,7 +192,7 @@ export default function FileBrowser({
 
   const startDelete = (path: string) => {
     if (tree.leaves.size <= 1) {
-      toasts.add({ title: 'Cannot delete the last remaining file', variant: 'error' })
+      toasts.add({ title: 'Не можна видалити останній файл', variant: 'error' })
       return
     }
     setDeletingFile(path)
@@ -260,14 +260,14 @@ export default function FileBrowser({
     <div className={`flex h-full w-[260px] flex-col border-r border-kumo-line bg-kumo-base ${className}`}>
       <div className="flex h-9 shrink-0 items-center justify-between gap-2 px-3 pt-3 pb-2">
         <span className={SECTION_HEADER_CLASS}>
-          {showChanges ? `Changes (${changes.length})` : 'Files'}
+          {showChanges ? `Зміни (${changes.length})` : 'Файли'}
         </span>
         <div className="flex items-center gap-1">
           <WorkshopIconButton
             onClick={() => setIsCreateModalOpen(true)}
             disabled={editLocked}
-            aria-label="New file"
-            title={lockedHint ?? 'New file'}
+            aria-label="Новий файл"
+            title={lockedHint ?? 'Новий файл'}
             className="!h-8 !w-8 text-kumo-subtle hover:bg-kumo-tint hover:text-kumo-default md:!h-6 md:!w-6"
           >
             <Plus size={14} weight="bold" />
@@ -275,7 +275,7 @@ export default function FileBrowser({
           {onRequestClose && (
             <WorkshopIconButton
               onClick={onRequestClose}
-              aria-label="Close files"
+              aria-label="Закрити файли"
               className="!h-8 !w-8 md:!hidden"
             >
               <X size={16} />
@@ -305,7 +305,7 @@ export default function FileBrowser({
               })}
             </div>
             <div className="mb-1 flex h-6 items-center px-1">
-              <span className={SECTION_HEADER_CLASS}>Files</span>
+              <span className={SECTION_HEADER_CLASS}>Файли</span>
             </div>
           </>
         )}
@@ -330,10 +330,10 @@ export default function FileBrowser({
           <div className="flex items-start justify-between gap-4 border-b border-kumo-line px-5 py-4">
             <div className="min-w-0">
               <Dialog.Title className="text-[15px] leading-5 font-medium tracking-[-0.3px] text-kumo-default">
-                New file
+                Новий файл
               </Dialog.Title>
               <Dialog.Description className="mt-1 text-[12px] leading-4 font-normal tracking-[-0.2px] text-kumo-subtle">
-                Create a new file in this {workpieceNoun}. Include a directory to place it there.
+                Створіть файл у цьому розділі ({workpieceNoun}). Укажіть каталог, щоб розмістити його там.
               </Dialog.Description>
             </div>
             <Dialog.Close
@@ -341,7 +341,7 @@ export default function FileBrowser({
                 <WorkshopIconButton
                   {...props}
                   className="!h-7 !w-7"
-                  aria-label="Close"
+                  aria-label="Закрити"
                 >
                   <X size={16} />
                 </WorkshopIconButton>
@@ -353,7 +353,7 @@ export default function FileBrowser({
             <WorkshopInput
               autoFocus
               placeholder="src/filename.ts"
-              aria-label="Filename"
+              aria-label="Назва файлу"
               value={newFileName}
               onChange={(e) => setNewFileName(e.target.value)}
               onKeyDown={(e) => {
@@ -377,7 +377,7 @@ export default function FileBrowser({
                   {...props}
                   className="!h-9"
                 >
-                  Cancel
+                  Скасувати
                 </WorkshopButton>
               )}
             />
@@ -386,7 +386,7 @@ export default function FileBrowser({
               onClick={handleCreateFile}
               disabled={!newFileName.trim()}
             >
-              Create file
+              Створити файл
             </WorkshopButton>
           </div>
         </Dialog>
@@ -397,8 +397,8 @@ export default function FileBrowser({
         onOpenChange={(o) => {
           if (!o) setDeletingFile(null)
         }}
-        title="Delete file?"
-        description={<>This removes <span className="font-mono text-kumo-default">{deletingFile}</span> from the {workpieceNoun}. You can&apos;t undo this.</>}
+        title="Видалити файл?"
+        description={<>Буде видалено файл <span className="font-mono text-kumo-default">{deletingFile}</span> з розділу «{workpieceNoun}». Цю дію не можна скасувати.</>}
         onConfirm={confirmDelete}
       />
     </div>
@@ -414,9 +414,9 @@ const LEAF_ICONS: Record<LeafKind, Icon> = {
 
 const LEAF_KIND_LABELS: Record<LeafKind, string | undefined> = {
   file: undefined,
-  executable: 'Executable',
-  symlink: 'Symbolic link (not viewable)',
-  submodule: 'Submodule (not viewable)',
+  executable: 'Виконуваний файл',
+  symlink: 'Символічне посилання (перегляд недоступний)',
+  submodule: 'Підмодуль (перегляд недоступний)',
 }
 
 interface FileRowProps {
@@ -551,7 +551,7 @@ function FileRow({
             <span
               className="h-1.5 w-1.5 shrink-0 rounded-full bg-kumo-success"
               aria-label={`${path} is being edited`}
-              title="Agent is editing this file"
+              title="Агент редагує цей файл"
             />
           )}
         </button>
@@ -594,7 +594,7 @@ function FileRow({
               onClick={onDownload}
               className="!h-auto rounded-md !px-2.5 !py-1.5 text-[12px] leading-4 tracking-[-0.2px] text-kumo-default transition-colors data-highlighted:bg-kumo-tint"
             >
-              Download
+              Завантажити
             </DropdownMenu.Item>
             {!editLocked && (
               <>
@@ -604,7 +604,7 @@ function FileRow({
                     onClick={onRename}
                     className="!h-auto rounded-md !px-2.5 !py-1.5 text-[12px] leading-4 tracking-[-0.2px] text-kumo-default transition-colors data-highlighted:bg-kumo-tint"
                   >
-                    Rename
+                    Перейменувати
                   </DropdownMenu.Item>
                 )}
                 <DropdownMenu.Item
@@ -613,7 +613,7 @@ function FileRow({
                   onClick={onDelete}
                   className="!h-auto rounded-md !px-2.5 !py-1.5 text-[12px] leading-4 tracking-[-0.2px] transition-colors data-highlighted:bg-kumo-danger-tint"
                 >
-                  Delete
+                  Видалити
                 </DropdownMenu.Item>
               </>
             )}

@@ -208,12 +208,12 @@ export default function AddModelModal({ visible, onCancel, onSuccess, authentica
     const newErrors: Record<string, string> = {}
 
     if (!selection) {
-      newErrors.selection = gatewayMode ? 'Please select a provider' : 'Please select a model'
+      newErrors.selection = gatewayMode ? 'Виберіть провайдера' : 'Виберіть модель'
     }
 
     if (selection?.type === 'custom') {
-      if (!modelId.trim()) newErrors.modelId = 'Please enter the model ID'
-      if (!displayName.trim()) newErrors.displayName = 'Please enter a display name'
+      if (!modelId.trim()) newErrors.modelId = 'Введіть ідентифікатор моделі'
+      if (!displayName.trim()) newErrors.displayName = 'Введіть ім’я для відображення'
     }
 
     const isOllama = selection?.provider === 'ollama'
@@ -222,16 +222,16 @@ export default function AddModelModal({ visible, onCancel, onSuccess, authentica
 
     if (showCredentials && selection && isTokenRequired(selection.provider, headerRows) && effectiveApiToken?.trim() === '') {
       newErrors.apiToken = apiToken === null
-        ? 'Please re-enter your API token, since the API URL changed'
-        : 'Please enter your API token'
+        ? 'Повторно введіть токен API, оскільки URL-адресу API змінено'
+        : 'Введіть токен API'
     }
 
     if (showCredentials && isCloudflare && !accountId.trim()) {
-      newErrors.accountId = 'Please enter your Cloudflare account ID'
+      newErrors.accountId = 'Введіть ідентифікатор облікового запису Cloudflare'
     }
 
     if (showCredentials && isOllama && !apiUrl.trim()) {
-      newErrors.apiUrl = 'Please enter the Ollama API URL'
+      newErrors.apiUrl = 'Введіть URL-адресу API Ollama'
     }
 
     if (parseTokenLimit(contextWindow) === null) {
@@ -294,12 +294,12 @@ export default function AddModelModal({ visible, onCancel, onSuccess, authentica
       } else {
         await authenticatedApi.addModel(profile, config, source?.profile.id)
       }
-      toasts.add({ title: editing ? 'AI model updated successfully' : 'AI model added successfully', variant: 'success' })
+      toasts.add({ title: editing ? 'Модель ШІ оновлено' : 'Модель ШІ додано', variant: 'success' })
       onSuccess()
     } catch (error: any) {
       console.error('Failed to save model:', error)
       toasts.add({
-        title: editing ? 'Failed to update model' : 'Failed to add model',
+        title: editing ? 'Не вдалося оновити модель' : 'Не вдалося додати модель',
         description: error?.message,
         variant: 'error',
       })
@@ -315,7 +315,7 @@ export default function AddModelModal({ visible, onCancel, onSuccess, authentica
   const isCloudflare = selection?.provider === 'cloudflare'
   const showCredentials = !gatewayMode
   const tokenRequired = selection !== null && isTokenRequired(selection.provider, headerRows)
-  const title = { add: 'Add AI Model', edit: 'Edit AI Model', clone: 'Clone AI Model' }[mode.type]
+  const title = { add: 'Додати модель ШІ', edit: 'Редагувати модель ШІ', clone: 'Клонувати модель ШІ' }[mode.type]
 
   // Group options by provider for rendering with visual separators.
   const groupedOptions: { provider: string; items: typeof options }[] = []
@@ -345,9 +345,9 @@ export default function AddModelModal({ visible, onCancel, onSuccess, authentica
             />
           ) : (
           <Select
-            label={gatewayMode ? 'Select Provider' : 'Select Model'}
+            label={gatewayMode ? 'Виберіть провайдера' : 'Виберіть модель'}
             className="w-full text-sm"
-            placeholder={gatewayMode ? 'Choose a provider...' : 'Choose an AI model...'}
+            placeholder={gatewayMode ? 'Виберіть провайдера…' : 'Виберіть модель ШІ…'}
             value={selectValue}
             onValueChange={(v) => handleModelSelect(v as string)}
             error={errors.selection}
@@ -378,7 +378,7 @@ export default function AddModelModal({ visible, onCancel, onSuccess, authentica
           {showCustomFields && (
             <>
               <Input
-                label="Model ID"
+                label="Ідентифікатор моделі"
                 placeholder={`e.g., ${example!.modelId}`}
                 description={`The model identifier as specified by the provider (e.g., '${example!.modelId}')`}
                 value={modelId}
@@ -389,9 +389,9 @@ export default function AddModelModal({ visible, onCancel, onSuccess, authentica
               />
 
               <Input
-                label="Display Name"
+                label="Назва для відображення"
                 placeholder={`e.g., ${example!.name}`}
-                description="Human-readable name shown in the UI"
+                description="Зрозуміла назва, що відображається в інтерфейсі"
                 value={displayName}
                 onChange={(e) => { setDisplayName(e.target.value); setErrors(prev => ({ ...prev, displayName: '' })) }}
                 error={errors.displayName}
@@ -403,9 +403,9 @@ export default function AddModelModal({ visible, onCancel, onSuccess, authentica
           {/* Cloudflare account ID (the Workers AI REST endpoint is account-scoped) */}
           {showCredentials && isCloudflare && (
             <Input
-              label="Cloudflare Account ID"
+              label="Ідентифікатор облікового запису Cloudflare"
               placeholder="e.g., 0123456789abcdef0123456789abcdef"
-              description="The Cloudflare account to bill for Workers AI usage"
+              description="Обліковий запис Cloudflare для оплати використання Workers AI"
               value={accountId}
               onChange={(e) => { setAccountId(e.target.value); setErrors(prev => ({ ...prev, accountId: '' })) }}
               error={errors.accountId}
@@ -416,14 +416,14 @@ export default function AddModelModal({ visible, onCancel, onSuccess, authentica
           {/* API Token */}
           {showCredentials && selection && (
             <StoredSecretInput
-              label="API Token"
+              label="Токен API"
               stored={storedSecretsUsable && source!.config.apiToken === null}
               placeholder={tokenRequired ? API_TOKEN_PLACEHOLDERS[selection.provider] : '(optional)'}
               description={
                 isOllama
-                  ? 'Optional for local Ollama access'
+                  ? 'Необов’язково для локального доступу до Ollama'
                   : isCloudflare
-                  ? 'An API token with Workers AI Read + Edit permissions (in the dashboard: Workers AI > Use REST API > Create a Workers AI API Token)'
+                  ? 'Токен API з дозволами Workers AI Read і Edit (у панелі керування: Workers AI > Use REST API > Create a Workers AI API Token)'
                   : TOKEN_OPTIONAL_WITH_HEADERS.has(selection.provider)
                   ? `Your ${PROVIDER_LABELS[selection.provider]} API token for billing. Leave blank if the extra headers under Advanced Settings authenticate you to a proxy that supplies its own key.`
                   : `Your ${PROVIDER_LABELS[selection.provider]} API token for billing`
@@ -439,7 +439,7 @@ export default function AddModelModal({ visible, onCancel, onSuccess, authentica
             <Input
               label="API URL"
               placeholder="http://localhost:11434"
-              description="URL of your Ollama server"
+              description="URL-адреса сервера Ollama"
               value={apiUrl}
               onChange={(e) => { setApiUrl(e.target.value); setErrors(prev => ({ ...prev, apiUrl: '' })) }}
               error={errors.apiUrl}
@@ -452,7 +452,7 @@ export default function AddModelModal({ visible, onCancel, onSuccess, authentica
               open={advancedOpen}
               onOpenChange={setAdvancedOpen}
             >
-              <Collapsible.DefaultTrigger>Advanced Settings</Collapsible.DefaultTrigger>
+              <Collapsible.DefaultTrigger>Розширені налаштування</Collapsible.DefaultTrigger>
               <Collapsible.DefaultPanel>
                 <div className="space-y-4">
                   {/* Ollama shows its API URL above; Workers AI's endpoint is derived from the account ID. */}
@@ -460,7 +460,7 @@ export default function AddModelModal({ visible, onCancel, onSuccess, authentica
                     <Input
                       label="API URL"
                       placeholder="https://..."
-                      description="Override the default API endpoint (useful for proxies like Cloudflare AI Gateway)"
+                      description="Замініть типову кінцеву точку API (наприклад, для проксі на кшталт Cloudflare AI Gateway)"
                       value={apiUrl}
                       onChange={(e) => setApiUrl(e.target.value)}
                     />
@@ -508,7 +508,7 @@ export default function AddModelModal({ visible, onCancel, onSuccess, authentica
         <div className="mt-6 flex justify-end gap-2">
           <Dialog.Close render={(props) => (
             <Button variant="secondary" {...props} disabled={loading}>
-              Cancel
+              Скасувати
             </Button>
           )} />
           <Button
@@ -517,7 +517,7 @@ export default function AddModelModal({ visible, onCancel, onSuccess, authentica
             loading={loading}
             disabled={!selection}
           >
-            {editing ? 'Save Changes' : 'Add Model'}
+            {editing ? 'Зберегти зміни' : 'Додати модель'}
           </Button>
         </div>
       </Dialog>

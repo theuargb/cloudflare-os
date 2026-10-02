@@ -1,10 +1,11 @@
 import { classifyRpcError, logRpcFailure } from "../rpcErrors";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useDeferredValue } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useKumoToastManager } from "@cloudflare/kumo";
 import { ChatComposer } from "../features/chat/composer/ChatComposer";
 import MeshBackground from "../components/MeshBackground";
 import HomeTaskSuggestions from "../components/AppShell/HomeTaskSuggestions";
+import QuickActions from "../components/Spotlight/QuickActions";
 import { useAuthenticatedApi } from "../AuthContext";
 import { RpcStub } from "capnweb";
 import {
@@ -40,7 +41,7 @@ function HomePage() {
 }
 
 export function HomePageContent({ prompt }: HomeSearch) {
-  useDocumentTitle("Home");
+  useDocumentTitle("Головна");
 
   const { authenticatedApi, currentUser } = useAuthenticatedApi();
   const navigate = useNavigate();
@@ -50,6 +51,9 @@ export function HomePageContent({ prompt }: HomeSearch) {
   const [selectedModel, setSelectedModel] = useState<string | null>(null);
   // Bumped each time a task suggestion is picked; the composer re-seeds its text off the nonce.
   const [seed, setSeed] = useState<{ text: string; nonce: number } | null>(null);
+  // Live composer text: Home's quick actions filter by it (deferred so typing never waits on ranking).
+  const [draft, setDraft] = useState("");
+  const actionQuery = useDeferredValue(draft);
 
   useEffect(() => {
     if (!prompt) return;
@@ -70,7 +74,7 @@ export function HomePageContent({ prompt }: HomeSearch) {
         // Toast unless it's a connection error (reconnect refetches); a do-reset here already
         // survived the Worker's same-colo retry, so the user should hear about it.
         if (classifyRpcError(err) !== "connection") {
-          toasts.add({ title: "Couldn't load AI models", variant: "error" });
+          toasts.add({ title: "Не вдалося завантажити моделі ШІ", variant: "error" });
         }
       });
     return () => {
@@ -130,7 +134,7 @@ export function HomePageContent({ prompt }: HomeSearch) {
           provisionalOverseerRef.current = null;
         }
         if (!transient) {
-          toasts.add({ title: "Failed to create workspace", variant: "error" });
+          toasts.add({ title: "Не вдалося створити робочий простір", variant: "error" });
         }
         throw err;
       }
@@ -173,10 +177,10 @@ export function HomePageContent({ prompt }: HomeSearch) {
         {/* Hero */}
         <header className="text-center">
           <h1 className="text-3xl font-semibold tracking-tight leading-tight text-kumo-default sm:text-4xl">
-            What are we working on?
+            Добрий день!
           </h1>
           <p className="mx-auto mt-3 max-w-md text-[14px] leading-5 tracking-[-0.25px] text-kumo-subtle">
-            Ask a question, create an output, or create an app that works with your tools and data.
+            Задавайте питання, шукайте інформацію, створюйте динамічні звіти та нові бізнес-екрани, разом з Енеєм - Українським Штучним Інтелектом.
           </p>
         </header>
 
@@ -195,10 +199,14 @@ export function HomePageContent({ prompt }: HomeSearch) {
           minRows={3}
           seedText={seed?.text}
           seedNonce={seed?.nonce}
+          onTextChange={setDraft}
           draftStorageKey={currentUser
             ? composerDraftStorageKey(currentUser.id, "home")
             : undefined}
         />
+
+        {/* Quick actions: recent and featured module actions; the full catalog is ⌘K. */}
+        <QuickActions query={actionQuery} />
 
         {/* A few example work tasks to spark ideas. Picking one seeds the composer above. */}
         <HomeTaskSuggestions

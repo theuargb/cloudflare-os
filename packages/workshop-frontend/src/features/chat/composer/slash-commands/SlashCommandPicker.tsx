@@ -228,14 +228,14 @@ export function useSlashCommandPicker({
         ref={listRef}
         id={listboxId}
         role="listbox"
-        aria-label="Slash commands"
+        aria-label="Команди зі скісною рискою"
         aria-busy={loading}
         className="sidebar-scroll min-h-0 flex-1 overflow-y-auto p-2"
       >
         {error ? (
           <p className={PICKER_EMPTY}>{`Couldn’t load commands. ${error}`}</p>
         ) : loading && choices.length === 0 ? (
-          <p className={PICKER_EMPTY}>Loading commands…</p>
+          <p className={PICKER_EMPTY}>Завантаження команд…</p>
         ) : choices.length > 0 ? (
           choices.map((choice, optionIndex) => (
             <button
@@ -273,7 +273,7 @@ export function useSlashCommandPicker({
           ))
         ) : (
           <p className={PICKER_EMPTY}>
-            {query ? "No commands match your search." : "No commands are available."}
+            {query ? "За цим запитом команд не знайдено." : "Немає доступних команд."}
           </p>
         )}
       </div>
@@ -298,7 +298,7 @@ export function useSlashCommandPicker({
     setIndex: selectIndex,
     status: open
       ? loading
-        ? "Loading slash commands"
+        ? "Завантаження команд зі скісною рискою"
         : error
           ? `Slash commands unavailable: ${error}`
           : `${choices.length} slash command${choices.length === 1 ? "" : "s"} found`

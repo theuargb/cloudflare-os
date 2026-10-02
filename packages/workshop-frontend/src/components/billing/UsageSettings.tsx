@@ -64,7 +64,7 @@ export default function UsageSettings() {
       // accounts subscription (plus the focus refresh).
       openConnectWindow(await authenticatedApi.connectAccount('cloudflare', []))
     } catch {
-      toasts.add({ title: 'Failed to start Cloudflare connection', variant: 'error' })
+      toasts.add({ title: 'Не вдалося підключити Cloudflare', variant: 'error' })
     } finally {
       setBusy(false)
     }
@@ -74,7 +74,7 @@ export default function UsageSettings() {
     setSelecting(accountId)
     try {
       await authenticatedApi.selectCloudflareAccount(accountId)
-      toasts.add({ title: 'Cloudflare account selected', variant: 'success' })
+      toasts.add({ title: 'Обліковий запис Cloudflare вибрано', variant: 'success' })
       setAccounts(null)
       refresh()
     } catch (err) {
@@ -88,16 +88,16 @@ export default function UsageSettings() {
   return (
     <section className="flex flex-col gap-3">
       <h2 className="px-1 text-[12px] font-medium uppercase tracking-[0.08em] text-kumo-inactive">
-        Usage &amp; billing
+        Використання й оплата
       </h2>
       <div className="rounded-xl border border-kumo-line bg-kumo-base p-5">
       {loading || !usage ? (
-        <p className="text-sm text-kumo-subtle">Loading usage…</p>
+        <p className="text-sm text-kumo-subtle">Завантаження даних про використання…</p>
       ) : (
         <div className="space-y-6">
           {/* Free daily allowance */}
           <div>
-            <p className="text-xs font-medium text-kumo-subtle mb-1">Free daily allowance</p>
+            <p className="text-xs font-medium text-kumo-subtle mb-1">Щоденний безкоштовний ліміт</p>
             <p className="text-sm text-kumo-default">
               {usage.remaining} of {usage.dailyLimit}{' '}
               {usage.dailyLimit === 1 ? 'request' : 'requests'} remaining today
@@ -112,22 +112,22 @@ export default function UsageSettings() {
 
           {/* Cloudflare connection / credits */}
           <div>
-            <p className="text-xs font-medium text-kumo-subtle mb-1">Cloudflare account</p>
+            <p className="text-xs font-medium text-kumo-subtle mb-1">Обліковий запис Cloudflare</p>
             {!usage.connected ? (
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm text-kumo-subtle">
                   <CloudflareLogo size={16} />
-                  <span>Not connected</span>
+                  <span>Не підключено</span>
                 </div>
                 <p className="text-sm text-kumo-subtle">
-                  Connect your Cloudflare account to keep building once your free allowance runs
-                  out. Usage beyond the free tier is billed to your own Cloudflare AI Gateway
-                  credits.
+                  Підключіть обліковий запис Cloudflare, щоб продовжити роботу після вичерпання
+                  безкоштовного ліміту. Використання понад ліміт оплачуватиметься з вашого
+                  балансу Cloudflare AI Gateway.
                 </p>
                 <div className="pt-1">
                   <Button variant="primary" size="sm" onClick={connect} loading={busy}>
                     <Lightning size={14} weight="bold" className="mr-1" />
-                    Connect Cloudflare
+                    Підключити Cloudflare
                   </Button>
                 </div>
               </div>
@@ -136,17 +136,17 @@ export default function UsageSettings() {
               <div className="space-y-3">
                 <div className="flex items-center gap-2 text-sm text-kumo-default">
                   <Warning size={18} weight="bold" className="text-kumo-warning" />
-                  <span>Choose which Cloudflare account to bill</span>
+                  <span>Виберіть обліковий запис Cloudflare для оплати</span>
                 </div>
                 <p className="text-sm text-kumo-subtle">
                   Your connection has access to multiple Cloudflare accounts. Select the one whose
                   AI Gateway credits should be used.
                 </p>
                 {accounts === null ? (
-                  <p className="text-sm text-kumo-subtle">Loading accounts…</p>
+                  <p className="text-sm text-kumo-subtle">Завантаження облікових записів…</p>
                 ) : accounts.length === 0 ? (
                   <p className="text-sm text-kumo-subtle">
-                    No accounts available on this connection.
+                    Для цього підключення немає доступних облікових записів.
                   </p>
                 ) : (
                   <div className="flex flex-col gap-2">
@@ -171,7 +171,7 @@ export default function UsageSettings() {
                 <div className="flex items-center gap-2 text-sm text-kumo-default">
                   <CloudCheck size={18} weight="bold" className="text-kumo-success" />
                   <span>
-                    Connected
+                    Підключено
                     {usage.accountName && <> — {usage.accountName}</>}
                   </span>
                 </div>
@@ -180,7 +180,7 @@ export default function UsageSettings() {
                   {usage.balance !== null ? (
                     <strong>${usage.balance.toFixed(2)}</strong>
                   ) : (
-                    <span className="text-kumo-subtle">unknown</span>
+                    <span className="text-kumo-subtle">невідомо</span>
                   )}
                 </p>
 
@@ -191,7 +191,7 @@ export default function UsageSettings() {
                     onClick={() => window.open(buildAddCreditsUrl(usage.accountId), '_blank')}
                   >
                     <Lightning size={14} weight="bold" className="mr-1" />
-                    Add credits
+                    Поповнити баланс
                   </Button>
                 </div>
               </div>
@@ -206,7 +206,7 @@ export default function UsageSettings() {
               rel="noreferrer"
               className="underline"
             >
-              AI Gateway unified billing
+              Єдина система оплати AI Gateway
             </a>
             .
           </p>

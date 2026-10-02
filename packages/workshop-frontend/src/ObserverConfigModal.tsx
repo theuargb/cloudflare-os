@@ -135,7 +135,7 @@ export default function ObserverConfigModal({
       // Loud on purpose: the modal has no retry path, so a quieted transient failure would
       // strand the user on a permanent loader.
       console.error('Failed to subscribe to connected accounts:', err)
-      toasts.add({ title: 'Failed to load your connected accounts', variant: 'error' })
+      toasts.add({ title: 'Не вдалося завантажити підключені облікові записи', variant: 'error' })
     })
 
     return () => {
@@ -307,7 +307,7 @@ export default function ObserverConfigModal({
       <Dialog className="responsive-dialog !top-[clamp(24px,10vh,80px)] !flex !max-h-[calc(100vh-clamp(24px,10vh,80px)-24px)] !-translate-y-0 flex-col overflow-hidden p-0" size="lg">
         <div className="shrink-0 px-6 pt-6">
           <Dialog.Title className="mb-2 text-lg font-semibold">
-            {isRetry ? 'Verify your access again' : 'Verify your access'}
+            {isRetry ? 'Повторно перевірте доступ' : 'Перевірте доступ'}
           </Dialog.Title>
           <Text variant="secondary" size="sm" as="p">
             {isRetry
@@ -385,7 +385,7 @@ export default function ObserverConfigModal({
                         {matching.length === 1 ? (
                           <div className="flex min-h-10 items-center gap-3 rounded-lg border border-kumo-line bg-kumo-elevated/50 px-3 py-2">
                             <div className="min-w-0 flex-1">
-                              <div className="text-[11px] leading-4 text-kumo-subtle">Using your account</div>
+                              <div className="text-[11px] leading-4 text-kumo-subtle">Використовується ваш обліковий запис</div>
                               <div className="truncate text-sm font-medium text-kumo-default">
                                 {accountLabel(matching[0], matching[0].id)}
                               </div>
@@ -394,7 +394,7 @@ export default function ObserverConfigModal({
                             {accountSatisfies(need, matching[0]) &&
                               matching[0].id !== need.failure?.accountId && (
                               <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-kumo-success">
-                                <CheckCircle size={15} weight="fill" /> Ready
+                                <CheckCircle size={15} weight="fill" /> Готово
                               </span>
                             )}
                           </div>
@@ -466,7 +466,7 @@ export default function ObserverConfigModal({
                               <Warning size={12} />
                             )}
                             {reconnecting === chosen.id
-                              ? 'Re-authenticating…'
+                              ? 'Повторна автентифікація…'
                               : chosen.credentialsValid
                                 ? 'Re-authenticate this account'
                                 : 'This account has expired — click to re-authenticate'}
@@ -495,14 +495,14 @@ export default function ObserverConfigModal({
 
         <div className="flex shrink-0 justify-end gap-2 border-t border-kumo-line px-6 py-4">
           <WorkshopButton tone="secondary" onClick={onCancel}>
-            Cancel
+            Скасувати
           </WorkshopButton>
           <WorkshopButton
             tone="primary"
             onClick={handleConfirm}
             disabled={!ready || !vendorsReady || !allSatisfied}
           >
-            {isRetry ? 'Verify again' : 'Verify and open'}
+            {isRetry ? 'Перевірити знову' : 'Перевірити та відкрити'}
           </WorkshopButton>
         </div>
       </Dialog>

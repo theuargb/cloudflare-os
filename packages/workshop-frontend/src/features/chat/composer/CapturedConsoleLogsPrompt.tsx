@@ -55,7 +55,7 @@ export const CapturedConsoleLogsPrompt = ({
           type="button"
           onClick={onDiscard}
           className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full opacity-60 transition-opacity hover:bg-kumo-tint hover:opacity-100"
-          aria-label="Discard captured logs"
+          aria-label="Відхилити зібрані журнали"
         >
           <X size={10} />
         </button>

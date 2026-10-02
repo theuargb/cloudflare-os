@@ -60,17 +60,17 @@ export function BlueprintBindingCard({
       <div className={headerClass}>
         <GatekeeperIcon vendorId={vendorId} fallbackText={resourceTitle || bindingName} />
         <div className="min-w-0 flex-1">
-          <label htmlFor={titleId} className="sr-only">Connection name</label>
+          <label htmlFor={titleId} className="sr-only">Назва підключення</label>
           <WorkshopInput
             id={titleId}
             aria-label={`Name for ${bindingName}`}
             value={annotation.title}
             onChange={(e) => onChange({ ...annotation, title: e.target.value })}
-            placeholder="Connection name"
+            placeholder="Назва підключення"
             className="!h-8 w-full bg-kumo-base text-[13px] leading-5 font-medium tracking-[-0.25px]"
           />
           <p className="mt-1 text-[11px] leading-4 tracking-[-0.1px] text-kumo-inactive">
-            Referenced in code as: <span className="font-mono text-kumo-subtle">{bindingName}</span>
+            У коді використовується назва: <span className="font-mono text-kumo-subtle">{bindingName}</span>
           </p>
         </div>
       </div>
@@ -81,7 +81,7 @@ export function BlueprintBindingCard({
           aria-label={`Help text for ${displayTitle}`}
           value={annotation.description}
           onChange={(e) => onChange({ ...annotation, description: e.target.value })}
-          placeholder="What should people connect here?"
+          placeholder="Що користувачам потрібно тут підключити?"
           rows={2}
           autoFocus={autoFocusDescription}
           className="w-full resize-none"

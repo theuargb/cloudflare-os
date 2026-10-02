@@ -17,6 +17,7 @@
 // `Adapter` type is the root interface implemented by the service binding.
 
 import type { WorkerEntrypoint, DurableObject, RpcTarget, RpcStub } from "cloudflare:workers";
+import type { AppAction, AppInbox, AppSearchHit } from "./app-host.js";
 
 /**
  * A pagination cursor.
@@ -84,6 +85,28 @@ export type VendorDescription = {
  * each time rather than baked into the account, since a user's admin status can change over time.
  */
 export type AppUiContext = {
+  /**
+   * Canonical authenticated actor id — the username for password accounts, the email for Access
+   * and sign-in accounts — identical to `AgentActionContext.actorId` for the same person.
+   */
+  actorId: string;
+  /** Current display data used to identify the actor in shared management activity. */
+  actor: { displayName: string; avatar?: AvatarImage };
+  /** Whether the actor is currently a deployment administrator. */
+  isAdmin: boolean;
+}
+
+/**
+ * Authenticated initiating actor facts supplied by the Workshop to an agent session. These facts
+ * identify the human whose authority the domain must check; `isAdmin` is freshly computed by the
+ * Workshop and is never a claim made by a gatekeeper or agent.
+ */
+export type AgentActionContext = {
+  /** Stable authenticated Workshop actor identifier. */
+  actorId: string;
+  /** Current display identity for audit and domain service calls. */
+  actor: { displayName: string; avatar?: AvatarImage };
+  /** Whether this actor currently has deployment administrator authority under `ADMINS`. */
   isAdmin: boolean;
 }
 
@@ -178,10 +201,21 @@ export type AccountDescription = {
   singleton?: { tsType: string };
 
   /**
+   * If set, this account feeds the Workshop topbar inbox (bell) through GatekeeperUser.getInbox and
+   * .markInboxRead. The first account declaring it is the deployment's inbox provider.
+   */
+  providesInbox?: boolean;
+
+  /**
    * If set, this account has a full-page management UI (see GatekeeperUser.startAppUi). The Workshop
    * surfaces it as a nav entry / page using this title.
    */
-  providesUi?: { title: string; icon?: AvatarImage };
+  providesUi?: {
+    title: string;
+    icon?: AvatarImage;
+    /** Sidebar section title; apps sharing it render under one collapsible section. */
+    group?: string;
+  };
 }
 
 /** Describes metadata about a specific instance of a resource. Returned by Gatekeeper.describe(). */
@@ -744,6 +778,28 @@ export interface GatekeeperUser extends WorkerEntrypoint {
    */
   startAppUi?(context: AppUiContext): Promise<GatekeeperUiFrame>;
 
+  /**
+   * Search records in the account's management app. The account filters results by the actor's
+   * current access. Accounts without the method contribute no results.
+   */
+  searchApp?(context: AppUiContext, request: { query: string; limit: number }): Promise<AppSearchHit[]>;
+
+  /**
+   * Launcher actions of the account's management UI (the Workshop search / ⌘K). Called on demand,
+   * not declared in describe(), because the stored description is not refreshed on redeploy. The
+   * account filters by the actor's access. Accounts without the method contribute no actions.
+   */
+  listAppActions?(context: AppUiContext): Promise<AppAction[]>;
+
+  /**
+   * The actor's inbox for the topbar bell: the unread total and at most `limit` latest entries.
+   * Called only on accounts whose description sets `providesInbox`.
+   */
+  getInbox?(context: AppUiContext, limit: number): Promise<AppInbox>;
+
+  /** Mark the actor's inbox entries read; an empty `ids` marks all of them. */
+  markInboxRead?(context: AppUiContext, ids: string[]): Promise<void>;
+
   // TODO:
   // - Query whether account has scope to access a particular URL.
 }
@@ -933,7 +989,7 @@ export interface Gatekeeper<Session> extends DurableObject {
    * ignore this parameter (and can even omit the parameter from their `applyAction()`
    * declaration).
    */
-  applyAction(action: number, cache: RpcStub<GitCache>): Promise<void>;
+  applyAction(action: number, cache: RpcStub<GitCache>, context?: AgentActionContext): Promise<void>;
 
   /**
    * Indicates that an action was rejected by the user. The gatekeeper should clean up any
@@ -1061,6 +1117,12 @@ export interface SlashCommandProvider extends RpcTarget {
  * called before applying them.
  */
 export interface ApprovalQueue extends ObservationAuthorizer {
+  /**
+   * Resolves the authenticated actor initiating this agent session, including current workspace
+   * admin status. Returns undefined for non-agent sessions. Agent callers must fail closed when
+   * this is undefined; the result is authority context, not caller-provided input.
+   */
+  getAgentActionContext?(): Promise<AgentActionContext | undefined>;
   // TODO: Method to indicate that the gadget tried to perform an action that the gatekeeper itself
   //   hasn't been authorized to do (e.g. the user hasn't authorized the right OAuth scopes). The
   //   system should direct the user to the right UI to authorize the action.

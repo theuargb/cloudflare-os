@@ -5,7 +5,8 @@ import TopBarNotice from '../../TopBarNotice'
 import ReconnectingChip from '../ReconnectingChip'
 import { useConnectionLost } from '../../RpcContext'
 import Sidebar from './Sidebar'
-import CommandPalette from './CommandPalette'
+import Spotlight, { SpotlightTrigger } from '../Spotlight/Spotlight'
+import InboxBell from '../Inbox/InboxBell'
 import { OPEN_COMMAND_PALETTE_EVENT } from './commandPaletteBus'
 
 const STORAGE_KEY_COLLAPSED = 'gadgets:sidebar-collapsed'
@@ -88,13 +89,21 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     setMobileOpen(false)
   }, [pathname])
 
-  // Global ⌘K / Ctrl+K opens the command palette; the rail's search button opens it via a custom
-  // event so it doesn't have to prop-drill into the palette.
+  // Search (Spotlight): ⌘K / Ctrl+K anywhere, or `/` outside text fields. The topbar field, the rail
+  // buttons and gatekeeper app frames (host.openSearch) open it through the command palette bus.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+      if ((e.metaKey || e.ctrlKey) && e.code === 'KeyK') {
         e.preventDefault()
         setPaletteOpen((o) => !o)
+        return
+      }
+      const target = e.target
+      const typing = target instanceof HTMLElement
+        && (target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')
+      if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && !typing) {
+        e.preventDefault()
+        setPaletteOpen(true)
       }
     }
     const onOpen = () => setPaletteOpen(true)
@@ -125,7 +134,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             ref={drawerRef}
             role="dialog"
             aria-modal="true"
-            aria-label="Primary navigation"
+            aria-label="Основна навігація"
             tabIndex={-1}
             className="fixed inset-y-0 left-0 z-50 outline-none md:hidden"
           >
@@ -141,14 +150,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         aria-hidden={mobileOpen ? true : undefined}
       >
         {/* Top bar. Same height as the sidebar's brand row (h-14) so they read as one continuous
-            chrome strip across the top. Mostly empty — carries the mobile hamburger on the left,
-            any admin TopBarNotice centered, and the reconnecting chip on the right. */}
+            chrome strip across the top. Carries the mobile hamburger on the left, any admin
+            TopBarNotice centered, and the search field, the inbox bell and the reconnecting chip
+            on the right. */}
         <div className="relative flex h-14 shrink-0 items-center justify-between border-b border-kumo-line bg-kumo-base px-3">
           <button
             type="button"
             ref={menuButtonRef}
             onClick={() => setMobileOpen((o) => !o)}
-            aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
+            aria-label={mobileOpen ? 'Закрити меню' : 'Відкрити меню'}
             className="flex h-11 w-11 items-center justify-center rounded-md text-kumo-default transition-colors hover:bg-kumo-tint md:hidden"
           >
             {mobileOpen ? <X size={16} /> : <List size={16} />}
@@ -157,9 +167,10 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           {/* `ml-auto` rather than the container's `justify-between`: on desktop the hamburger is
               hidden, leaving this the only in-flow child, which `justify-between` would park on the
               left. */}
-          <div className="ml-auto flex items-center gap-2">
+          <div className="relative ml-auto flex items-center gap-2">
             {connectionLost && <ReconnectingChip />}
-            <span aria-hidden="true" className="h-11 w-11 md:hidden" />
+            <SpotlightTrigger />
+            <InboxBell />
           </div>
         </div>
 
@@ -167,7 +178,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
       </div>
 
-      <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <Spotlight open={paletteOpen} onClose={() => setPaletteOpen(false)} />
     </div>
   )
 }
