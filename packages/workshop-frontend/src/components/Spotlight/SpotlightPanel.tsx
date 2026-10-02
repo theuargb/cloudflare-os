@@ -2,11 +2,13 @@ import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent }
 import { useNavigate, useRouterState } from '@tanstack/react-router'
 import { ChatCircleDotsIcon, MagnifyingGlassIcon } from '@phosphor-icons/react'
 import type { AppActionKind } from '@gadgets/workshop-shared/app-host'
+import { GatekeeperAppIcon } from '../GatekeeperAppIcon'
 import { isImeComposing } from '../../keyboardEvent'
-import { ActionRow, AssistantRow } from './ActionRow'
+import { ActionRow, AssistantRow, RecordRow } from './ActionRow'
 import { ACTION_KINDS, KIND_ORDER } from './kinds'
 import { rankEntries, type RankedEntry } from './ranking'
 import { getRecents, recordPick } from './recents'
+import { useRecordSearch } from './useRecordSearch'
 import { useSpotlightEntries } from './useSpotlightEntries'
 
 const APP_PATH = /^\/gatekeepers\/([^/]+)\/?$/
@@ -42,9 +44,11 @@ export default function SpotlightPanel({ onDone }: { onDone: () => void }) {
     [entries, query, kind, recents, currentAppId],
   )
   const needle = query.trim()
+  const records = useRecordSearch(query)
+  const recordHits = useMemo(() => records.flatMap((group) => group.hits.map((hit) => ({ appId: group.app.id, hit }))), [records])
   const flat = useMemo(() => sections.flatMap((section) => section.items), [sections])
-  // The assistant row follows the actions whenever there is a query.
-  const total = flat.length + (needle ? 1 : 0)
+  // Records follow the actions, the assistant row follows everything whenever there is a query.
+  const total = flat.length + recordHits.length + (needle ? 1 : 0)
 
   useEffect(() => { setActiveIndex(0) }, [query, kind])
   useEffect(() => {
@@ -62,6 +66,11 @@ export default function SpotlightPanel({ onDone }: { onDone: () => void }) {
     navigate({ to: '/', search: { prompt: needle } })
   }, [onDone, navigate, needle])
 
+  const openRecord = useCallback((appId: string, route: string) => {
+    onDone()
+    navigate({ to: '/gatekeepers/$appId', params: { appId }, search: { at: route } })
+  }, [onDone, navigate])
+
   const onKeyDown = useCallback((event: KeyboardEvent) => {
     if (isImeComposing(event)) return
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -74,12 +83,15 @@ export default function SpotlightPanel({ onDone }: { onDone: () => void }) {
     } else if (event.key === 'Enter') {
       event.preventDefault()
       if (activeIndex < flat.length) pick(flat[activeIndex])
-      else if (needle) askAssistant()
+      else if (activeIndex < flat.length + recordHits.length) {
+        const { appId, hit } = recordHits[activeIndex - flat.length]
+        openRecord(appId, hit.route)
+      } else if (needle) askAssistant()
     } else if (event.key === 'Escape') {
       event.preventDefault()
       onDone()
     }
-  }, [total, kind, activeIndex, flat, needle, pick, askAssistant, onDone])
+  }, [total, kind, activeIndex, flat, recordHits, needle, pick, openRecord, askAssistant, onDone])
 
   let offset = 0
   return (
@@ -143,17 +155,36 @@ export default function SpotlightPanel({ onDone }: { onDone: () => void }) {
             </div>
           )
         })}
-        {flat.length === 0 && (
+        {flat.length === 0 && recordHits.length === 0 && (
           <p className="px-3 py-6 text-center text-[13px] text-kumo-inactive">
-            {needle ? 'No such action found.' : 'Module actions appear here once modules register them.'}
+            {needle ? 'Nothing found.' : 'Module actions appear here once modules register them.'}
           </p>
         )}
+        {records.map((group) => {
+          const start = flat.length + recordHits.findIndex((item) => item.appId === group.app.id)
+          return (
+            <div key={`records:${group.app.id}`} className="mb-2">
+              <p className="px-3 pt-1 pb-1.5 text-[11px] font-medium uppercase tracking-[0.4px] text-kumo-inactive">{group.app.title}</p>
+              {group.hits.map((hit, i) => (
+                <RecordRow
+                  key={hit.id}
+                  hit={hit}
+                  icon={<GatekeeperAppIcon app={group.app} />}
+                  index={start + i}
+                  active={start + i === activeIndex}
+                  onHover={setActiveIndex}
+                  onPick={() => openRecord(group.app.id, hit.route)}
+                />
+              ))}
+            </div>
+          )
+        })}
         {needle && (
           <AssistantRow
             query={needle}
             icon={<ChatCircleDotsIcon size={16} weight="bold" />}
-            index={flat.length}
-            active={activeIndex === flat.length}
+            index={flat.length + recordHits.length}
+            active={activeIndex === flat.length + recordHits.length}
             onHover={setActiveIndex}
             onPick={askAssistant}
           />

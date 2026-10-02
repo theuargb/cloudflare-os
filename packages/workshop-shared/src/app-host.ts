@@ -86,6 +86,46 @@ export function sanitizeAppActions(raw: unknown): AppAction[] {
   return result;
 }
 
+/**
+ * One record-search result from a gatekeeper management app (GatekeeperUser.searchApp). Picking it
+ * opens the app at `route`. Plain data from an untrusted app: the host validates and truncates it.
+ */
+export type AppSearchHit = {
+  /** Unique within the app's search results. */
+  id: string;
+  /** Primary result label. */
+  title: string;
+  /** Optional secondary context, such as organization or number. */
+  subtitle?: string;
+  /** Short record-kind label. */
+  kind?: string;
+  /** App-relative route to open. */
+  route: string;
+};
+
+/** Keep well-formed record-search hits from an untrusted app. */
+export function sanitizeAppSearchHits(raw: unknown): AppSearchHit[] {
+  if (!Array.isArray(raw)) return [];
+  let result: AppSearchHit[] = [];
+  let ids: Record<string, true> = {};
+  for (let item of raw) {
+    if (result.length >= 5) break;
+    if (typeof item !== "object" || item === null) continue;
+    let { id, title, subtitle, kind, route } = item as Record<string, unknown>;
+    if (typeof id !== "string" || ids[id] || typeof title !== "string" || !title.trim()
+        || !isAppRoute(route)) continue;
+    ids[id] = true;
+    result.push({
+      id,
+      title: title.slice(0, MAX_TEXT),
+      subtitle: typeof subtitle === "string" ? subtitle.slice(0, MAX_TEXT) : undefined,
+      kind: typeof kind === "string" ? kind.slice(0, 40) : undefined,
+      route,
+    });
+  }
+  return result;
+}
+
 export type AppInboxSeverity = "info" | "warning" | "error";
 
 /**
