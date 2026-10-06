@@ -1,4 +1,6 @@
 import type { RpcTarget } from "capnweb";
+import type { RpcStub } from "capnweb";
+import type { GatekeeperAppTheme, GatekeeperAppThemeReceiver } from "./theme.js";
 
 /**
  * What a launcher action does; the host colours, filters and ranks by it. `create` opens a new
@@ -51,6 +53,31 @@ export function isAppRoute(route: unknown): route is string {
 /** A gatekeeper app id: the lowercased suffix of its GATEKEEPER_<NAME> binding. */
 export function isAppId(appId: unknown): appId is string {
   return typeof appId === "string" && /^[a-z0-9_]{1,64}$/.test(appId);
+}
+
+/**
+ * The host capability the Workshop hands a sandboxed gatekeeper app's frame over its message port,
+ * as the frame sees it (the frame holds an `RpcStub<GatekeeperAppHost>`). The host methods that
+ * only some apps use (workspace navigation, prompts, presentation) are not part of this contract.
+ */
+export interface GatekeeperAppHost extends RpcTarget {
+  /** Learn the current theme and register a receiver for later changes. */
+  subscribeTheme(receiver: RpcStub<GatekeeperAppThemeReceiver>): GatekeeperAppTheme;
+  /** Register for launcher navigation; returns the route to open (from the Workshop URL). */
+  subscribeRoute(receiver: RpcStub<GatekeeperAppRouteReceiver>): string;
+  /** Report an in-app navigation so the Workshop mirrors it into its URL. Invalid routes throw. */
+  reportRoute(route: string): void;
+  /** Open the Workshop's ⌘K launcher; keystrokes inside the frame never reach the Workshop. */
+  openSearch(): void;
+  /** Open another gatekeeper app at a route. Invalid ids or routes throw. */
+  openApp(appId: string, route: string): void;
+  /**
+   * Read a small UI preference the Workshop keeps for apps (the frame has no storage of its own).
+   * Keys are lowercase kebab-case, at most 40 characters; unset or unreadable yields null.
+   */
+  getAppPreference(key: string): string | null;
+  /** Write a UI preference (see getAppPreference); values are at most 256 characters. */
+  setAppPreference(key: string, value: string): void;
 }
 
 const ACTION_KINDS: Record<AppActionKind, true> = { create: true, list: true, report: true, operation: true, settings: true };

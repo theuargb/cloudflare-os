@@ -1,8 +1,7 @@
 import { RpcStub } from "capnweb";
 import { GadgetMetadataWithTimestamps, AiChatAuthorInfo, AiModelConfig, RedactedAiModelConfig, CollaboratorRole, ConnectedAccountsSubscriber, ConnectedAccountsFilter, GatekeeperVendorFilter, GadgetMetadata, BlueprintMetadata, BlueprintLibrarySummary, BlueprintSource, BlueprintUserSummary, BLUEPRINT_SCREENSHOT_R2_PREFIX, GatekeeperVendorInfo, OutputSummary, ListOutputsResult, AUTH_ERROR_CODES, createAuthError, ConnectFlowStart, validateCommitEmail, NotificationSubscriber, UserNotification } from '@gadgets/workshop-shared/api';
-import type { GatekeeperAppActions, GatekeeperInbox } from '@gadgets/workshop-shared/api';
 import { ActionDescription, Gatekeeper, GatekeeperUser, GatekeeperUserVerifier, GatekeeperVendor, AccountDescription, VendorDescription, GatekeeperConnectCallback, ConnectHandoff, SupportedResource, ResourceConfiguratorFrame, AppUiContext, GatekeeperUiFrame } from "@gadgets/workshop-shared/gatekeeper";
-import { sanitizeAppActions, sanitizeAppInbox, sanitizeAppSearchHits, MAX_INBOX_ITEMS } from "@gadgets/workshop-shared/app-host";
+import * as appHost from "./app-host-fanout.js";
 import { shouldAutoProvisionAccount, ambientGatekeeperMode } from "./provisioning-policy.js";
 import { CloudflareGatekeeperUser } from "@gadgets/workshop-shared/cloudflare-gatekeeper";
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
@@ -50,13 +49,7 @@ export type ProvidedAccountInfo = {
 // usable directly, the way the runtime stub actually behaves.
 type AccountCreatorStub = Required<Pick<GatekeeperVendor, "createAccount">>;
 type ResourceCreatorStub = Required<Pick<GatekeeperVendor, "createResource">>;
-type SingletonAccountStub = Required<Pick<GatekeeperUser, "getSingletonGatekeeperClass" | "startAppUi" | "listAppActions" | "searchApp" | "getInbox" | "markInboxRead">>;
-
-/** Per-app deadline for listAppActions; slow apps must not hold the launcher. */
-const APP_ACTIONS_TIMEOUT_MS = 1500;
-
-/** Per-app deadline for record search; slow apps must not hold Spotlight. */
-const APP_SEARCH_TIMEOUT_MS = 800;
+type SingletonAccountStub = Required<Pick<GatekeeperUser, "getSingletonGatekeeperClass" | "startAppUi">>;
 
 function areCredentialsValid(record: ConnectedAccountRecord): boolean {
   if (record.credentialsExpired) return false;
@@ -1409,74 +1402,32 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
     return (record.account as unknown as SingletonAccountStub).startAppUi(context);
   }
 
-  /**
-   * Launcher actions of every management app (AuthenticatedApi.listAppActions): all providesUi
-   * accounts are asked in parallel, each bounded by APP_ACTIONS_TIMEOUT_MS. A missing method, an
-   * error or a timeout yields no actions for that app. Entries are untrusted: invalid ones are
-   * dropped and the rest are capped.
-   */
-  async listAppActions(context: AppUiContext): Promise<GatekeeperAppActions[]> {
-    let accounts = await this.listProvidedAccounts();
-    return Promise.all(accounts.filter((account) => account.description.providesUi).map(async (account) => {
-      let stub = this.storage.connectedAccounts.get(account.accountId)!.account as unknown as SingletonAccountStub;
-      try {
-        let raw = await Promise.race([
-          stub.listAppActions(context),
-          scheduler.wait(APP_ACTIONS_TIMEOUT_MS).then(() => { throw new Error("timeout"); }),
-        ]);
-        return { appId: account.vendorId, actions: sanitizeAppActions(raw) };
-      } catch (err) {
-        logger.warn("app actions unavailable", { event: "gatekeeper.app.actions.failed", vendorId: account.vendorId, error: err });
-        return { appId: account.vendorId, actions: [] };
-      }
+  // The provided accounts as the app-host fan-out (./app-host-fanout.ts) sees them.
+  async #appHostAccounts(): Promise<appHost.AppHostAccount[]> {
+    return (await this.listProvidedAccounts()).map(({vendorId, accountId, description}) => ({
+      appId: vendorId,
+      description,
+      stub: this.storage.connectedAccounts.get(accountId)!.account as unknown as appHost.AppHostStub,
     }));
   }
 
-  /**
-   * Record search of one management app (AuthenticatedApi.searchApp). The account is selected by
-   * vendor id, constrained to UI providers, and cannot stall Spotlight beyond APP_SEARCH_TIMEOUT_MS.
-   */
+  /** Launcher actions of every management app (AuthenticatedApi.listAppActions). */
+  async listAppActions(context: AppUiContext) {
+    return appHost.listAppActions(await this.#appHostAccounts(), context);
+  }
+
+  /** Record search of one management app (AuthenticatedApi.searchApp). */
   async searchApp(context: AppUiContext, appId: string, query: string) {
-    query = query.trim();
-    if (query.length < 2 || query.length > 100) return [];
-    let account = (await this.listProvidedAccounts()).find(
-        candidate => candidate.vendorId === appId && candidate.description.providesUi);
-    if (!account) return [];
-    let stub = this.storage.connectedAccounts.get(account.accountId)!.account as unknown as SingletonAccountStub;
-    try {
-      let raw = await Promise.race([
-        stub.searchApp(context, { query, limit: 5 }),
-        scheduler.wait(APP_SEARCH_TIMEOUT_MS).then(() => { throw new Error("timeout"); }),
-      ]);
-      return sanitizeAppSearchHits(raw);
-    } catch (err) {
-      logger.warn("app search unavailable", {
-        event: "gatekeeper.app.search.failed", vendorId: account.vendorId, error: err,
-      });
-      return [];
-    }
+    return appHost.searchApp(await this.#appHostAccounts(), context, appId, query);
   }
 
-  /** The account feeding the topbar inbox: the first one whose description sets providesInbox. */
-  async #inboxProvider(): Promise<{ appId: string, stub: SingletonAccountStub } | null> {
-    let accounts = await this.listProvidedAccounts();
-    let provider = accounts.find((account) => account.description.providesInbox);
-    if (!provider) return null;
-    let stub = this.storage.connectedAccounts.get(provider.accountId)!.account as unknown as SingletonAccountStub;
-    return { appId: provider.vendorId, stub };
+  /** Topbar inbox (AuthenticatedApi.getInbox). */
+  async getInbox(context: AppUiContext) {
+    return appHost.getInbox(await this.#appHostAccounts(), context);
   }
 
-  /** Topbar inbox (AuthenticatedApi.getInbox); the provider's entries are untrusted and sanitized. */
-  async getInbox(context: AppUiContext): Promise<GatekeeperInbox | null> {
-    let provider = await this.#inboxProvider();
-    if (!provider) return null;
-    return { ...sanitizeAppInbox(await provider.stub.getInbox(context, MAX_INBOX_ITEMS)), appId: provider.appId };
-  }
-
-  async markInboxRead(context: AppUiContext, ids: string[]): Promise<void> {
-    let provider = await this.#inboxProvider();
-    if (!provider) return;
-    await provider.stub.markInboxRead(context, ids);
+  async markInboxRead(context: AppUiContext, ids: string[]) {
+    await appHost.markInboxRead(await this.#appHostAccounts(), context, ids);
   }
 
   async ensureAccountResources(accountId: number, resourceUrlPatterns: string[])

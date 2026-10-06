@@ -8,6 +8,7 @@ import type {
   GatekeeperAppThemeReceiver,
 } from '@gadgets/workshop-shared/theme'
 import { isAppId, isAppRoute, type GatekeeperAppRouteReceiver } from '@gadgets/workshop-shared/app-host'
+import type { GatekeeperAppHost } from '@gadgets/workshop-shared/app-host'
 import { openCommandPalette } from './components/AppShell/commandPaletteBus'
 import { isHexColor } from '@gadgets/workshop-shared/api'
 import { createRateLimitedCapability } from './rateLimitedCapability'
@@ -20,6 +21,7 @@ import {
   parseGatekeeperAppWorkspaceTarget,
   type GatekeeperAppWorkspaceTarget,
 } from './gatekeeperAppNavigation'
+import { readGatekeeperAppPreference, writeGatekeeperAppPreference } from './gatekeeperAppPreferences'
 
 // The content-pane rect, in viewport coordinates, that the app pins its page to while the iframe
 // is full-viewport.
@@ -87,7 +89,7 @@ function iframeStyleForOverlay(overlay: OverlayState): CSSProperties {
 // The host capability exposed to the sandboxed app (the gatekeeper's iframe UI) over the MessagePort
 // RPC session. The app uses `ui` to reach the gatekeeper's own capability, which Workshop relays and
 // rate-limits. `setPresenting` stays in Workshop and only grows/restores the iframe's layout.
-class GatekeeperAppHostImpl extends RpcTarget {
+class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
   readonly #ui: RpcStub<RpcTarget>
   readonly #disposeRateLimiter: () => void
   readonly #present: PresentController
@@ -154,6 +156,15 @@ class GatekeeperAppHostImpl extends RpcTarget {
 
   openPrompt(prompt: string): void {
     this.#openPrompt(normalizeGatekeeperAppPrompt(prompt))
+  }
+
+  // UI preferences shared across gatekeeper apps, persisted by Workshop (see gatekeeperAppPreferences).
+  getAppPreference(key: string): string | null {
+    return readGatekeeperAppPreference(key)
+  }
+
+  setAppPreference(key: string, value: string): void {
+    writeGatekeeperAppPreference(key, value)
   }
 
   // The app calls this once to learn the current theme and register a receiver for later changes.

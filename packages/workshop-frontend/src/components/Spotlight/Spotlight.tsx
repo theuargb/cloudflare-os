@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { MagnifyingGlassIcon } from '@phosphor-icons/react'
 import SpotlightPanel from './SpotlightPanel'
 import { openCommandPalette } from '../AppShell/commandPaletteBus'
@@ -8,6 +9,28 @@ import { openCommandPalette } from '../AppShell/commandPaletteBus'
 
 /** Full-page modal: full-screen on mobile, a large centred sheet on desktop. */
 export default function Spotlight({ open, onClose }: { open: boolean; onClose: () => void }) {
+  // The shell's own handler covers ⌘K / Ctrl+K on a Latin layout. Here: the same chord on other
+  // layouts (the physical K key reports another character, e.g. Cyrillic), and `/` outside text fields.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.code === 'KeyK' && e.key.toLowerCase() !== 'k') {
+        e.preventDefault()
+        if (open) onClose()
+        else openCommandPalette()
+        return
+      }
+      const target = e.target
+      const typing = target instanceof HTMLElement
+        && (target.isContentEditable || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT')
+      if (e.key === '/' && !e.metaKey && !e.ctrlKey && !e.altKey && !typing) {
+        e.preventDefault()
+        openCommandPalette()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
   if (!open) return null
   return (
     <div

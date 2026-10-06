@@ -610,18 +610,18 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
   }
 
   async searchApp(appId: string, query: string): Promise<AppSearchHit[]> {
-    return this.#user.searchApp(this.#appUiContext(), appId, query);
+    return this.#user.searchApp(await this.#appUiContext(), appId, query);
   }
 
   async getInbox(): Promise<GatekeeperInbox | null> {
-    return this.#user.getInbox(this.#appUiContext());
+    return this.#user.getInbox(await this.#appUiContext());
   }
 
   async markInboxRead(ids: string[]): Promise<void> {
     if (!Array.isArray(ids) || ids.length > 100 || !ids.every((id) => typeof id === "string")) {
       throw new TypeError("Invalid inbox ids.");
     }
-    await this.#user.markInboxRead(this.#appUiContext(), ids);
+    await this.#user.markInboxRead(await this.#appUiContext(), ids);
   }
 
   async getGatekeeperApp(id: string): Promise<GatekeeperUiFrame | null> {
