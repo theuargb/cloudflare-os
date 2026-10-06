@@ -1,6 +1,7 @@
 /**
- * Applies Workshop deployment admin policy to a trusted authenticated username. `admins` uses the
- * same array-or-JSON-string configuration shape as the server's AuthenticatedApi policy.
+ * The Workshop's deployment admin policy: whether a trusted authenticated username is listed in
+ * `ADMINS`. `admins` should be a JSON binding of array type, but `.env` can't express JSON bindings,
+ * so a string that parses as a JSON array is accepted too.
  */
 export function isDeploymentAdmin(admins: string[] | string | undefined,
                                   username: string | undefined): boolean {
