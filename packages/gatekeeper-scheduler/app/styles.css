@@ -4,8 +4,7 @@
 @import "@gadgets/workshop-shared/fonts.css";
 
 @theme {
-  --font-sans: "e-Ukraine", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-heading: "e-Ukraine Head", var(--font-sans);
+  --font-sans: "FT Kunst Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --color-kumo-base: #fcfcfb;
   --color-kumo-elevated: #f8f8f7;
   --color-kumo-tint: #f3f3f1;
@@ -55,12 +54,6 @@ body {
   background: var(--color-kumo-base);
   color: var(--text-color-kumo-default);
   -webkit-font-smoothing: antialiased;
-}
-
-h1,
-h2,
-h3 {
-  font-family: var(--font-heading);
 }
 
 .press {
