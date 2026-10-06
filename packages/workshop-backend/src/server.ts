@@ -15,6 +15,7 @@ import { deploymentOutputForBlueprint, listFormatOffers, readAdminConfig } from 
 // Re-export the optional-feature Durable Objects + entrypoints so they can be bound in wrangler.
 export { PendingLogin, LoginConnectCallbackImpl };
 import { GatekeeperUiFrame } from "@gadgets/workshop-shared/gatekeeper";
+import type { AppUiContext } from "@gadgets/workshop-shared/gatekeeper";
 import { LanguageModelGatekeeper } from "./ai-models";
 import { getGatewayModels } from "./ai-gateway.js";
 import { AdminSettings, AdminApiImpl } from "./admin-settings.js";
@@ -32,6 +33,7 @@ import { resolveUiFeatureFlags } from "./feature-flags";
 import { serveSiteLogo, SITE_LOGO_PATH } from "./site-logo.js";
 import { createWorkshopLogger } from "./observability";
 import { retryOnDoReset, wrapDoStubForTelemetry } from "./do-retry";
+import { isDeploymentAdmin } from "./admin-authorization";
 
 const logger = createWorkshopLogger("workshop.server");
 
@@ -120,22 +122,7 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
   }
 
   #isAdmin(): boolean {
-    let name = this.#userId.name;
-    let admins = this.env.ADMINS;
-
-    if (!name || !admins) return false;
-
-    if (typeof admins === "string") {
-      // Admins should be a JSON binding of array type, but `.env` doesn't actually let you
-      // specify JSON bindings, so we also support a string that parses as JSON array.
-      admins = JSON.parse(admins);
-    }
-
-    if (!Array.isArray(admins)) {
-      throw new TypeError("ADMINS must be configured as an array of usernames.");
-    }
-
-    return admins.includes(name);
+    return isDeploymentAdmin(this.env.ADMINS, this.#userId.name);
   }
 
   whoami(): Promise<AiChatAuthorInfo> {
@@ -623,15 +610,20 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
     let accounts = await user.listProvidedAccounts();
     let app = accounts.find((account: (typeof accounts)[number]) => account.vendorId === id && account.description.providesUi);
     if (!app) return null;
-    // The actor and current authority are supplied fresh on every open. The actor id is the
-    // canonical login identity (username or Access email), the same id agent sessions carry.
+    return user.startAccountAppUi(app.accountId, await this.#appUiContext());
+  }
+
+  // The actor and current authority are supplied fresh on every open. The actor id is the canonical
+  // login identity (username or Access email), the same id agent sessions carry.
+  async #appUiContext(): Promise<AppUiContext> {
     let actorId = this.#userId.name;
     if (!actorId) throw new Error("The authenticated user has no canonical identity.");
-    return user.startAccountAppUi(app.accountId, {
+    let profile = await retryOnDoReset(() => this.#user.whoamiIfExists());
+    return {
       actorId,
-      actor: {displayName: actorId},
+      actor: {displayName: profile?.name || actorId},
       isAdmin: this.#isAdmin(),
-    });
+    };
   }
 
   // --- Deployment admin ---
