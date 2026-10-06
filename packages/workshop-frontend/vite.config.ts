@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite'
 import tsconfigPaths from 'vite-tsconfig-paths'
 import { TanStackRouterVite } from '@tanstack/router-plugin/vite'
 import { vitestTask } from '@gadgets/scripts/vitest-task'
+import { uiLocale } from '@gadgets/ui-locale/vite'
 
 // `dist/` is this package's own build output, excluded from the inputs of the bundle and test
 // tasks: vp declines to cache a task that reads a path it also wrote. Package-relative rather than
@@ -73,6 +74,7 @@ export default defineConfig(({ mode }) => {
     // no such property, but the excess-property check doesn't reach spreads.
     ...runConfig,
     plugins: [
+      ...(env.VITE_UI_LOCALE ? [uiLocale(env.VITE_UI_LOCALE)] : []),
       TanStackRouterVite({ target: 'react', autoCodeSplitting: true }),
       react(),
       tailwindcss(),

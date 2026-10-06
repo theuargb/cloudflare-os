@@ -73,8 +73,14 @@ const EXPECTED: Record<string, ExpectedArea> = {
       "VITE_DEV_PASSWORD",
       "VITE_DEV_USERNAME",
       "VITE_FRONTEND_ERROR_REPORTING",
+      "VITE_UI_LOCALE",
     ],
     injected: ["NODE_ENV"],
+  },
+  // `src/report.ts` is a CLI run by hand (`pnpm --filter @gadgets/ui-locale report`), never a task;
+  // pnpm sets INIT_CWD to the directory the caller typed the command in.
+  "packages/ui-locale": {
+    external: ["INIT_CWD"],
   },
   "packages/workshop-backend": {
     uncached: ["BUNDLED_BLUEPRINTS_DIR"],
