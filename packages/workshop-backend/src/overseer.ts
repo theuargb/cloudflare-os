@@ -4,7 +4,7 @@ import { Overseer, GadgetMetadata, UiBundle, WorkpieceId, WorkpieceSummary, Work
 import { applyCodeChange, changedGadgets, codeChangeSerializedSize, composeCodeChange,
   MAX_CODE_CHANGE_SIZE, transformCodeChange, validateCodeChangeContent, validateCodeChangeSchema,
   requireTextFiles, type FileContent, type CodeContent, type CodeChange } from "@gadgets/workshop-shared/code-change";
-import { type AgentCatalog, type AgentActionContext, Gatekeeper, GatekeeperUserVerifier, HookInitiator, ResourceDescription, ApprovalQueue, ActionDescription, ObservationAuthorizer, ObservationDescription, VendorDescription, SupportedResource, resolveRequestedResource, HookController, HookDescription, ActionKind, GitCache, GitPullHints } from "@gadgets/workshop-shared/gatekeeper";
+import { type AgentCatalog, type ActorContext, Gatekeeper, GatekeeperUserVerifier, HookInitiator, ResourceDescription, ApprovalQueue, ActionDescription, ObservationAuthorizer, ObservationDescription, VendorDescription, SupportedResource, resolveRequestedResource, HookController, HookDescription, ActionKind, GitCache, GitPullHints } from "@gadgets/workshop-shared/gatekeeper";
 import {
   DurableObject, WorkerEntrypoint, RpcStub as NativeRpcStub,
   RpcTarget as NativeRpcTarget, restore,
@@ -5887,12 +5887,12 @@ class OverseerImpl implements AgentHooks {
    * Resolve a live agent's initiating user from Workshop-owned active-turn state, or undefined
    * once the turn has ended.
    */
-  async getAgentActionContext(chatId: number): Promise<AgentActionContext | undefined> {
+  async getAgentActionContext(chatId: number): Promise<ActorContext | undefined> {
     let active = this.storage.activeAgents.get(chatId);
     return active ? this.getActionContextForUser(active.initiatorUserId) : undefined;
   }
 
-  async getActionContextForUser(userIdString: string): Promise<AgentActionContext> {
+  async getActionContextForUser(userIdString: string): Promise<ActorContext> {
     let userId = this.users.idFromString(userIdString);
     let profile = await retryOnDoReset(() => this.users.get(userId).whoamiIfExists(), this.logger);
     if (!profile || profile.type !== "user" || !profile.id) {
@@ -13491,7 +13491,7 @@ class ApprovalQueueImpl extends RpcTarget implements ApprovalQueue {
     return this.impl.authorizeObservation(this.gatekeeperId, description, this.caller);
   }
 
-  async getAgentActionContext(): Promise<AgentActionContext | undefined> {
+  async getAgentActionContext(): Promise<ActorContext | undefined> {
     if (this.hookId !== undefined || this.caller.from !== "agent") return undefined;
     return this.impl.getAgentActionContext(this.caller.chatId);
   }

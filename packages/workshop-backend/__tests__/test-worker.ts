@@ -246,7 +246,7 @@ export class GatekeeperUserPickerTestHooks extends DurableObject<Cloudflare.Env>
     stashedTickets.set(accountName, ticket);
     try {
       const frame = await this.ctx.exports.UserDurableObject.getByName(viewerId)
-        .startAccountAppUi(accountId, { isAdmin: false });
+        .startAccountAppUi(accountId, { actorId: "test-user", actor: { displayName: "test-user" }, isAdmin: false });
       frame.ui[Symbol.dispose]();
     } catch (error) {
       return { error: error instanceof Error ? error.message : String(error) };
