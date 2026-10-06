@@ -102,7 +102,11 @@ const SidebarNavContent = ({
   const toggleGroup = (title: string) => {
     const next = closed.includes(title) ? closed.filter((item) => item !== title) : [...closed, title]
     setClosed(next)
-    localStorage.setItem(CLOSED_GROUPS_KEY, JSON.stringify(next))
+    try {
+      localStorage.setItem(CLOSED_GROUPS_KEY, JSON.stringify(next))
+    } catch {
+      // Storage disabled or full: the collapse state simply does not persist.
+    }
   }
 
   const finishRename = (key: string, defaultLabel: string, label: string) => {
