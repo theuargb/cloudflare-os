@@ -660,16 +660,14 @@ function ConnectorsPage() {
     })
   }, [accounts, vendors, searchLower])
 
-  // Resource vendors may also be ambient. Only list those when the ambient policy says they are
-  // addable, while retaining their resources for search and the connect modal.
+  // Connectable vendors = OAuth/resource gatekeepers plus opt-in ambient ones, rendered identically.
+  // An ambient vendor is recognized by `description.autoProvisionsAccount`, which routes the connect
+  // action to a direct (no-OAuth) add instead.
   const availableVendors = useMemo<VendorEntry[]>(
-    () => {
-      const resourceVendors = new Map(vendors.map((vendor) => [vendor.id, vendor]))
-      return [
-        ...vendors.filter((vendor) => !vendor.description.autoProvisionsAccount),
-        ...addable.map((vendor) => resourceVendors.get(vendor.id) ?? vendor),
-      ]
-    },
+    () => [
+      ...vendors,
+      ...addable,
+    ],
     [vendors, addable],
   )
 
