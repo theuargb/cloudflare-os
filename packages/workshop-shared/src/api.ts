@@ -25,6 +25,7 @@
 
 import { RpcCompatible, RpcStub, RpcTarget } from "capnweb";
 import { AccountDescription, ActionKind, ActionDescription, AgentCatalog, AvatarImage, GatekeeperUiFrame, GatekeeperUserSelection, ObservationDescription, ResourceDescription, ResourceConfiguratorFrame, SupportedResource, VendorDescription, HookDescription } from "./gatekeeper.js";
+import type { VendorGroup } from "./gatekeeper.js";
 import type { CodeChange } from "./code-change.js";
 import type { GitOid } from "./gatekeeper.js";
 import type { AppInbox, AppNavigation, AppSearchHit } from "./app-host.js";
@@ -987,8 +988,10 @@ export type GatekeeperAppInfo = {
   title: string;
   /** Optional icon. */
   icon?: AvatarImage;
-  /** Sidebar section title (AccountDescription.providesUi.group); ungrouped apps list at the top level. */
-  group?: string;
+  /** Sidebar section (VendorDescription.group); ungrouped apps list at the top level. */
+  group?: VendorGroup;
+  /** Default position (VendorDescription.order). */
+  order?: number;
 };
 
 /**
