@@ -36,6 +36,9 @@ export type AvatarImage = {
   url: string;
 }
 
+/** A gatekeeper's sidebar/connector group. `order` is the group's hundred, e.g. 100, 200. */
+export type VendorGroup = { title: string; order: number };
+
 /** Describes a connected GatekeeperVendor, for display purposes. */
 export type VendorDescription = {
   /** Human-readable name of the service, e.g. "Google", "GitHub", etc. */
@@ -78,6 +81,20 @@ export type VendorDescription = {
    * management UI (see AccountDescription.singleton / .providesUi).
    */
   autoProvisionsAccount?: boolean;
+
+  /** Group shared by related gatekeepers: one sidebar section, adjacent connector cards. */
+  group?: VendorGroup;
+
+  /** Default position: `group.order` + index inside the group (e.g. 101, 110). Lower first. */
+  order?: number;
+}
+
+type Ordered = { group?: VendorGroup; order?: number };
+const rank = (value: number | undefined) => value ?? Number.MAX_SAFE_INTEGER;
+
+/** Group order, then item order; undeclared values sort last; equal keys keep input order (stable sort). */
+export function compareGatekeeperOrder(a: Ordered, b: Ordered): number {
+  return rank(a.group?.order) - rank(b.group?.order) || rank(a.order) - rank(b.order);
 }
 
 /**
@@ -203,12 +220,7 @@ export type AccountDescription = {
    * If set, this account has a full-page management UI (see GatekeeperUser.startAppUi). The Workshop
    * surfaces it as a nav entry / page using this title.
    */
-  providesUi?: {
-    title: string;
-    icon?: AvatarImage;
-    /** Sidebar section title; apps sharing it render under one collapsible section. */
-    group?: string;
-  };
+  providesUi?: { title: string; icon?: AvatarImage };
 }
 
 /** Describes metadata about a specific instance of a resource. Returned by Gatekeeper.describe(). */

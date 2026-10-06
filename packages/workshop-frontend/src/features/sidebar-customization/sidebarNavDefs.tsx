@@ -41,7 +41,7 @@ const appItem = (app: GatekeeperAppInfo): SidebarItemDef => ({
   icon: <GatekeeperAppIcon app={app} />,
 })
 
-/** The sidebar as modules declare it: built-ins, ungrouped apps, then one group per `providesUi.group`. */
+/** The sidebar as modules declare it: built-ins, ungrouped apps, then one group per `VendorDescription.group`, in the order `apps` arrives (the backend sorts by group, then item order). */
 export const buildSidebarDefaults = (apps: GatekeeperAppInfo[]): SidebarNavDefaults => {
   const items = new Map<string, SidebarItemDef>()
   const add = (def: SidebarItemDef): string => {
@@ -62,12 +62,12 @@ export const buildSidebarDefaults = (apps: GatekeeperAppInfo[]): SidebarNavDefau
   const groups: { key: string; items: string[] }[] = []
   for (const app of apps) {
     if (!app.group) continue
-    const key = `group:${app.group}`
+    const key = `group:${app.group.title}`
     let group = groups.find((candidate) => candidate.key === key)
     if (!group) {
       group = { key, items: [] }
       groups.push(group)
-      groupTitles.set(key, app.group)
+      groupTitles.set(key, app.group.title)
     }
     group.items.push(add(appItem(app)))
   }
