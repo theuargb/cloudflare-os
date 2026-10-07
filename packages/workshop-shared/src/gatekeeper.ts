@@ -1126,6 +1126,15 @@ export interface ApprovalQueue extends ObservationAuthorizer {
    * this is undefined; the result is authority context, not caller-provided input.
    */
   getAgentActionContext?(): Promise<ActorContext | undefined>;
+  /**
+   * Resolves the authenticated user a gadget's calls through an ambient singleton session act
+   * for: the workspace owner, whose singleton account backs that session. Returns undefined for
+   * every other caller (agents, users, hooks) and for non-ambient gatekeepers. Like
+   * getAgentActionContext, it is authority context, not caller input; reads must still be
+   * authorized as observations, and observer verification keeps what the gadget read from
+   * collaborators who could not read it themselves.
+   */
+  getGadgetActorContext?(): Promise<ActorContext | undefined>;
   // TODO: Method to indicate that the gadget tried to perform an action that the gatekeeper itself
   //   hasn't been authorized to do (e.g. the user hasn't authorized the right OAuth scopes). The
   //   system should direct the user to the right UI to authorize the action.
