@@ -42,6 +42,7 @@ const API_TOKEN_PLACEHOLDERS: Record<AiModelProvider, string> = {
   ollama: '(optional)',
   // Never shown: Auto Router's one model is the deployment's (see AiGatewayInfo.enabledProviders).
   'cloudflare-auto-router': '',
+  semantyka: 'Ключ API Семантики',
 }
 
 // Providers whose client can send no API key at all, so a proxy that extra headers authenticate
@@ -88,6 +89,9 @@ function buildOptions(gatewayMode: boolean, enabledProviders: Set<string> | null
   for (const provider of providerOrder) {
     // Auto Router's one model is the deployment's; it runs only through a gateway.
     if (provider === 'cloudflare-auto-router') continue
+    // Semantyka models run on the deployment's endpoint with its key, so only a gateway
+    // deployment, whose catalog lists them, offers them; a user's own credentials would be ignored.
+    if (provider === 'semantyka' && !gatewayMode) continue
     if (enabledProviders && !enabledProviders.has(provider)) continue
 
     // In gateway mode, suggested models are already built-in, so don't list them.
