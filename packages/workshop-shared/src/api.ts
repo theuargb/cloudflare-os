@@ -1700,8 +1700,12 @@ export type CloudflareAccountOption = {
   accountName: string;
 };
 
-/** Supported AI providers. */
-export type AiModelProvider = "openai" | "anthropic" | "google" | "cloudflare" | "ollama";
+/**
+ * Supported AI providers. A "semantyka" model always runs on Semantyka's endpoint with the
+ * deployment's SEMANTYKA_API_KEY, so a config's apiUrl, apiToken and extraHeaders are ignored for it.
+ */
+export type AiModelProvider =
+    "openai" | "anthropic" | "google" | "cloudflare" | "ollama" | "semantyka";
 
 /** Information about the AI gateway configuration. Returned by `AuthenticatedApi.getAiConfig()`. */
 export type AiGatewayInfo = {
@@ -2071,8 +2075,25 @@ type SuggestedModel = {
   kind?: ModelKind;
 };
 
+// Semantyka's /v1/models states no limits. 262144 is the window of the models behind it, and the
+// response cap lifts agent turns off pi's 4096-token default (the live endpoint accepts
+// max_completion_tokens up to at least 65536).
+const SEMANTYKA_CONTEXT_WINDOW = 262144;
+const SEMANTYKA_OUTPUT_LIMIT = 32768;
+
 // The literal is kept apart from the export so SuggestedModelId can derive the model ids from it.
 const SUGGESTED_MODEL_CATALOG = {
+  "semantyka": {
+    "peak/enei-1": {
+      name: "Еней 1", contextWindow: SEMANTYKA_CONTEXT_WINDOW,
+      outputLimit: SEMANTYKA_OUTPUT_LIMIT,
+    },
+    // Listed for admins to enable in /admin → Models; not offered in pickers until then.
+    "peak/enei-1-flash": {
+      name: "Швидкий Еней", contextWindow: SEMANTYKA_CONTEXT_WINDOW,
+      outputLimit: SEMANTYKA_OUTPUT_LIMIT, hidden: true,
+    },
+  },
   "cloudflare": {
     "@cf/moonshotai/kimi-k2.7-code": {
       name: "Kimi K2.7 Code (Workers AI)", contextWindow: 262144,
