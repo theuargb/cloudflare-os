@@ -6375,6 +6375,16 @@ class OverseerImpl implements AgentHooks {
     return active ? this.getActionContextForUser(active.initiatorUserId) : undefined;
   }
 
+  /**
+   * The workspace owner's actor context for a gadget calling the owner's ambient singleton
+   * `gatekeeperId`; undefined for any other gatekeeper.
+   */
+  async getGadgetActorContext(gatekeeperId: number): Promise<ActorContext | undefined> {
+    let record = this.storage.gatekeepers.get(gatekeeperId);
+    if (record?.creationSpec?.type !== "ambient" || this.ownerId === undefined) return undefined;
+    return this.getActionContextForUser(this.ownerId);
+  }
+
   async getActionContextForUser(userIdString: string): Promise<ActorContext> {
     let userId = this.users.idFromString(userIdString);
     let profile = await retryOnDoReset(() => this.users.get(userId).whoamiIfExists(), this.logger);
@@ -14299,6 +14309,11 @@ class ApprovalQueueImpl extends RpcTarget implements ApprovalQueue {
   async getAgentActionContext(): Promise<ActorContext | undefined> {
     if (this.hookId !== undefined || this.caller.from !== "agent") return undefined;
     return this.impl.getAgentActionContext(this.caller.chatId);
+  }
+
+  async getGadgetActorContext(): Promise<ActorContext | undefined> {
+    if (this.hookId !== undefined || this.caller.from !== "gadget") return undefined;
+    return this.impl.getGadgetActorContext(this.gatekeeperId);
   }
 
   async getGitCache(): Promise<GitCache> {
