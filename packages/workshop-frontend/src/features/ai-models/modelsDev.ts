@@ -16,8 +16,8 @@ export const MODELS_DEV_URL = 'https://models.dev/api.json'
 export type ModelSuggestion = GatewayModel
 
 // Each provider's ID in models.dev, or null where models.dev has no list to suggest from: an Ollama
-// server offers whatever its operator pulled. Total over AiModelProvider, so a provider added there
-// does not compile until it is decided here.
+// server offers whatever its operator pulled, and Semantyka's models are its own. Total over
+// AiModelProvider, so a provider added there does not compile until it is decided here.
 const MODELS_DEV_PROVIDER_IDS: Record<AiModelProvider, string | null> = {
   anthropic: 'anthropic',
   openai: 'openai',
@@ -26,6 +26,7 @@ const MODELS_DEV_PROVIDER_IDS: Record<AiModelProvider, string | null> = {
   ollama: null,
   // No model can be added under it: Auto Router is the gateway's one model of its own.
   'cloudflare-auto-router': null,
+  semantyka: null,
 }
 
 // The longest ID or name the server accepts for an added model.
