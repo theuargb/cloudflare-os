@@ -23,6 +23,9 @@ declare global {
       CF_AI_GATEWAY_USE_BINDING?: string;
       // Note: outside gateway mode, Workers AI (provider "cloudflare") is BYOK like every other
       // provider -- the account ID and API token live in the user's model config, not in env.
+      // Key for Semantyka models (provider "semantyka"), which run on SEMANTYKA_BASE_URL, never
+      // through AI Gateway (see semantyka.ts). A Worker secret.
+      SEMANTYKA_API_KEY?: string;
 
       // Blueprint storage bindings.
       BLUEPRINTS: KVNamespace;             // Workers KV for blueprint metadata lookup
