@@ -26,7 +26,7 @@
 import { RpcCompatible, RpcStub, RpcTarget } from "capnweb";
 import { AccountDescription, ActionKind, ActionDescription, AvatarImage, GatekeeperUiFrame, ObservationDescription, ResourceDescription, ResourceConfiguratorFrame, SupportedResource, VendorDescription, HookDescription } from "./gatekeeper.js";
 import type { CodeChange } from "./code-change.js";
-import type { AppAction, AppInbox, AppSearchHit } from "./app-host.js";
+import type { AppInbox, AppNavigation, AppSearchHit } from "./app-host.js";
 import type { UiFeatureFlags } from "./feature-flags.js";
 
 export const SERVICE_SALT = new Uint8Array([
@@ -874,12 +874,13 @@ export interface AuthenticatedApi extends RpcTarget {
   getGatekeeperApp(id: string): Promise<GatekeeperUiFrame | null>;
 
   /**
-   * Launcher actions of every UI-providing gatekeeper: the Workshop search (⌘K) fans out to each
-   * providesUi account's `listAppActions()` in parallel with a per-app timeout, returning whichever
-   * apps respond. An app that is missing the method, throws, or exceeds the deadline contributes an
-   * empty `actions` array. Each app's actions are validated and truncated.
+   * Launcher actions of every UI-providing gatekeeper: the Workshop topbar menus (by `menu`) and
+   * search (⌘K) fan out to each providesUi account's `getAppNavigation()` in parallel with a
+   * per-app timeout, returning whichever apps respond. An app that is missing the method, throws,
+   * or exceeds the deadline contributes empty `actions`. Each app's actions are validated and
+   * truncated.
    */
-  listAppActions(): Promise<GatekeeperAppActions[]>;
+  listAppNavigation(): Promise<GatekeeperAppNavigation[]>;
 
   /**
    * Search records in one UI-providing gatekeeper. Invalid queries, unavailable apps, and app
@@ -930,12 +931,13 @@ export type GatekeeperAppInfo = {
   icon?: AvatarImage;
 };
 
-/** One management app's launcher actions (⌘K); app title and icon come from GatekeeperAppInfo. */
-export type GatekeeperAppActions = {
+/**
+ * One management app's navigation (topbar menus, ⌘K); app title and icon come from GatekeeperAppInfo.
+ * Empty when the app has none, failed, or did not answer in time.
+ */
+export type GatekeeperAppNavigation = AppNavigation & {
   /** The vendor id (same as GatekeeperAppInfo.id). */
   appId: string;
-  /** Empty when the app has no actions, failed, or did not answer in time. */
-  actions: AppAction[];
 };
 
 /** The topbar inbox (AuthenticatedApi.getInbox) with the provider app it came from. */

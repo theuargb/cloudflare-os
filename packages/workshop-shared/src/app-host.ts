@@ -10,7 +10,7 @@ import type { GatekeeperAppTheme, GatekeeperAppThemeReceiver } from "./theme.js"
 export type AppActionKind = "create" | "list" | "report" | "operation" | "settings";
 
 /**
- * One launcher entry of a gatekeeper management app (GatekeeperUser.listAppActions). Picking it opens
+ * One launcher entry of a gatekeeper management app (GatekeeperUser.getAppNavigation). Picking it opens
  * the app at `route`. Plain data from an untrusted app: the host validates and truncates it.
  */
 export type AppAction = {
@@ -26,7 +26,21 @@ export type AppAction = {
   route: string;
   /** Suggested on the home page and on an empty query: the app's few everyday actions. */
   featured?: boolean;
+  /** Topbar menu the action is listed in: the kind of the section it opens. Absent (an overview dashboard) = Spotlight only. */
+  menu?: AppMenuKind;
+  /** Sub-heading inside the app's block of a menu: the sidebar entry title, else the section label. */
+  group?: string;
 };
+
+/**
+ * Where an action sits in the host's topbar menus: the kind of the section it opens. A module's
+ * `overview` landing dashboard is the sidebar's job, so it has no menu.
+ */
+export type AppSectionKind = "overview" | "documents" | "registers" | "journals" | "reports" | "references" | "classifiers" | "settings";
+export type AppMenuKind = Exclude<AppSectionKind, "overview" | "settings">;
+
+/** What a management app exposes to the host shell: its launcher actions (topbar menus and ⌘K). */
+export type AppNavigation = { actions: AppAction[] };
 
 /**
  * Launcher navigation between the Workshop host and a sandboxed gatekeeper app. The app's frame is
@@ -69,8 +83,13 @@ export interface GatekeeperAppHost extends RpcTarget {
   reportRoute(route: string): void;
   /** Open the Workshop's ⌘K launcher; keystrokes inside the frame never reach the Workshop. */
   openSearch(): void;
-  /** Open another gatekeeper app at a route. Invalid ids or routes throw. */
-  openApp(appId: string, route: string): void;
+  /**
+   * Open another gatekeeper app at a route; `newTab` opens it in a new browser tab (the frame cannot
+   * open windows itself). Invalid ids or routes throw.
+   */
+  openApp(appId: string, route: string, newTab?: boolean): void;
+  /** Reload the Workshop page: the frame cannot reload itself (a second handshake ends its session). Apps call it from a user click. */
+  reloadPage(): void;
   /**
    * Read a small UI preference the Workshop keeps for apps (the frame has no storage of its own).
    * Keys are lowercase kebab-case, at most 40 characters; unset or unreadable yields null.
@@ -81,22 +100,31 @@ export interface GatekeeperAppHost extends RpcTarget {
 }
 
 const ACTION_KINDS: Record<AppActionKind, true> = { create: true, list: true, report: true, operation: true, settings: true };
-const MAX_ACTIONS = 200;
+const MENU_KINDS: Record<AppMenuKind, true> = { documents: true, registers: true, journals: true, reports: true, references: true, classifiers: true };
+const MAX_ACTIONS = 300;
 const MAX_TEXT = 120;
 const MAX_KEYWORDS = 12;
 const MAX_KEYWORD = 40;
+const MAX_GROUP = 60;
 
-/** Keep well-formed actions from an untrusted app: unique ids, known kinds, valid routes, capped text. */
-export function sanitizeAppActions(raw: unknown): AppAction[] {
+/** Keep a well-formed navigation payload from an untrusted app: invalid actions are dropped, the rest capped. */
+export function sanitizeAppNavigation(raw: unknown): AppNavigation {
+  if (typeof raw !== "object" || raw === null) return { actions: [] };
+  return { actions: sanitizeAppActions((raw as Record<string, unknown>).actions) };
+}
+
+/** Keep well-formed actions from an untrusted app: unique ids, known kinds and menus, valid routes, capped text. */
+function sanitizeAppActions(raw: unknown): AppAction[] {
   if (!Array.isArray(raw)) return [];
   let result: AppAction[] = [];
   let ids: Record<string, true> = {};
   for (let item of raw) {
     if (result.length >= MAX_ACTIONS) break;
     if (typeof item !== "object" || item === null) continue;
-    let { id, title, subtitle, keywords, kind, route, featured } = item as Record<string, unknown>;
+    let { id, title, subtitle, keywords, kind, menu, group, route, featured } = item as Record<string, unknown>;
     if (typeof id !== "string" || ids[id] || typeof title !== "string" || !title.trim()) continue;
     if (typeof kind !== "string" || !Object.hasOwn(ACTION_KINDS, kind) || !isAppRoute(route)) continue;
+    if (menu !== undefined && (typeof menu !== "string" || !Object.hasOwn(MENU_KINDS, menu))) continue;
     ids[id] = true;
     result.push({
       id,
@@ -106,6 +134,8 @@ export function sanitizeAppActions(raw: unknown): AppAction[] {
         ? keywords.filter((keyword): keyword is string => typeof keyword === "string").slice(0, MAX_KEYWORDS).map((keyword) => keyword.slice(0, MAX_KEYWORD))
         : undefined,
       kind: kind as AppActionKind,
+      menu: menu as AppMenuKind | undefined,
+      group: typeof group === "string" && group.trim() ? group.slice(0, MAX_GROUP) : undefined,
       route,
       featured: featured === true || undefined,
     });

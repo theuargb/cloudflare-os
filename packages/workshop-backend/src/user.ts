@@ -1411,9 +1411,9 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
     }));
   }
 
-  /** Launcher actions of every management app (AuthenticatedApi.listAppActions). */
-  async listAppActions(context: AppUiContext) {
-    return appHost.listAppActions(await this.#appHostAccounts(), context);
+  /** Navigation (launcher actions) of every management app (AuthenticatedApi.listAppNavigation). */
+  async listAppNavigation(context: AppUiContext) {
+    return appHost.listAppNavigation(await this.#appHostAccounts(), context);
   }
 
   /** Record search of one management app (AuthenticatedApi.searchApp). */

@@ -4,7 +4,7 @@ import type { AppActionKind } from '@gadgets/workshop-shared/app-host'
 type KindStyle = {
   /** The row tag, e.g. "Create". */
   tag: string
-  /** The filter chip, e.g. "Journals". */
+  /** The filter chip, e.g. "Lists". */
   filter: string
   Icon: Icon
   /** Tinted square behind the icon. */
@@ -26,8 +26,8 @@ export const ACTION_KINDS: Record<AppActionKind, KindStyle> = {
     pill: 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300',
   },
   list: {
-    tag: 'Journal',
-    filter: 'Journals',
+    tag: 'List',
+    filter: 'Lists',
     Icon: ListBulletsIcon,
     tile: 'bg-sky-500/12 text-sky-600 dark:text-sky-400',
     dot: 'bg-sky-500',

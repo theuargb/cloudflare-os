@@ -2,30 +2,19 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { useKumoToastManager } from '@cloudflare/kumo'
 import { SquaresFourIcon } from '@phosphor-icons/react'
-import type { GatekeeperAppActions, OutputFormatOffer } from '@gadgets/workshop-shared/api'
+import type { OutputFormatOffer } from '@gadgets/workshop-shared/api'
 import { useAuthenticatedApi } from '../../AuthContext'
 import { useGatekeeperApps } from '../../useGatekeeperApps'
+import { useAppNavigation } from '../AppNavigation/useAppNavigation'
 import { createFromFormat } from '../format/useOutputFormats'
 import { GatekeeperAppIcon } from '../GatekeeperAppIcon'
 import type { SpotlightEntry } from './ranking'
 
-type SpotlightData = { formats: OutputFormatOffer[]; actions: GatekeeperAppActions[] }
-
-// Served instantly on open, refetched when older than the TTL (stale-while-revalidate). App actions
-// are also kept in localStorage so the first ⌘K after a reload already finds them.
+// Output formats are served instantly on open and refetched when older than the TTL
+// (stale-while-revalidate). App actions come from the shared navigation store.
 const CACHE_TTL_MS = 30_000
-const ACTIONS_STORAGE_KEY = 'gadgets:spotlight-actions'
 const CORE_MODULE = 'Workspaces'
-let cache: { data: SpotlightData; fetchedAt: number } | null = null
-
-function readStoredActions(): GatekeeperAppActions[] {
-  try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(ACTIONS_STORAGE_KEY) ?? '[]')
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
+let formatsCache: { data: OutputFormatOffer[]; fetchedAt: number } | null = null
 
 /**
  * Every launcher action — the registered actions of each management app the user can open, then
@@ -36,20 +25,19 @@ export function useSpotlightEntries(): SpotlightEntry[] {
   const navigate = useNavigate()
   const toasts = useKumoToastManager()
   const apps = useGatekeeperApps()
-  const [data, setData] = useState<SpotlightData>(() => cache?.data ?? { formats: [], actions: readStoredActions() })
+  const navigation = useAppNavigation()
+  const [formats, setFormats] = useState<OutputFormatOffer[]>(() => formatsCache?.data ?? [])
 
   useEffect(() => {
-    if (cache) setData(cache.data)
-    if (cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) return
+    if (formatsCache) setFormats(formatsCache.data)
+    if (formatsCache && Date.now() - formatsCache.fetchedAt < CACHE_TTL_MS) return
     let cancelled = false
-    Promise.all([authenticatedApi.listOutputFormats(), authenticatedApi.listAppActions()])
-      .then(([formats, actions]) => {
-        const next: SpotlightData = { formats, actions }
-        cache = { data: next, fetchedAt: Date.now() }
-        try { localStorage.setItem(ACTIONS_STORAGE_KEY, JSON.stringify(actions)) } catch { /* quota */ }
-        if (!cancelled) setData(next)
+    authenticatedApi.listOutputFormats()
+      .then((data) => {
+        formatsCache = { data, fetchedAt: Date.now() }
+        if (!cancelled) setFormats(data)
       })
-      .catch((err) => console.error('Spotlight: failed to load actions', err))
+      .catch((err) => console.error('Spotlight: failed to load output formats', err))
     return () => { cancelled = true }
   }, [authenticatedApi])
 
@@ -62,7 +50,7 @@ export function useSpotlightEntries(): SpotlightEntry[] {
     const appsById = Object.fromEntries(apps.map((app) => [app.id, app]))
     const entries: SpotlightEntry[] = []
     // Actions of apps the user can no longer open (stale localStorage copy) are skipped.
-    for (const { appId, actions } of data.actions) {
+    for (const { appId, actions } of navigation) {
       const app = appsById[appId]
       if (!app) continue
       const moduleIcon = <GatekeeperAppIcon app={app} />
@@ -92,7 +80,7 @@ export function useSpotlightEntries(): SpotlightEntry[] {
       featured: true,
       run: () => navigate({ to: '/' }),
     })
-    for (const format of data.formats) {
+    for (const format of formats) {
       entries.push({
         id: `format:${format.blueprintId}`,
         kind: 'create',
@@ -103,5 +91,5 @@ export function useSpotlightEntries(): SpotlightEntry[] {
       })
     }
     return entries
-  }, [apps, data, navigate, createFormat])
+  }, [apps, navigation, formats, navigate, createFormat])
 }

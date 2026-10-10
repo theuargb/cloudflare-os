@@ -17,7 +17,7 @@ export { PendingLogin, LoginConnectCallbackImpl };
 import { GatekeeperUiFrame } from "@gadgets/workshop-shared/gatekeeper";
 import type { AppUiContext } from "@gadgets/workshop-shared/gatekeeper";
 import type { AppSearchHit } from "@gadgets/workshop-shared/app-host";
-import type { GatekeeperAppActions, GatekeeperInbox } from "@gadgets/workshop-shared/api";
+import type { GatekeeperAppNavigation, GatekeeperInbox } from "@gadgets/workshop-shared/api";
 import { LanguageModelGatekeeper } from "./ai-models";
 import { getGatewayModels } from "./ai-gateway.js";
 import { AdminSettings, AdminApiImpl } from "./admin-settings.js";
@@ -605,8 +605,8 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
         }));
   }
 
-  async listAppActions(): Promise<GatekeeperAppActions[]> {
-    return this.#user.listAppActions(await this.#appUiContext());
+  async listAppNavigation(): Promise<GatekeeperAppNavigation[]> {
+    return this.#user.listAppNavigation(await this.#appUiContext());
   }
 
   async searchApp(appId: string, query: string): Promise<AppSearchHit[]> {

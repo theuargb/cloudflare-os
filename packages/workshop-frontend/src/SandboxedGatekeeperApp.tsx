@@ -1,7 +1,7 @@
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { RpcStub, RpcTarget, newMessagePortRpcSession } from 'capnweb'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useRouter } from '@tanstack/react-router'
 import type { GatekeeperUiFrame } from '@gadgets/workshop-shared/gatekeeper'
 import type {
   GatekeeperAppTheme,
@@ -40,11 +40,11 @@ type OpenTarget = (target: GatekeeperAppWorkspaceTarget) => void
 type ResolveWorkspaceTitles = (ids: string[]) => Promise<(string | null)[]>
 type OpenPrompt = (prompt: string) => void
 // The app's route as mirrored in the Workshop URL ('' = the app's start screen), and navigation to
-// another app's route (an inbox card, a cross-module link).
+// another app's route (an inbox card, a cross-module link), here or in a new browser tab.
 type AppRouting = {
   current: () => string,
   report: (route: string) => void,
-  openApp: (appId: string, route: string) => void,
+  openApp: (appId: string, route: string, newTab: boolean) => void,
 }
 
 type OverlayState = 'full' | null
@@ -235,10 +235,17 @@ class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
     openCommandPalette()
   }
 
-  // Open another gatekeeper app at a route. Both parts are validated: the app is untrusted.
-  openApp(appId: string, route: string): void {
-    if (!isAppId(appId) || !isAppRoute(route)) throw new TypeError('Invalid app link.')
-    this.#routing.openApp(appId, route)
+  // Open another gatekeeper app at a route, optionally in a new browser tab (the sandboxed frame
+  // cannot open windows). All parts are validated: the app is untrusted.
+  openApp(appId: string, route: string, newTab?: unknown): void {
+    if (!isAppId(appId) || !isAppRoute(route) || (newTab !== undefined && typeof newTab !== 'boolean')) throw new TypeError('Invalid app link.')
+    this.#routing.openApp(appId, route, newTab === true)
+  }
+
+  // A module whose definitions changed under the open page asks for a fresh Workshop load; the frame
+  // cannot reload itself (a second handshake invalidates the session).
+  reloadPage(): void {
+    window.location.reload()
   }
 
   // Queue a presentation change; the latest requested state is applied on the next frame.
@@ -299,6 +306,7 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, rout
   onRouteChange?: (route: string) => void,
 }) {
   const navigate = useNavigate()
+  const router = useRouter()
   const { authenticatedApi } = useAuthenticatedApi()
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const sessionRef = useRef<{ [Symbol.dispose]?(): void } | null>(null)
@@ -414,7 +422,11 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, rout
         {
           current: () => routeRef.current,
           report: (next) => onRouteChangeRef.current?.(next),
-          openApp: (appId, at) => navigate({ to: '/gatekeepers/$appId', params: { appId }, search: at ? { at } : {} }),
+          openApp: (appId, at, newTab) => {
+            const target = { to: '/gatekeepers/$appId', params: { appId }, search: at ? { at } : {} } as const
+            if (newTab) window.open(router.buildLocation(target).href, '_blank', 'noopener')
+            else void navigate(target)
+          },
         },
       )
       hostRef.current = host
@@ -448,16 +460,18 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, rout
     }
     // Re-establish the session if either the HTML or the `ui` capability changes, so a new frame
     // carrying a fresh stub (even with identical HTML) never keeps talking through the stale one.
-  }, [frame.iframeHtml, frame.ui, gatekeeperVendorId, navigate, openPrompt, openTarget,
+  }, [frame.iframeHtml, frame.ui, gatekeeperVendorId, navigate, router, openPrompt, openTarget,
       present, resolveWorkspaceTitles, setOverlayPhase])
 
   return (
     <iframe
       ref={iframeRef}
       srcDoc={frame.iframeHtml}
-      // allow-scripts: run the app's JS. allow-modals: its beforeunload unsaved-changes guard. Not
+      // allow-scripts: run the app's JS. allow-modals: its beforeunload unsaved-changes guard.
+      // allow-downloads: save files the app already holds (exports, print forms) — browsers block every
+      // download from a sandboxed frame without it, even from a user-clicked <a download>. Not
       // allow-same-origin (the frame stays an opaque origin), and the app's CSP keeps connect-src 'none'.
-      sandbox="allow-scripts allow-modals"
+      sandbox="allow-scripts allow-modals allow-downloads"
       allow="clipboard-write"
       title="Gatekeeper app"
       style={iframeStyleForOverlay(overlay)}

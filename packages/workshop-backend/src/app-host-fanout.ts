@@ -1,18 +1,18 @@
-// Fan-out of the app-host surface (launcher actions, record search, topbar inbox) across a user's
+// Fan-out of the app-host surface (navigation, record search, topbar inbox) across a user's
 // management-app accounts. Every gatekeeper answer is untrusted and bounded: each call runs under
 // a deadline, a failing or slow app is isolated from the others, and entries are sanitized.
 
-import type { GatekeeperAppActions, GatekeeperInbox } from "@gadgets/workshop-shared/api";
+import type { GatekeeperAppNavigation, GatekeeperInbox } from "@gadgets/workshop-shared/api";
 import type { AccountDescription, AppUiContext, GatekeeperUser } from "@gadgets/workshop-shared/gatekeeper";
 import {
-  sanitizeAppActions, sanitizeAppInbox, sanitizeAppSearchHits, MAX_INBOX_ITEMS,
+  sanitizeAppNavigation, sanitizeAppInbox, sanitizeAppSearchHits, MAX_INBOX_ITEMS,
 } from "@gadgets/workshop-shared/app-host";
 import { createWorkshopLogger } from "./observability";
 
 const logger = createWorkshopLogger("workshop.app-host");
 
-/** Per-app deadline for listAppActions; slow apps must not hold the launcher. */
-const APP_ACTIONS_TIMEOUT_MS = 1500;
+/** Per-app deadline for navigation; slow apps must not hold the launcher. */
+const APP_NAVIGATION_TIMEOUT_MS = 1500;
 
 /** Per-app deadline for record search; slow apps must not hold Spotlight. */
 const APP_SEARCH_TIMEOUT_MS = 800;
@@ -26,7 +26,7 @@ const APP_INBOX_TIMEOUT_MS = 1500;
  * `providesInbox`), which is why they can be viewed as required.
  */
 export type AppHostStub =
-    Required<Pick<GatekeeperUser, "listAppActions" | "searchApp" | "getInbox" | "markInboxRead">>;
+    Required<Pick<GatekeeperUser, "getAppNavigation" | "searchApp" | "getInbox" | "markInboxRead">>;
 
 /** One provided account as the fan-out sees it. `appId` is the vendor id, which names the app. */
 export type AppHostAccount = { appId: string, description: AccountDescription, stub: AppHostStub };
@@ -39,20 +39,20 @@ function withDeadline<T>(call: Promise<T>, ms: number): Promise<T> {
 }
 
 /**
- * Launcher actions of every management app (AuthenticatedApi.listAppActions): all providesUi
- * accounts are asked in parallel, each bounded by APP_ACTIONS_TIMEOUT_MS. A missing method, an
- * error or a timeout yields no actions for that app. Entries are untrusted: invalid ones are
- * dropped and the rest are capped.
+ * Navigation (launcher actions) of every management app (AuthenticatedApi.listAppNavigation):
+ * all providesUi accounts are asked in parallel, each bounded by APP_NAVIGATION_TIMEOUT_MS. A
+ * missing method, an error or a timeout yields no actions for that app. Actions are untrusted:
+ * invalid ones are dropped and the rest are capped.
  */
-export async function listAppActions(accounts: AppHostAccount[], context: AppUiContext)
-    : Promise<GatekeeperAppActions[]> {
+export async function listAppNavigation(accounts: AppHostAccount[], context: AppUiContext)
+    : Promise<GatekeeperAppNavigation[]> {
   return Promise.all(accounts.filter(account => account.description.providesUi).map(async account => {
     try {
-      let raw = await withDeadline(account.stub.listAppActions(context), APP_ACTIONS_TIMEOUT_MS);
-      return { appId: account.appId, actions: sanitizeAppActions(raw) };
+      let raw = await withDeadline(account.stub.getAppNavigation(context), APP_NAVIGATION_TIMEOUT_MS);
+      return { appId: account.appId, ...sanitizeAppNavigation(raw) };
     } catch (err) {
-      logger.warn("app actions unavailable", {
-        event: "gatekeeper.app.actions.failed", vendorId: account.appId, error: err,
+      logger.warn("app navigation unavailable", {
+        event: "gatekeeper.app.navigation.failed", vendorId: account.appId, error: err,
       });
       return { appId: account.appId, actions: [] };
     }
