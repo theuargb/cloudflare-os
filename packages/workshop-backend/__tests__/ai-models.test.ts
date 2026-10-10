@@ -691,6 +691,86 @@ describe("getModel direct routing (no gateway)", () => {
   });
 });
 
+describe("getModel Semantyka routing", () => {
+  beforeEach(() => {
+    capturedRequests.length = 0;
+  });
+
+  const SEMANTYKA = { SEMANTYKA_API_KEY: "semantyka-key" };
+  const SEMANTYKA_CONFIG: AiModelConfig = {
+    provider: "semantyka",
+    model: "peak/enei-1",
+    apiToken: "ignored",
+    apiUrl: "https://elsewhere.example",
+  };
+  const SEMANTYKA_URL = "https://6f4cf922.neutrome.dev/v1/chat/completions";
+
+  const expectSemantykaRequest = async (handle: ModelHandle) => {
+    expect(handle.model.api).toBe("openai-completions");
+    // The config's own apiUrl is ignored: the endpoint is the deployment's.
+    expect(handle.model.baseUrl).toBe("https://6f4cf922.neutrome.dev/v1");
+    expect(handle.aiGatewayLogRoute).toBeUndefined();
+    const request = await captureRequest(handle);
+    expect(request.url).toBe(SEMANTYKA_URL);
+    expect(request.headers.get("authorization")).toBe("Bearer semantyka-key");
+    expect(request.headers.get("cf-aig-authorization")).toBeNull();
+    expect(request.headers.get("cf-aig-metadata")).toBeNull();
+  };
+
+  it("calls Semantyka directly, not through the platform gateway", async () => {
+    const handle = getModel(
+        env({ ...SEMANTYKA, CF_AI_GATEWAY_PROVIDERS: "anthropic,semantyka" }),
+        SEMANTYKA_CONFIG, INITIATOR);
+    await expectSemantykaRequest(handle);
+  });
+
+  it("keeps calling Semantyka directly for a user billed through their own gateway", async () => {
+    const handle = getModel(
+        env({ ...SEMANTYKA, CF_AI_GATEWAY_PROVIDERS: "anthropic,semantyka" }),
+        SEMANTYKA_CONFIG, INITIATOR,
+        { userGateway: { accountId: "user-account", apiKey: "user-token" } });
+    await expectSemantykaRequest(handle);
+  });
+
+  it("calls Semantyka the same way on a deployment with no gateway", async () => {
+    const handle = getModel(
+        env({ ...SEMANTYKA, CF_AI_GATEWAY: undefined }), SEMANTYKA_CONFIG, INITIATOR);
+    await expectSemantykaRequest(handle);
+  });
+
+  it("sends the system prompt and token cap the endpoint takes", async () => {
+    const handle = getModel(
+        env({ ...SEMANTYKA, CF_AI_GATEWAY: undefined }), SEMANTYKA_CONFIG, INITIATOR);
+    const stream = handle.stream(handle.model, {
+      systemPrompt: "Be brief.",
+      messages: [{ role: "user", content: "hello", timestamp: 0 }],
+    }, { fetch: fetchStub, maxRetries: 0, maxTokens: 100 });
+    await stream.result();
+
+    const body = JSON.parse(capturedRequests[0].body);
+    expect(body.messages[0]).toMatchObject({ role: "system", content: "Be brief." });
+    expect(body.max_completion_tokens).toBe(100);
+    expect(body).not.toHaveProperty("max_tokens");
+    expect(body).not.toHaveProperty("store");
+    expect(body).not.toHaveProperty("reasoning_effort");
+    expect(body.stream_options).toEqual({ include_usage: true });
+  });
+
+  it.each([undefined, "  "])("refuses to run without a key (%j)", (key) => {
+    expect(() => getModel(
+        env({ CF_AI_GATEWAY: undefined, SEMANTYKA_API_KEY: key }), SEMANTYKA_CONFIG, INITIATOR))
+        .toThrow("Semantyka is not configured on this deployment: it needs SEMANTYKA_API_KEY.");
+  });
+
+  it("takes image input unless the model's capabilities rule it out", () => {
+    const noGateway = env({ ...SEMANTYKA, CF_AI_GATEWAY: undefined });
+    expect(getModel(noGateway, SEMANTYKA_CONFIG, INITIATOR).model.input)
+        .toEqual(["text", "image"]);
+    expect(getModel(noGateway, { ...SEMANTYKA_CONFIG, capabilities: { imageInput: false } },
+        INITIATOR).model.input).toEqual(["text"]);
+  });
+});
+
 // The parts of a request body that ask for reasoning, and what they are for each answer of
 // gatewayBuiltInReasoning(). The effort pi gives a Claude whose effort it manages is pi's own.
 const reasoningAsked = (body: Record<string, unknown>) => ({
@@ -1006,6 +1086,9 @@ describe("gateway model reasoning levels", () => {
     ["cloudflare", "@cf/zai-org/glm-5.2", null],
     ["cloudflare", "@cf/zai-org/glm-5.3-flash", null],
     ["cloudflare", "@cf/deepseek-ai/deepseek-v4-pro-0813", null],
+    // No Semantyka model reasons: the endpoint takes no effort.
+    ...Object.keys(SUGGESTED_MODELS.semantyka).map(
+        (model): [AiModelConfig["provider"], string, BuiltInReasoning] => ["semantyka", model, null]),
   ];
   it.each(BUILT_IN)("says what %s model %s is asked for while no level is set",
       (provider, model, builtIn) => {

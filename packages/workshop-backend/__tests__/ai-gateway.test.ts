@@ -163,6 +163,7 @@ describe("GatewayModels", () => {
     CF_AI_GATEWAY_ACCOUNT_ID: "account-id",
     CF_AI_GATEWAY_API_TOKEN: "gateway-token",
     CF_AI_GATEWAY_PROVIDERS: providers,
+    ...(providers.split(",").includes("semantyka") && { SEMANTYKA_API_KEY: "semantyka-key" }),
   });
   type Config = Pick<AdminConfig, "modelModes" | "addedProviders" | "addedModels" |
       "userModelsEnabled" | "modelSettings" | "defaultReasoning">;
@@ -687,6 +688,62 @@ describe("GatewayModels", () => {
           expect(request, provider).not.toThrow();
         }
       }
+    });
+
+    describe("Semantyka", () => {
+      const SEMANTYKA_ENV = { SEMANTYKA_API_KEY: "semantyka-key" };
+      const SEMANTYKA_IDS = ["peak/enei-1", "peak/enei-developer"];
+
+      it("refuses an environment that lists it without a key", () => {
+        expect(() => new AiGatewayConfig(env({
+          CF_AI_GATEWAY_ACCOUNT_ID: "account-id", CF_AI_GATEWAY_API_TOKEN: "gateway-token",
+          CF_AI_GATEWAY_PROVIDERS: "anthropic,semantyka", SEMANTYKA_API_KEY: undefined,
+        }))).toThrow("CF_AI_GATEWAY_PROVIDERS lists semantyka, which needs SEMANTYKA_API_KEY.");
+      });
+
+      it("is neither shown nor enabled on a deployment with no key, even if an admin added it", () => {
+        const deployment = env({
+          CF_AI_GATEWAY_ACCOUNT_ID: "account-id", CF_AI_GATEWAY_API_TOKEN: "gateway-token",
+          CF_AI_GATEWAY_PROVIDERS: "anthropic",
+        });
+        const models = new GatewayModels(new AiGatewayConfig(deployment),
+            { ...NO_CONFIG, addedProviders: ["semantyka"] });
+        expect([...models.providers]).toEqual(["anthropic"]);
+        expect(models.providerSettings.map(({ provider }) => provider)).toEqual(CATALOG_ORDER);
+        expect(models.get("peak/enei-1")).toBeUndefined();
+        expect(() => models.assertAddable({
+          provider: "semantyka", id: "semantyka/extra", name: "Extra", contextWindow: 1000,
+        })).toThrow('Provider "semantyka" is not enabled on this deployment.');
+      });
+
+      it("offers the two Enei models and keeps the Flash one hidden", () => {
+        const models = gatewayModels({}, "semantyka");
+        expect(ids(models.list())).toEqual(SEMANTYKA_IDS);
+        expect(models.get("peak/enei-1-flash")).toMatchObject(
+            { mode: "hidden", defaultMode: "hidden" });
+        expect(models.resolve("peak/enei-1-flash")?.config).toMatchObject(
+            { provider: "semantyka", model: "peak/enei-1-flash" });
+        expect(models.resolve("peak/enei-1")?.config.provider).toBe("semantyka");
+      });
+
+      it("is enabled by an admin on a deployment that has a key, and listed first", () => {
+        const models = new GatewayModels(
+            new AiGatewayConfig(gatewayEnv("anthropic,semantyka")),
+            { ...NO_CONFIG, addedProviders: ["semantyka"] });
+        expect(models.providerSettings[0]).toStrictEqual(
+            { provider: "semantyka", enabledBy: "environment", needsApiToken: false });
+
+        const admin = new GatewayModels(
+            new AiGatewayConfig(env({
+              ...SEMANTYKA_ENV, CF_AI_GATEWAY_ACCOUNT_ID: "account-id",
+              CF_AI_GATEWAY_API_TOKEN: "gateway-token", CF_AI_GATEWAY_PROVIDERS: "anthropic",
+            })),
+            { ...NO_CONFIG, addedProviders: ["semantyka"] });
+        expect(admin.providerSettings[0]).toStrictEqual(
+            { provider: "semantyka", enabledBy: "admin", needsApiToken: false });
+        expect(ids(admin.list())).toEqual(
+            expect.arrayContaining([...SEMANTYKA_IDS, "claude-opus-5-5"]));
+      });
     });
   });
 

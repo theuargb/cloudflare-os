@@ -32,6 +32,7 @@ import {
 import { completeText } from "./ai-invoke.js";
 import { bridgePdfAttachments } from "./chat-attachment-pdf.js";
 import { hasGpt56PromptCaching, splitSystemPrompt } from "./system-prompt-blocks.js";
+import { semantykaEndpoint } from "./semantyka.js";
 
  /**
   * Routing to bill a user's own Cloudflare account for inference (BYOK path once the free tier is
@@ -239,6 +240,20 @@ function workersAiCompat(catalog: CatalogEntry | undefined): OpenAICompletionsCo
     supportsReasoningEffort: true,
   };
 }
+
+// Compat flags for Semantyka's chat-completions endpoint, set rather than left to pi's URL
+// detection, which knows nothing of the host. Checked against the live endpoint: it takes
+// max_completion_tokens and streams usage. `store` and reasoning effort are not sent, and the
+// system prompt rides the `system` role, which every model behind it reads (some open models
+// silently drop `developer`; see the Ollama case in getModelDirect).
+const SEMANTYKA_COMPAT: OpenAICompletionsCompat = {
+  supportsStore: false,
+  supportsDeveloperRole: false,
+  supportsReasoningEffort: false,
+  supportsUsageInStreaming: true,
+  maxTokensField: "max_completion_tokens",
+  supportsLongCacheRetention: false,
+};
 
 // Build the pi model descriptor for reaching a provider's own native API through an AI Gateway
 // (the platform's or a user's). `gatewayUrl` is a gateway root -- over HTTPS
@@ -564,6 +579,12 @@ function withoutPromptCacheKey(model: Model<Api>, payload: unknown): object | un
 export function getModel(env: Cloudflare.Env, config: AiModelConfig,
                          initiator: AiChatAuthorInfo,
                          options: ModelRoutingOptions = {}): ModelHandle {
+  // Semantyka is served by its own endpoint, never through an AI Gateway, so not through a
+  // user's either.
+  if (config.provider === "semantyka") {
+    return getModelViaSemantyka(env, config, options.sessionAffinity);
+  }
+
   // BYOK: a connected user's own Cloudflare account pays for everything (all providers, including
   // Workers AI), routed through the user's own AI Gateway with unified billing. Honored regardless
   // of whether a platform AI Gateway is configured, so connected users are always billed correctly.
@@ -581,6 +602,37 @@ export function getModel(env: Cloudflare.Env, config: AiModelConfig,
   }
 
   return getModelDirect(config, options.sessionAffinity);
+}
+
+// Semantyka models run on the deployment's own Semantyka endpoint with its key, whichever route
+// the other providers take: AI Gateway does not serve the provider, and the deployment pays for
+// these requests even for a user billed through their own gateway. No gateway sees them, so their
+// cost is the catalog estimate (zero) and they carry no AI Gateway log route.
+function getModelViaSemantyka(env: Cloudflare.Env, config: AiModelConfig,
+                              sessionAffinity?: string): ModelHandle {
+  const endpoint = semantykaEndpoint(env);
+  if (!endpoint) {
+    throw new Error("Semantyka is not configured on this deployment: it needs SEMANTYKA_API_KEY.");
+  }
+  return makeHandle({
+    model: {
+      id: config.model,
+      name: config.model,
+      api: "openai-completions",
+      provider: "semantyka",
+      baseUrl: endpoint.baseUrl,
+      // The endpoint takes no reasoning effort, so no level is offered and a set one asks for
+      // nothing. Streamed reasoning_content still arrives as thinking.
+      reasoning: false,
+      // Every Semantyka model takes images, unless an added model's capabilities say it does not.
+      input: config.capabilities?.imageInput === false ? ["text"] : ["text", "image"],
+      cost: ZERO_COST,
+      ...modelTokenWindow(config, undefined),
+      compat: SEMANTYKA_COMPAT,
+    },
+    apiKey: endpoint.apiKey,
+    sessionAffinity,
+  });
 }
 
 // Route inference through the user's own account (unified billing) via their account's default AI
@@ -859,6 +911,9 @@ function getModelDirect(config: AiModelConfig, sessionAffinity?: string): ModelH
         ...directAuth(config, "Authorization"),
         sessionAffinity,
       });
+    case "semantyka":
+      // getModel() sends these to the deployment's endpoint before it picks a route.
+      throw new Error('Provider "semantyka" has no direct route.');
     default:
       config.provider satisfies never;
       throw new Error(`Unknown provider "${config.provider}".`);
