@@ -35,6 +35,20 @@ export const SERVICE_SALT = new Uint8Array([
 ]);
 
 /**
+ * Canonical form of a username: the key of the user's account and the salt input for password
+ * hashing. Throws if the username isn't alphanumeric/underscore starting with a letter.
+ */
+export function normalizeUsername(username: string): string {
+  username = username.toLowerCase();
+
+  if (!username.match(/^[a-z][a-z0-9_]*$/)) {
+    throw new Error("Invalid username. Must be alphanumeric starting with a letter.")
+  }
+
+  return username;
+}
+
+/**
  * How a connect, reconnect, ensure-resources or sign-in flow starts, as returned by
  * `AuthenticatedApi.connectAccount()` and its siblings. `url` is the gatekeeper's flow URL, which
  * the Workshop opens as a disowned popup. `nonce` is a 64-lowercase-hex secret minted for this
@@ -123,7 +137,7 @@ export interface PublicApi extends RpcTarget {
    *
    *     argon2id({
    *       password,
-   *       salt: SERVICE_SALT + encode(username, 'utf8'),
+   *       salt: SERVICE_SALT + encode(normalizeUsername(username), 'utf8'),
    *       parallelism: 1,
    *       iterations: 3,
    *       memorySize: 64MiB,
