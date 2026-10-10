@@ -16,6 +16,8 @@ import { deploymentOutputForBlueprint, listFormatOffers, readAdminConfig } from 
 export { PendingLogin, LoginConnectCallbackImpl };
 import { GatekeeperUiFrame } from "@gadgets/workshop-shared/gatekeeper";
 import type { AppUiContext } from "@gadgets/workshop-shared/gatekeeper";
+import type { AppSearchHit } from "@gadgets/workshop-shared/app-host";
+import type { GatekeeperAppNavigation, GatekeeperInbox } from "@gadgets/workshop-shared/api";
 import { LanguageModelGatekeeper } from "./ai-models";
 import { getGatewayModels } from "./ai-gateway.js";
 import { AdminSettings, AdminApiImpl } from "./admin-settings.js";
@@ -601,6 +603,25 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
           title: account.description.providesUi!.title,
           icon: account.description.providesUi!.icon,
         }));
+  }
+
+  async listAppNavigation(): Promise<GatekeeperAppNavigation[]> {
+    return this.#user.listAppNavigation(await this.#appUiContext());
+  }
+
+  async searchApp(appId: string, query: string): Promise<AppSearchHit[]> {
+    return this.#user.searchApp(await this.#appUiContext(), appId, query);
+  }
+
+  async getInbox(): Promise<GatekeeperInbox | null> {
+    return this.#user.getInbox(await this.#appUiContext());
+  }
+
+  async markInboxRead(ids: string[]): Promise<void> {
+    if (!Array.isArray(ids) || ids.length > 100 || !ids.every((id) => typeof id === "string")) {
+      throw new TypeError("Invalid inbox ids.");
+    }
+    await this.#user.markInboxRead(await this.#appUiContext(), ids);
   }
 
   async getGatekeeperApp(id: string): Promise<GatekeeperUiFrame | null> {

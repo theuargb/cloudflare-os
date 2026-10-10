@@ -2,10 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouterState } from '@tanstack/react-router'
 import { List, X } from '@phosphor-icons/react'
 import TopBarNotice from '../../TopBarNotice'
+import TopNav from '../AppNavigation/TopNav'
 import ReconnectingChip from '../ReconnectingChip'
 import { useConnectionLost } from '../../RpcContext'
 import Sidebar from './Sidebar'
-import CommandPalette from './CommandPalette'
+import CommandPalette from '../Spotlight/Spotlight'
+import ShellTopbarActions from './ShellTopbarActions'
 import { OPEN_COMMAND_PALETTE_EVENT } from './commandPaletteBus'
 
 const STORAGE_KEY_COLLAPSED = 'gadgets:sidebar-collapsed'
@@ -153,13 +155,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           >
             {mobileOpen ? <X size={16} /> : <List size={16} />}
           </button>
-          <TopBarNotice />
+          <TopNav />
+          <TopBarNotice inline />
           {/* `ml-auto` rather than the container's `justify-between`: on desktop the hamburger is
               hidden, leaving this the only in-flow child, which `justify-between` would park on the
               left. */}
           <div className="ml-auto flex items-center gap-2">
             {connectionLost && <ReconnectingChip />}
-            <span aria-hidden="true" className="h-11 w-11 md:hidden" />
+            <ShellTopbarActions />
           </div>
         </div>
 

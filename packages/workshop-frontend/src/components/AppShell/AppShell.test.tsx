@@ -10,6 +10,9 @@ vi.mock('@tanstack/react-router', () => ({ useRouterState: () => '/' }))
 vi.mock('../../RpcContext', () => ({ useConnectionLost: () => false }))
 vi.mock('../../TopBarNotice', () => ({ default: () => null }))
 vi.mock('./CommandPalette', () => ({ default: () => null }))
+vi.mock('../Spotlight/Spotlight', () => ({ default: () => null }))
+vi.mock('./ShellTopbarActions', () => ({ default: () => null }))
+vi.mock('../AppNavigation/TopNav', () => ({ default: () => null }))
 vi.mock('./Sidebar', () => ({
   default: () => <aside data-testid="sidebar" />,
 }))

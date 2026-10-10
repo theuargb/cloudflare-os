@@ -1,6 +1,7 @@
 import { RpcStub } from "capnweb";
 import { GadgetMetadataWithTimestamps, AiChatAuthorInfo, AiModelConfig, RedactedAiModelConfig, CollaboratorRole, ConnectedAccountsSubscriber, ConnectedAccountsFilter, GatekeeperVendorFilter, GadgetMetadata, BlueprintMetadata, BlueprintLibrarySummary, BlueprintSource, BlueprintUserSummary, BLUEPRINT_SCREENSHOT_R2_PREFIX, GatekeeperVendorInfo, OutputSummary, ListOutputsResult, AUTH_ERROR_CODES, createAuthError, ConnectFlowStart, validateCommitEmail, NotificationSubscriber, UserNotification } from '@gadgets/workshop-shared/api';
 import { ActionDescription, Gatekeeper, GatekeeperUser, GatekeeperUserVerifier, GatekeeperVendor, AccountDescription, VendorDescription, GatekeeperConnectCallback, ConnectHandoff, SupportedResource, ResourceConfiguratorFrame, AppUiContext, GatekeeperUiFrame } from "@gadgets/workshop-shared/gatekeeper";
+import * as appHost from "./app-host-fanout.js";
 import { shouldAutoProvisionAccount, ambientGatekeeperMode } from "./provisioning-policy.js";
 import { CloudflareGatekeeperUser } from "@gadgets/workshop-shared/cloudflare-gatekeeper";
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
@@ -1399,6 +1400,34 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
     let record = this.storage.connectedAccounts.get(accountId);
     if (!record?.description.providesUi) throw new Error("No such app.");
     return (record.account as unknown as SingletonAccountStub).startAppUi(context);
+  }
+
+  // The provided accounts as the app-host fan-out (./app-host-fanout.ts) sees them.
+  async #appHostAccounts(): Promise<appHost.AppHostAccount[]> {
+    return (await this.listProvidedAccounts()).map(({vendorId, accountId, description}) => ({
+      appId: vendorId,
+      description,
+      stub: this.storage.connectedAccounts.get(accountId)!.account as unknown as appHost.AppHostStub,
+    }));
+  }
+
+  /** Navigation (launcher actions) of every management app (AuthenticatedApi.listAppNavigation). */
+  async listAppNavigation(context: AppUiContext) {
+    return appHost.listAppNavigation(await this.#appHostAccounts(), context);
+  }
+
+  /** Record search of one management app (AuthenticatedApi.searchApp). */
+  async searchApp(context: AppUiContext, appId: string, query: string) {
+    return appHost.searchApp(await this.#appHostAccounts(), context, appId, query);
+  }
+
+  /** Topbar inbox (AuthenticatedApi.getInbox). */
+  async getInbox(context: AppUiContext) {
+    return appHost.getInbox(await this.#appHostAccounts(), context);
+  }
+
+  async markInboxRead(context: AppUiContext, ids: string[]) {
+    await appHost.markInboxRead(await this.#appHostAccounts(), context, ids);
   }
 
   async ensureAccountResources(accountId: number, resourceUrlPatterns: string[])
