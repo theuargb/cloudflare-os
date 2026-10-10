@@ -1,10 +1,10 @@
 import { useState, FormEvent } from 'react'
 import { Link } from '@tanstack/react-router'
 import { RpcStub } from 'capnweb'
-import { PublicApi } from '@gadgets/workshop-shared/api'
+import { PublicApi, normalizeUsername } from '@gadgets/workshop-shared/api'
 import { Hexagon } from '@phosphor-icons/react'
 import { Input, Button, Banner, Loader } from '@cloudflare/kumo'
-import { hashPassword } from './passwordHash'
+import { hashPassword, hashPasswordLegacyCase } from './passwordHash'
 import { useServerConfig, useServerConfigError, useSiteName } from './ServerConfigContext'
 import { useDocumentTitle } from './useDocumentTitle'
 import { useConnectionLost } from './RpcContext'
@@ -35,8 +35,18 @@ export default function LoginPage({ rpcStub, onLoginSuccess }: LoginPageProps) {
     setError(null)
 
     try {
+      const loginName = normalizeUsername(username)
       const passwordHash = await hashPassword(username, password)
-      const token = await rpcStub.login(username, passwordHash)
+      let token = await rpcStub.login(loginName, passwordHash)
+      if (!token && username !== loginName) {
+        // Accounts created before salts were normalized are salted with the case typed at signup.
+        const legacyHash = await hashPasswordLegacyCase(username, password)
+        token = await rpcStub.login(loginName, legacyHash)
+        if (token) {
+          const api = rpcStub.authenticate(token)
+          try { await api.changePassword(legacyHash, passwordHash) } finally { api[Symbol.dispose]() }
+        }
+      }
       if (token) {
         localStorage.setItem('authToken', token)
         if (onLoginSuccess) {

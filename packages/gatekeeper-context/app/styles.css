@@ -2,6 +2,7 @@
 @source "../../ui/src/**/*.{js,jsx,ts,tsx}";
 @import "@cloudflare/kumo/styles";
 @import "tailwindcss";
+@import "@gadgets/workshop-shared/fonts.css";
 @custom-variant dark (&:where([data-mode="dark"], [data-mode="dark"] *));
 
 html,

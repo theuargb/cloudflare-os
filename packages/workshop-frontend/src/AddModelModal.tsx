@@ -38,6 +38,7 @@ const API_TOKEN_PLACEHOLDERS: Record<AiModelProvider, string> = {
   google: 'AIza...',
   cloudflare: 'Cloudflare API token',
   ollama: '(optional)',
+  semantyka: 'Ключ API Семантики',
 }
 
 // Providers whose client can send no API key at all, so a proxy that extra headers authenticate
@@ -82,6 +83,9 @@ function buildOptions(gatewayMode: boolean, enabledProviders: Set<string> | null
   const providerOrder = Object.keys(SUGGESTED_MODELS) as AiModelProvider[]
 
   for (const provider of providerOrder) {
+    // Semantyka models run on the deployment's endpoint with its key, so only a gateway
+    // deployment, whose catalog lists them, offers them; a user's own credentials would be ignored.
+    if (provider === 'semantyka' && !gatewayMode) continue
     if (enabledProviders && !enabledProviders.has(provider)) continue
 
     // In gateway mode, suggested models are already built-in, so don't list them.

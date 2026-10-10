@@ -25,12 +25,28 @@
 
 import { RpcCompatible, RpcStub, RpcTarget } from "capnweb";
 import { AccountDescription, ActionKind, ActionDescription, AvatarImage, GatekeeperUiFrame, ObservationDescription, ResourceDescription, ResourceConfiguratorFrame, SupportedResource, VendorDescription, HookDescription } from "./gatekeeper.js";
+import type { VendorGroup } from "./gatekeeper.js";
 import type { CodeChange } from "./code-change.js";
+import type { AppEntry, AppInbox, AppNavigation, AppSearchHit } from "./app-host.js";
 import type { UiFeatureFlags } from "./feature-flags.js";
 
 export const SERVICE_SALT = new Uint8Array([
   0xd9, 0x4e, 0x54, 0x1d, 0x29, 0xc1, 0x03, 0x74, 0x73, 0x7e, 0xb3, 0xe3, 0x34, 0x6d, 0x8f, 0x21
 ]);
+
+/**
+ * Canonical form of a username: the key of the user's account and the salt input for password
+ * hashing. Throws if the username isn't alphanumeric/underscore starting with a letter.
+ */
+export function normalizeUsername(username: string): string {
+  username = username.toLowerCase();
+
+  if (!username.match(/^[a-z][a-z0-9_]*$/)) {
+    throw new Error("Invalid username. Must be alphanumeric starting with a letter.")
+  }
+
+  return username;
+}
 
 /**
  * How a connect, reconnect, ensure-resources or sign-in flow starts, as returned by
@@ -121,7 +137,7 @@ export interface PublicApi extends RpcTarget {
    *
    *     argon2id({
    *       password,
-   *       salt: SERVICE_SALT + encode(username, 'utf8'),
+   *       salt: SERVICE_SALT + encode(normalizeUsername(username), 'utf8'),
    *       parallelism: 1,
    *       iterations: 3,
    *       memorySize: 64MiB,
@@ -872,6 +888,30 @@ export interface AuthenticatedApi extends RpcTarget {
    */
   getGatekeeperApp(id: string): Promise<GatekeeperUiFrame | null>;
 
+  /**
+   * Launcher actions of every UI-providing gatekeeper: the Workshop topbar menus (by `menu`) and
+   * search (⌘K) fan out to each providesUi account's `getAppNavigation()` in parallel with a
+   * per-app timeout, returning whichever apps respond. An app that is missing the method, throws,
+   * or exceeds the deadline contributes empty `actions`. Each app's actions are validated and
+   * truncated.
+   */
+  listAppNavigation(): Promise<GatekeeperAppNavigation[]>;
+
+  /**
+   * Search records in one UI-providing gatekeeper. Invalid queries, unavailable apps, and app
+   * errors return no hits. Each app response is validated and truncated.
+   */
+  searchApp(appId: string, query: string): Promise<AppSearchHit[]>;
+
+  /**
+   * The topbar inbox from the deployment's inbox provider (the first account whose description sets
+   * `providesInbox`), validated and truncated; null when there is no provider.
+   */
+  getInbox(): Promise<GatekeeperInbox | null>;
+
+  /** Mark entries of the topbar inbox read at the provider; an empty `ids` marks all of them. */
+  markInboxRead(ids: string[]): Promise<void>;
+
   // --- Deployment admin ---
 
   /**
@@ -904,6 +944,27 @@ export type GatekeeperAppInfo = {
   title: string;
   /** Optional icon. */
   icon?: AvatarImage;
+  /** Sidebar section (VendorDescription.group); ungrouped apps list at the top level. */
+  group?: VendorGroup;
+  /** Default position (VendorDescription.order). */
+  order?: number;
+  /** Sidebar rows (VendorDescription.entries): one per business area; empty for a single-row app. */
+  entries?: AppEntry[];
+};
+
+/**
+ * One management app's navigation (topbar menus, ⌘K); app title and icon come from GatekeeperAppInfo.
+ * Empty when the app has none, failed, or did not answer in time.
+ */
+export type GatekeeperAppNavigation = AppNavigation & {
+  /** The vendor id (same as GatekeeperAppInfo.id). */
+  appId: string;
+};
+
+/** The topbar inbox (AuthenticatedApi.getInbox) with the provider app it came from. */
+export type GatekeeperInbox = AppInbox & {
+  /** The provider's vendor id (same as GatekeeperAppInfo.id): "All notifications" opens this app. */
+  appId: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -1487,8 +1548,12 @@ export type CloudflareAccountOption = {
   accountName: string;
 };
 
-/** Supported AI providers. */
-export type AiModelProvider = "openai" | "anthropic" | "google" | "cloudflare" | "ollama";
+/**
+ * Supported AI providers. A "semantyka" model always runs on Semantyka's endpoint with the
+ * deployment's SEMANTYKA_API_KEY, so a config's apiUrl, apiToken and extraHeaders are ignored for it.
+ */
+export type AiModelProvider =
+    "openai" | "anthropic" | "google" | "cloudflare" | "ollama" | "semantyka";
 
 /** Information about the AI gateway configuration. Returned by `AuthenticatedApi.getAiConfig()`. */
 export type AiGatewayInfo = {
@@ -1848,8 +1913,29 @@ type SuggestedModel = {
   hidden?: true;
 };
 
+// Semantyka's /v1/models states no limits. 131072 is a conservative window for the models behind
+// it, and the response cap lifts agent turns off pi's 4096-token default (the live endpoint
+// accepts max_completion_tokens up to at least 65536).
+const SEMANTYKA_CONTEXT_WINDOW = 131072;
+const SEMANTYKA_OUTPUT_LIMIT = 32768;
+
 // The literal is kept apart from the export so SuggestedModelId can derive the model ids from it.
 const SUGGESTED_MODEL_CATALOG = {
+  "semantyka": {
+    "peak/enei-1": {
+      name: "Еней 1", contextWindow: SEMANTYKA_CONTEXT_WINDOW,
+      outputLimit: SEMANTYKA_OUTPUT_LIMIT,
+    },
+    "peak/enei-developer": {
+      name: "Еней Розробник", contextWindow: SEMANTYKA_CONTEXT_WINDOW,
+      outputLimit: SEMANTYKA_OUTPUT_LIMIT,
+    },
+    // Listed for admins to enable in /admin → Models; not offered in pickers until then.
+    "peak/enei-1-flash": {
+      name: "Швидкий Еней", contextWindow: SEMANTYKA_CONTEXT_WINDOW,
+      outputLimit: SEMANTYKA_OUTPUT_LIMIT, hidden: true,
+    },
+  },
   "cloudflare": {
     "@cf/moonshotai/kimi-k2.7-code": {
       name: "Kimi K2.7 Code (Workers AI)", contextWindow: 262144,
@@ -2278,6 +2364,9 @@ export type ActionLogEntry = {
    * authority (see `autoApproved`).
    */
   resolvedBy?: AiChatAuthorInfo;
+
+  /** Authenticated actor who initiated an agent action, when one was available at submission. */
+  requestedBy?: AiChatAuthorInfo;
 
   /**
    * True when the action was applied automatically by an auto-approval rule rather than by a human

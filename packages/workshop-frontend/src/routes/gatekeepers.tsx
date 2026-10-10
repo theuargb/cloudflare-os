@@ -20,6 +20,7 @@ import {
   AccountDescription,
   SupportedResource,
   VendorDescription,
+  compareGatekeeperOrder,
 } from '@gadgets/workshop-shared/gatekeeper'
 import { GatekeeperVendorInfo } from '@gadgets/workshop-shared/api'
 import { useDocumentTitle } from '../useDocumentTitle'
@@ -648,26 +649,30 @@ function ConnectorsPage() {
       vendors.find((v) => v.id === account.vendorId)?.supportedResources ??
       account.supportedResources
 
-    return accounts.filter((a) => {
-      const resources = resourcesForAccountFilter(a)
-      return (
-        matchesSearch(a.accountDescription.displayName) ||
-        matchesSearch(a.accountDescription.uniqueName) ||
-        matchesSearch(a.vendorDescription.displayName) ||
-        matchesSearch(a.vendorDescription.tagline) ||
-        resources.some((r) => matchesSearch(r.title))
-      )
-    })
+    return accounts
+      .filter((a) => {
+        const resources = resourcesForAccountFilter(a)
+        return (
+          matchesSearch(a.accountDescription.displayName) ||
+          matchesSearch(a.accountDescription.uniqueName) ||
+          matchesSearch(a.vendorDescription.displayName) ||
+          matchesSearch(a.vendorDescription.tagline) ||
+          resources.some((r) => matchesSearch(r.title))
+        )
+      })
+      .toSorted((a, b) => compareGatekeeperOrder(a.vendorDescription, b.vendorDescription))
   }, [accounts, vendors, searchLower])
 
-  // Connectable vendors = OAuth/resource gatekeepers plus opt-in ambient ones, rendered identically.
-  // An ambient vendor is recognized by `description.autoProvisionsAccount`, which routes the connect
-  // action to a direct (no-OAuth) add instead.
+  // Resource vendors may also be ambient. Only list those when the ambient policy says they are
+  // addable, while retaining their resources for search and the connect modal.
   const availableVendors = useMemo<VendorEntry[]>(
-    () => [
-      ...vendors,
-      ...addable,
-    ],
+    () => {
+      const resourceVendors = new Map(vendors.map((vendor) => [vendor.id, vendor]))
+      return [
+        ...vendors.filter((vendor) => !vendor.description.autoProvisionsAccount),
+        ...addable.map((vendor) => resourceVendors.get(vendor.id) ?? vendor),
+      ]
+    },
     [vendors, addable],
   )
 
@@ -675,12 +680,14 @@ function ConnectorsPage() {
     const matchesSearch = (text: string | undefined) =>
       !searchLower || (text ?? '').toLowerCase().includes(searchLower)
 
-    return availableVendors.filter(
-      (v) =>
-        matchesSearch(v.description.displayName) ||
-        matchesSearch(v.description.tagline) ||
-        v.supportedResources.some((r) => matchesSearch(r.title)),
-    )
+    return availableVendors
+      .filter(
+        (v) =>
+          matchesSearch(v.description.displayName) ||
+          matchesSearch(v.description.tagline) ||
+          v.supportedResources.some((r) => matchesSearch(r.title)),
+      )
+      .toSorted((a, b) => compareGatekeeperOrder(a.description, b.description))
   }, [availableVendors, searchLower])
 
   const activeAccount: AccountEntry | undefined =

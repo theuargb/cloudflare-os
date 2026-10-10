@@ -8,7 +8,10 @@
     // from their own tsconfig.app.json). Emitting here would leave a compiled `vite.config.js`,
     // which vite resolves ahead of `vite.config.ts` -- so the stale copy would silently shadow the
     // real config.
-    "noEmit": true
+    "noEmit": true,
+    // The config imports `@gadgets/ui-locale/vite`, whose sources name each other by file on disk
+    // (`./units.ts`) because Node's type stripping resolves them as written.
+    "allowImportingTsExtensions": true
   },
   "include": ["vite.config.ts"]
 }

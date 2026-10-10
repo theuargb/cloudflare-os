@@ -3,6 +3,7 @@ import {
   GatewayModelMode, HTTPS_ONLY_PROVIDERS, ReasoningLevel, SUGGESTED_MODELS,
 } from "@gadgets/workshop-shared/api";
 import { readAdminConfig } from "./admin-config.js";
+import { semantykaEndpoint, type SemantykaEndpoint } from "./semantyka.js";
 import type { AdminConfig } from "./storage-schema/admin-settings-storage.js";
 import type { UserAiModelRecord } from "./storage-schema/user-storage.js";
 
@@ -13,11 +14,12 @@ import type { UserAiModelRecord } from "./storage-schema/user-storage.js";
 const QUICK_MODEL_ID = "@cf/meta/llama-3.3-70b-instruct-fp8-fast";
 
 /**
- * Providers AI Gateway serves: the ones gatewayNativeModel() in ai-models.ts has a route for.
- * Ollama has none, so a model added under it could never run.
+ * Providers the deployment can serve: the ones gatewayNativeModel() in ai-models.ts has an AI
+ * Gateway route for, and Semantyka, which getModel() sends to the deployment's own endpoint
+ * instead (see semantyka.ts). Ollama has neither, so a model added under it could never run.
  */
 const GATEWAY_PROVIDERS: ReadonlySet<string> =
-    new Set<AiModelProvider>(["anthropic", "openai", "google", "cloudflare"]);
+    new Set<AiModelProvider>(["anthropic", "openai", "google", "cloudflare", "semantyka"]);
 
 /** Throws unless AI Gateway serves `provider`. */
 export function assertGatewayProvider(provider: string): void {
@@ -94,6 +96,8 @@ export class AiGatewayConfig {
   readonly binding?: Ai;
   /** The providers CF_AI_GATEWAY_PROVIDERS lists, which an admin can add to (see GatewayModels). */
   readonly providers: Set<string>;
+  /** The deployment's Semantyka endpoint, when it sets SEMANTYKA_API_KEY (see semantyka.ts). */
+  readonly semantyka?: SemantykaEndpoint;
 
   constructor(env: Cloudflare.Env) {
     this.gateway = env.CF_AI_GATEWAY!;
@@ -122,6 +126,10 @@ export class AiGatewayConfig {
     this.providers = new Set(
       (env.CF_AI_GATEWAY_PROVIDERS || "").split(",").map(s => s.trim()).filter(s => s !== "")
     );
+    this.semantyka = semantykaEndpoint(env);
+    if (this.providers.has("semantyka") && !this.semantyka) {
+      throw new Error("CF_AI_GATEWAY_PROVIDERS lists semantyka, which needs SEMANTYKA_API_KEY.");
+    }
     const httpsOnly = [...this.providers].filter(p => HTTPS_ONLY_PROVIDERS.has(p));
     if (httpsOnly.length > 0 && !this.apiToken) {
       const names = httpsOnly.join(", ");
@@ -192,12 +200,21 @@ export class GatewayModels {
   /** The reasoning level of a model whose settings give none. */
   readonly #defaultReasoning: ReasoningLevel | null;
 
+  /**
+   * Whether the deployment can serve `provider`: AI Gateway routes it, or it is Semantyka and
+   * the deployment sets SEMANTYKA_API_KEY.
+   */
+  #serves(provider: string): boolean {
+    return GATEWAY_PROVIDERS.has(provider) &&
+        (provider !== "semantyka" || this.gateway.semantyka !== undefined);
+  }
+
   constructor(readonly gateway: AiGatewayConfig,
               config: Pick<AdminConfig, "modelModes" | "addedProviders" | "addedModels" |
                   "userModelsEnabled" | "modelSettings" | "defaultReasoning">) {
     this.providers = new Set([
       ...gateway.providers,
-      ...config.addedProviders.filter(provider => GATEWAY_PROVIDERS.has(provider)),
+      ...config.addedProviders.filter(provider => this.#serves(provider)),
     ]);
     this.#added = config.addedModels;
     this.userModels = config.userModelsEnabled;
@@ -218,7 +235,7 @@ export class GatewayModels {
         add({ provider: provider as AiModelProvider, id, name: model.name, ...tokenLimits(model) },
             model.hidden ? "hidden" : "enabled", false);
       }
-      if (!GATEWAY_PROVIDERS.has(provider)) continue;
+      if (!this.#serves(provider)) continue;
       this.addableProviders.push(provider as AiModelProvider);
       for (let model of config.addedModels) {
         // A gateway model is looked up by ID alone, so the catalog wins an ID it lists under any
@@ -232,14 +249,16 @@ export class GatewayModels {
   /** Every provider the gateway serves, enabled or not, in catalog order. */
   get providerSettings(): AdminGatewayProvider[] {
     return (Object.keys(SUGGESTED_MODELS) as AiModelProvider[])
-        .filter(provider => GATEWAY_PROVIDERS.has(provider))
+        .filter(provider => this.#serves(provider))
         .map(provider => ({
           provider,
           ...(this.providers.has(provider) &&
               { enabledBy: this.gateway.providers.has(provider) ? "environment" : "admin" }),
           // What getModelViaGateway refuses a request for. Only an admin can enable a provider
           // in that state: the environment enabling one keeps `gateway` from being built.
-          needsApiToken: !this.gateway.bindingFor(provider) && !this.gateway.apiToken,
+          // Semantyka runs on its own key, over neither transport.
+          needsApiToken: provider !== "semantyka" &&
+              !this.gateway.bindingFor(provider) && !this.gateway.apiToken,
         }));
   }
 

@@ -1,37 +1,25 @@
 import { Link } from '@tanstack/react-router'
-import {
-  Blueprint,
-  BookOpen,
-  Compass,
-  Hexagon,
-  House,
-  MagnifyingGlass,
-  SidebarSimple,
-  SquaresFour,
-  Stack,
-} from '@phosphor-icons/react'
+import { Hexagon, MagnifyingGlass, SidebarSimple } from '@phosphor-icons/react'
 import { useSiteName } from '../../ServerConfigContext'
 import SiteLogo from '../SiteLogo'
 import { useGatekeeperApps } from '../../useGatekeeperApps'
 import { openCommandPalette } from './commandPaletteBus'
-import SidebarItem from './SidebarItem'
 import {
   SidebarWorkspacesProvider,
   SidebarWorkspacesTools,
   SidebarWorkspacesLists,
 } from './SidebarWorkspaces'
 import SidebarUtilityStrip from './SidebarUtilityStrip'
+import { SidebarNav } from '../../features/sidebar-customization/SidebarNav'
 
 /**
- * The persistent left rail. Three pinned regions sandwich a single scrolling region of lists, so
- * the user can always reach Search, primary nav, and the bottom utility strip no matter how many
- * workspaces they have.
+ * The persistent left rail. Brand/search and the bottom utility strip stay pinned; primary
+ * navigation and workspace lists share the bounded scrolling region so dynamic lists remain
+ * reachable at any viewport height.
  *
  * Layout (top → bottom):
  *   • brand row                            pinned
- *   • primary nav (Home, Workspaces, …)    pinned
- *   • workspace tools (⌘K search)          pinned
- *   • Favorites / Recent workspaces        SCROLLS
+ *   • primary nav + Favorites / Recent workspaces SCROLLS together
  *   • utility strip (plug, avatar)         pinned
  */
 export default function Sidebar({
@@ -113,89 +101,18 @@ export default function Sidebar({
       )}
 
       <SidebarWorkspacesProvider>
-        {/* Pinned top stack. shrink-0 keeps it from squishing when the lists below grow. */}
-        <div className="flex shrink-0 flex-col gap-3 pt-3">
-          {/* Primary nav */}
-          <nav className="flex flex-col gap-0.5 px-2">
-            <SidebarItem
-              to="/"
-              label="Home"
-              icon={<House size={14} weight="regular" />}
-              collapsed={collapsed}
-            />
-            <SidebarItem
-              to="/workspaces"
-              label="Workspaces"
-              icon={<SquaresFour size={14} weight="regular" />}
-              collapsed={collapsed}
-            />
-            <SidebarItem
-              to="/blueprints"
-              label="Blueprints"
-              icon={<Blueprint size={14} weight="regular" />}
-              collapsed={collapsed}
-            />
-            <SidebarItem
-              to="/outputs"
-              label="Outputs"
-              icon={<Stack size={14} weight="regular" />}
-              collapsed={collapsed}
-            />
-            {/* Gatekeeper management apps (e.g. the Context Library), listed dynamically. */}
-            {gatekeeperApps.map((app) => {
-              // Escape the icon URL for safe interpolation into a CSS url("…") string.
-              const maskUrl = app.icon
-                ? `url("${app.icon.url.replace(/[\\"]/g, '\\$&')}")`
-                : undefined
-              return (
-              <SidebarItem
-                key={app.id}
-                to="/gatekeepers/$appId"
-                params={{ appId: app.id }}
-                label={app.title}
-                icon={
-                  maskUrl ? (
-                    // Render the (monochrome) app icon as a CSS mask filled with the row's current
-                    // text color, so it tints like the Phosphor icons — subtle by default, accent
-                    // when active, darker on hover.
-                    <span
-                      aria-hidden
-                      className="h-3.5 w-3.5 bg-current"
-                      style={{
-                        maskImage: maskUrl,
-                        WebkitMaskImage: maskUrl,
-                        maskRepeat: 'no-repeat',
-                        WebkitMaskRepeat: 'no-repeat',
-                        maskPosition: 'center',
-                        WebkitMaskPosition: 'center',
-                        maskSize: 'contain',
-                        WebkitMaskSize: 'contain',
-                      }}
-                    />
-                  ) : (
-                    <BookOpen size={14} weight="regular" />
-                  )
-                }
-                collapsed={collapsed}
-              />
-              )
-            })}
-            <SidebarItem
-              to="/explore"
-              label="Explore"
-              icon={<Compass size={14} weight="regular" />}
-              collapsed={collapsed}
-            />
-          </nav>
-
-          {/* Workspace tools: search. Pinned so it's always reachable. */}
+        {/* Keep essential controls outside the scrolling content. */}
+        <div className="shrink-0 pt-2">
           <SidebarWorkspacesTools collapsed={collapsed} />
         </div>
 
-        {/* Scrolling middle: only the Favorites / Recent workspaces / Recent blueprints lists.
-            min-h-0 lets flex children compute scroll height correctly. */}
-        <div className="sidebar-scroll mt-1 min-h-0 flex-1 overflow-y-auto">
-          <SidebarWorkspacesLists collapsed={collapsed} />
+        {/* min-h-0 gives this region a bounded height between the pinned brand and profile rows. */}
+        <div className="sidebar-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+          <SidebarNav apps={gatekeeperApps} collapsed={collapsed} />
+
+          <div className="mt-1">
+            <SidebarWorkspacesLists collapsed={collapsed} />
+          </div>
         </div>
       </SidebarWorkspacesProvider>
 

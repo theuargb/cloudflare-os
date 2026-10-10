@@ -4,7 +4,7 @@ import { Overseer, GadgetMetadata, UiBundle, WorkpieceId, WorkpieceSummary, Work
 import { applyCodeChange, changedGadgets, codeChangeSerializedSize, composeCodeChange,
   transformCodeChange, validateCodeChangeContent, validateCodeChangeSchema,
   type CodeContent, type CodeChange } from "@gadgets/workshop-shared/code-change";
-import { type AgentCatalog, Gatekeeper, GatekeeperUserVerifier, HookInitiator, ResourceDescription, ApprovalQueue, ActionDescription, ObservationAuthorizer, ObservationDescription, VendorDescription, SupportedResource, resolveRequestedResource, HookController, HookDescription, ActionKind, GitCache, GitPullHints } from "@gadgets/workshop-shared/gatekeeper";
+import { type AgentCatalog, type ActorContext, Gatekeeper, GatekeeperUserVerifier, HookInitiator, ResourceDescription, ApprovalQueue, ActionDescription, ObservationAuthorizer, ObservationDescription, VendorDescription, SupportedResource, resolveRequestedResource, HookController, HookDescription, ActionKind, GitCache, GitPullHints } from "@gadgets/workshop-shared/gatekeeper";
 import {
   DurableObject, WorkerEntrypoint, RpcStub as NativeRpcStub,
   RpcTarget as NativeRpcTarget, restore,
@@ -45,6 +45,7 @@ import {
   type AiGatewayLogRoute,
 } from "./ai-gateway";
 import { AgentGadgetInfo, AgentHooks, CHAT_CHANGE_MESSAGE_BUDGET, SeedBindingInfo, formatMissingBlueprintBindings, runAgent, summarizeArgs, type AgentStepChange, type AiChatMessageBodyWithModelData, type ChatHistory, type WorktreeTurnAccess, GIT_BINDING_NAME } from "./agent";
+import { ATTACHMENTS_BINDING_NAME } from "./agent";
 import { WorktreeSessionImpl } from "./worktree-session";
 import { GitImpl } from "./git-binding";
 import { scanWorkpieceForGrep, type GrepScan } from "./grep";
@@ -71,6 +72,7 @@ import { reportIssue } from "@gadgets/observability/error-reporting";
 import type { ProductAnalyticsConnectionType, ProductAnalyticsGadgetInput } from "./analytics";
 import { checkUsageAndBalance } from "./ai-gateway-billing/limits/usage-checker";
 import { normalizeAgentCatalog } from "./agent-catalog";
+import { isDeploymentAdmin } from "./admin-authorization";
 import { refreshCachedBalance } from "./ai-gateway-billing/cloudflare/connection-service";
 import { SharingManager, SharingCaller, roleRank } from "./sharing";
 import { AutoApprovalDrainer, autoApprovalRule } from "./auto-approval";
@@ -96,6 +98,7 @@ import {
 
 const logger = createWorkshopLogger("workshop.overseer");
 export const AGENT_RUNNING_ERROR_MESSAGE = "Agent is running, wait for it to finish.";
+
 
 let CODE_MODE_HARNESS =
 `import { WorkerEntrypoint, restore } from "cloudflare:workers";
@@ -510,6 +513,7 @@ function actionRecordToLog(record: ActionRecord): ActionLogEntry {
         type: "action",
         description: record.description,
         resolvedBy: record.resolvedBy,
+        requestedBy: record.requestedBy,
         autoApproved: record.autoApproved,
         creation: record.action === "create" || undefined,
       };
@@ -2449,6 +2453,7 @@ class OverseerImpl implements AgentHooks {
     // Before the chat's bindings, so a chat binding named GIT shadows it -- matching
     // describeBinding (see describeBinding in agent.ts).
     env[GIT_BINDING_NAME] = this.makeBindingLoopback({type: "git"}, caller);
+    env[ATTACHMENTS_BINDING_NAME] = this.makeBindingLoopback({type: "attachments"}, caller);
 
     for (let [name, entry] of Object.entries(bindings)) {
       try {
@@ -4732,11 +4737,17 @@ class OverseerImpl implements AgentHooks {
       created = await (gatekeeper as unknown as Fetcher<Gatekeeper<any> &
           Required<Pick<Gatekeeper<any>, "applyCreation">>>).applyCreation(creator);
     } else {
+      // A queued request can outlive the session that created it. Re-resolve the requesting user's
+      // identity and workspace membership at application time so revoked actors cannot retain
+      // authority through an old pending action. The approver remains a separate audit principal.
+      let actorContext = record.requestedActorUserId
+          ? await this.getActionContextForUser(record.requestedActorUserId)
+          : undefined;
       // The apply-time cache stub is scoped to the gatekeeper AND to this action (approval can
       // happen long after the session that queued it, so the queue-time stub is gone) -- the
       // binding that makes buildPack() serve exactly this action's pending-push closure.
       await gatekeeper.applyAction(record.action,
-          new GitCacheImpl(this.gitCache, record.gatekeeperId, record.id));
+          new GitCacheImpl(this.gitCache, record.gatekeeperId, record.id), actorContext);
     }
     record.state = "approved";
     record.appliedAt = new Date();
@@ -4831,7 +4842,7 @@ class OverseerImpl implements AgentHooks {
 
   // `joinAs` counts the returned client toward #hasCollaboratorSession for its lifetime; passed by
   // the collaborator-facing mints, omitted for the owner's and for internal callers (see
-  // GadgetClientImpl). `actorUserId` is who the returned client acts for, for analytics only.
+  // GadgetClientImpl). `actorUserId` is who the returned client acts for (see GatekeeperClientImpl).
   async addGatekeeper(
       cls: GatekeeperClass, creationSpec: GatekeeperCreationSpec, actorUserId: string,
       joinAs?: SessionKind)
@@ -4987,6 +4998,12 @@ class OverseerImpl implements AgentHooks {
 
       case "git":
         return Promise.resolve(new GitImpl(this, () => this.#gitAuthorFor(caller)));
+
+      case "attachments":
+        if (caller.from !== "agent") {
+          throw new Error("Chat attachments are only available to the agent's executeCode.");
+        }
+        return Promise.resolve(new ChatAttachmentsSession(this, caller.chatId));
 
       default:
         target satisfies never;
@@ -5347,12 +5364,59 @@ class OverseerImpl implements AgentHooks {
     this.#associateAction(caller, actionId);
   }
 
+  /**
+   * Resolve a live agent's initiating user from Workshop-owned active-turn state, or undefined
+   * once the turn has ended.
+   */
+  async getAgentActionContext(chatId: number): Promise<ActorContext | undefined> {
+    let active = this.storage.activeAgents.get(chatId);
+    return active ? this.getActionContextForUser(active.initiatorUserId) : undefined;
+  }
+
+  /**
+   * The workspace owner's actor context for a gadget calling the owner's ambient singleton
+   * `gatekeeperId`; undefined for any other gatekeeper.
+   */
+  async getGadgetActorContext(gatekeeperId: number): Promise<ActorContext | undefined> {
+    let record = this.storage.gatekeepers.get(gatekeeperId);
+    if (record?.creationSpec?.type !== "ambient" || this.ownerId === undefined) return undefined;
+    return this.getActionContextForUser(this.ownerId);
+  }
+
+  async getActionContextForUser(userIdString: string): Promise<ActorContext> {
+    let userId = this.users.idFromString(userIdString);
+    let profile = await retryOnDoReset(() => this.users.get(userId).whoamiIfExists(), this.logger);
+    if (!profile || profile.type !== "user" || !profile.id) {
+      throw new Error("The initiating agent has no verifiable authenticated actor.");
+    }
+    let owner = this.ownerId !== undefined && userId.toString() === this.ownerId;
+    let role = owner ? "build" : (await this.getSharingManager()).getEffectiveRole(profile.id);
+    if (!role) throw new Error("The initiating actor no longer has access to this workspace.");
+    return {
+      actorId: profile.id,
+      actor: { displayName: profile.name },
+      // `idFromString()` does not retain the Durable Object ID's original name, so use the
+      // authenticated profile's canonical ID (whoami above), which is the username checked by
+      // AuthenticatedApi.#isAdmin().
+      isAdmin: isDeploymentAdmin(this.env.ADMINS, profile.id),
+    };
+  }
+
   async submitAction(gatekeeperId: number, action: number | "create",
                      description: ActionDescription, caller: GatekeeperCaller)
       : Promise<void> {
     // An in-flight facet RPC can outlive removeGatekeeper, and a pending action on a removed
     // connection could never be approved or rejected (both dereference the facet).
     let gatekeeper = this.storage.gatekeepers.get(gatekeeperId);
+    // Attribute the action to its initiator when one is verifiable, resolved before allocating an
+    // action id or persisting anything. An agent's comes from the active turn and current
+    // workspace membership, never from the RPC input; a user capability's is the authenticated
+    // User DO ID the API minted it with. Without either (an agent's code after its turn ended,
+    // gadget and hook sessions) the action is queued unattributed.
+    let initiatorUserId = caller.from === "agent"
+        ? this.storage.activeAgents.get(caller.chatId)?.initiatorUserId
+        : caller.from === "user" ? caller.userId : undefined;
+    let requester = initiatorUserId ? await this.getActionContextForUser(initiatorUserId) : undefined;
     if (!gatekeeper) {
       throw new Error(
           "This action was blocked because the connection it was submitted through has been " +
@@ -5393,7 +5457,9 @@ class OverseerImpl implements AgentHooks {
       createdAt: new Date(),
       state: "pending",
       type: "action",
-      description
+      description,
+      requestedBy: requester ? { type: "user", id: requester.actorId, name: requester.actor.displayName } : undefined,
+      requestedActorUserId: initiatorUserId,
     };
 
     // The marking walk stamps the verified push closure "pending push" -- the read grant that
@@ -10033,7 +10099,43 @@ type BindingLoopbackTarget = {
 } | {
   // The `env.GIT` binding (see git-binding.ts).
   type: "git";
+} | {
+  // The `env.ATTACHMENTS` binding of an agent's executeCode environment.
+  type: "attachments";
 };
+
+/** Chat attachments available to the agent's current executeCode environment. */
+@validateRpc()
+class ChatAttachmentsSession extends NativeRpcTarget {
+  constructor(private overseer: OverseerImpl, private chatId: number) {
+    super();
+  }
+
+  async list(): Promise<Array<{ id: string; name: string | null; mime: string; size: number }>> {
+    let result: Array<{ id: string; name: string | null; mime: string; size: number }> = [];
+    let ids = new Set<string>();
+    for (let message of this.overseer.storage.chats.list({prefix: `${keyString(this.chatId)}.`})) {
+      if (message.type !== "message") continue;
+      for (let attachment of message.attachments ?? []) {
+        if (ids.has(attachment.id)) continue;
+        ids.add(attachment.id);
+        result.push({
+          id: attachment.id,
+          name: attachment.name ?? null,
+          mime: attachment.mimeType,
+          size: attachment.size,
+        });
+      }
+    }
+    return result;
+  }
+
+  async get(id: string): Promise<{ id: string; name: string | null; mime: string; bytes: Uint8Array }> {
+    let attachment = (await this.list()).find(candidate => candidate.id === id);
+    if (!attachment) throw new Error("attachment not found in this chat");
+    return {...attachment, bytes: await this.overseer.getChatAttachmentData(this.chatId, id)};
+  }
+}
 
 /**
  * Horrible hack: At present the `env` of a dynamic isolate can contain ServiceStubs but cannot
@@ -12600,7 +12702,8 @@ class GatekeeperClientImpl<Session extends RpcCompatible<Session>>
     extends RpcTarget implements GatekeeperClient<Session> {
   // See GadgetClientImpl: `joinedAs` counts a collaborator's retained capability toward
   // #hasCollaboratorSession; omitted for the owner's and for internal construction.
-  // `actorUserId` (hex user DO ID of the client holding this capability) feeds analytics only.
+  // `actorUserId` (hex user DO ID of the client holding this capability) feeds analytics and is
+  // the authenticated initiator of actions submitted through its sessions.
   #leaveSession?: () => void;
 
   constructor(private impl: OverseerImpl, private id: number,
@@ -12654,7 +12757,8 @@ class GatekeeperClientImpl<Session extends RpcCompatible<Session>>
   }
 
   async openSession(): Promise<RpcStub<Session>> {
-    return this.impl.openGatekeeperSession(this.id, this.facet, {from: "user"});
+    return this.impl.openGatekeeperSession(
+        this.id, this.facet, {from: "user", userId: this.actorUserId});
   }
 
   async getCreationSpec(): Promise<GatekeeperCreationSpec> {
@@ -12759,13 +12863,23 @@ class ApprovalQueueImpl extends RpcTarget implements ApprovalQueue {
     return this.impl.authorizeObservation(this.gatekeeperId, description, this.caller);
   }
 
+  async getAgentActionContext(): Promise<ActorContext | undefined> {
+    if (this.hookId !== undefined || this.caller.from !== "agent") return undefined;
+    return this.impl.getAgentActionContext(this.caller.chatId);
+  }
+
+  async getGadgetActorContext(): Promise<ActorContext | undefined> {
+    if (this.hookId !== undefined || this.caller.from !== "gadget") return undefined;
+    return this.impl.getGadgetActorContext(this.gatekeeperId);
+  }
+
   async getGitCache(): Promise<GitCache> {
     return new GitCacheImpl(this.impl.gitCache, this.gatekeeperId);
   }
 
-  submitAction(action: number, description: ActionDescription): Promise<void> {
+  async submitAction(action: number, description: ActionDescription): Promise<void> {
     if (this.hookId !== undefined) requireLiveHook(this.impl, this.hookId);
-    return this.impl.submitAction(this.gatekeeperId, action, description, this.caller);
+    await this.impl.submitAction(this.gatekeeperId, action, description, this.caller);
   }
 
   bindHook<Hook extends RpcTarget>(
