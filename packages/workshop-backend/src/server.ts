@@ -72,6 +72,7 @@ export { OverseerDurableObject, GatekeeperLoopback, GatekeeperHookLoopback,
 
 // Re-export service-binding entrypoint for external channel integrations.
 export { ExternalMessageGateway };
+export { ModelRunner } from "./model-runner.js";
 
 // Declare optional environment variables here since they may be omitted from wrangler.jsonc.
 type Env = Cloudflare.Env & {
