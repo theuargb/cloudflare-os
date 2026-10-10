@@ -1,4 +1,5 @@
 import { Link, useRouterState, type LinkProps } from '@tanstack/react-router'
+import { appRouteEntry } from '@gadgets/workshop-shared/app-host'
 import type { ReactNode } from 'react'
 
 /**
@@ -12,6 +13,10 @@ export type SidebarItemProps = {
   label: string
   to: LinkProps['to']
   params?: LinkProps['params']
+  /** Search params of the link (an app entry row passes the entry's route as `at`). */
+  search?: { at: string }
+  /** Row of an app entry: active only while the open app screen belongs to this entry (no entry in the route = the first one). */
+  entry?: { id: string; first: boolean }
   trailing?: ReactNode
   collapsed?: boolean
   /** When true, match this item active when the current path starts with `to`. */
@@ -20,11 +25,19 @@ export type SidebarItemProps = {
   endAction?: ReactNode
 }
 
+/** The app entry named by an open `/gatekeepers/<app>?at=<route>` location (null when the route names none). */
+function openAppEntry(search: unknown): string | null {
+  if (typeof search !== 'object' || search === null || !('at' in search) || typeof search.at !== 'string') return null
+  return appRouteEntry(search.at)
+}
+
 export default function SidebarItem({
   icon,
   label,
   to,
   params,
+  search,
+  entry,
   trailing,
   collapsed = false,
   matchPrefix = false,
@@ -33,18 +46,20 @@ export default function SidebarItem({
   // Resolve the active path manually so we can style the icon as well as the row. For parameterized
   // routes (e.g. "/gatekeepers/$appId"), substitute the params so the resolved path can match.
   const pathname = useRouterState({ select: (s) => s.location.pathname })
+  const openEntry = useRouterState({ select: (s) => openAppEntry(s.location.search) })
   let target = typeof to === 'string' ? to : ''
   if (params) {
     for (const [key, value] of Object.entries(params as Record<string, string>)) {
       target = target.replaceAll(`$${key}`, String(value))
     }
   }
-  const isActive = matchPrefix
+  const onPath = matchPrefix
     ? pathname === target || pathname.startsWith(target + '/')
     : pathname === target
+  const isActive = onPath && (!entry || openEntry === entry.id || (openEntry === null && entry.first))
 
   // Kept loose: the generated route-tree union is stricter than is convenient for a generic row.
-  const linkProps = { to, params } as unknown as LinkProps
+  const linkProps = { to, params, search } as unknown as LinkProps
 
   const link = (
     <Link

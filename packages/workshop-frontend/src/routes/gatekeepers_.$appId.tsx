@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { isAppRoute, type AppRouteMode } from '@gadgets/workshop-shared/app-host'
+import { appRouteEntry, isAppRoute, type AppRouteMode } from '@gadgets/workshop-shared/app-host'
 import GatekeeperAppPage from '../GatekeeperAppPage'
 import { useDocumentTitle } from '../useDocumentTitle'
 import { useGatekeeperApps } from '../useGatekeeperApps'
@@ -30,7 +30,8 @@ function GatekeeperApp() {
   const { at } = Route.useSearch()
   const navigate = Route.useNavigate()
   const app = useGatekeeperApps().find((a) => a.id === appId)
-  useDocumentTitle(app?.title ?? 'App')
+  const entry = app?.entries?.find((candidate) => candidate.id === appRouteEntry(at))
+  useDocumentTitle(entry?.title ?? app?.title ?? 'App')
   // The URL mirrors the app's route; a new screen adds a history entry, so Back returns to it, and
   // a params-only change replaces the entry. Other URL changes are pushed into the open app.
   const onRouteChange = useCallback(
