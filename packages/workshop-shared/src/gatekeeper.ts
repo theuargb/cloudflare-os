@@ -17,7 +17,7 @@
 // `Adapter` type is the root interface implemented by the service binding.
 
 import type { WorkerEntrypoint, DurableObject, RpcTarget, RpcStub } from "cloudflare:workers";
-import type { AppInbox, AppNavigation, AppSearchHit } from "./app-host.js";
+import type { AppEntry, AppInbox, AppNavigation, AppSearchHit } from "./app-host.js";
 
 /**
  * A pagination cursor.
@@ -87,6 +87,13 @@ export type VendorDescription = {
 
   /** Default position: `group.order` + index inside the group (e.g. 101, 110). Lower first. */
   order?: number;
+
+  /**
+   * Sidebar rows of an app that serves several business areas: one row per entry instead of one for
+   * the app (e.g. a trade module's "Purchases" and "Sales"). Vendor-level like `group`/`order`, so
+   * it follows module upgrades. Fewer than two valid entries are ignored (see sanitizeAppEntries).
+   */
+  entries?: AppEntry[];
 }
 
 type Ordered = { group?: VendorGroup; order?: number };
