@@ -4,6 +4,7 @@ import type { GatekeeperAppInfo } from '@gadgets/workshop-shared/api';
 import { ActionDescription, Gatekeeper, GatekeeperUser, GatekeeperUserVerifier, GatekeeperVendor, AccountDescription, VendorDescription, GatekeeperConnectCallback, ConnectHandoff, SupportedResource, ResourceConfiguratorFrame, AppUiContext, GatekeeperUiFrame } from "@gadgets/workshop-shared/gatekeeper";
 import * as appHost from "./app-host-fanout.js";
 import { compareGatekeeperOrder } from "@gadgets/workshop-shared/gatekeeper";
+import { sanitizeAppEntries } from "@gadgets/workshop-shared/app-host";
 import { shouldAutoProvisionAccount, ambientGatekeeperMode } from "./provisioning-policy.js";
 import { CloudflareGatekeeperUser } from "@gadgets/workshop-shared/cloudflare-gatekeeper";
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
@@ -1378,6 +1379,9 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
     let result: ProvidedAccountInfo[] = [];
     for (let rec of this.#connectedAccountRecords()) {
       if (!rec.description.singleton && !rec.description.providesUi) continue;
+      // The vendor's binding was removed from this deployment (e.g. Context/Scheduler dropped from
+      // the config): the stored account is dormant, there is nothing left to open or call.
+      if (!this.vendors.has(rec.vendorId)) continue;
       // A "disabled" ambient gatekeeper's account stays dormant: don't surface its singleton capsule
       // or management UI. (Its data is preserved, so re-enabling restores it.)
       if (rec.autoProvisioned && ambientGatekeeperMode(config, rec.vendorId) === "disabled") continue;
@@ -1405,6 +1409,7 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
             icon: account.description.providesUi!.icon,
             group: vendor?.group,
             order: vendor?.order,
+            entries: sanitizeAppEntries(vendor?.entries),
           };
         })
         .toSorted(compareGatekeeperOrder);

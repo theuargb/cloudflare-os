@@ -99,6 +99,56 @@ export interface GatekeeperAppHost extends RpcTarget {
   setAppPreference(key: string, value: string): void;
 }
 
+/**
+ * Reserved hash param of an app route that names the sidebar entry the screen belongs to
+ * (`documents?entry=sales`). The host reads it to highlight the entry's row; the app keeps it sticky.
+ */
+export const APP_ENTRY_PARAM = "entry";
+
+/**
+ * One sidebar row of an app that serves several business areas (VendorDescription.entries): the
+ * Workshop lists one row per entry instead of one for the app. Picking it opens the app at `route`,
+ * which carries `entry=<id>` (APP_ENTRY_PARAM). Plain data from the vendor, validated by the host.
+ */
+export type AppEntry = {
+  /** Unique within the app; kebab-case. */
+  id: string;
+  /** Row label in the user's language, e.g. "Purchases". */
+  title: string;
+  /** App route the row opens; its `entry` param equals `id`. */
+  route: string;
+  /** Optional row icon (an `AvatarImage`, kept structural: this file stays free of worker types); the app's own icon is used when absent. */
+  icon?: { url: string };
+};
+
+/** The `entry` param of an app route (`section/path?entry=sales`), or null. */
+export function appRouteEntry(route: string | undefined): string | null {
+  const query = route?.split("?")[1];
+  return query ? new URLSearchParams(query).get(APP_ENTRY_PARAM) : null;
+}
+
+const MAX_ENTRIES = 12;
+const MAX_ENTRY_TITLE = 60;
+const ENTRY_ID = /^[a-z][a-z0-9-]{0,31}$/;
+
+/** Keep well-formed entries: unique kebab-case ids, a title, a valid route naming its own entry. Fewer than two valid entries means none. */
+export function sanitizeAppEntries(raw: unknown): AppEntry[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  let result: AppEntry[] = [];
+  let ids: Record<string, true> = {};
+  for (let item of raw) {
+    if (result.length >= MAX_ENTRIES) break;
+    if (typeof item !== "object" || item === null) continue;
+    let { id, title, route, icon } = item as Record<string, unknown>;
+    if (typeof id !== "string" || !ENTRY_ID.test(id) || ids[id]) continue;
+    if (typeof title !== "string" || !title.trim() || !isAppRoute(route) || appRouteEntry(route) !== id) continue;
+    ids[id] = true;
+    let url = typeof icon === "object" && icon !== null ? (icon as Record<string, unknown>).url : undefined;
+    result.push({ id, title: title.slice(0, MAX_ENTRY_TITLE), route, icon: typeof url === "string" ? { url } : undefined });
+  }
+  return result.length > 1 ? result : undefined;
+}
+
 const ACTION_KINDS: Record<AppActionKind, true> = { create: true, list: true, report: true, operation: true, settings: true };
 const MENU_KINDS: Record<AppMenuKind, true> = { documents: true, registers: true, journals: true, reports: true, references: true, classifiers: true };
 const MAX_ACTIONS = 300;

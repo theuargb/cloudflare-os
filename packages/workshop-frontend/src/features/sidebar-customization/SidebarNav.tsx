@@ -136,6 +136,8 @@ const SidebarNavContent = ({
       <SidebarItem
         to={def.to}
         params={def.params}
+        search={def.search}
+        entry={def.entry}
         label={label}
         icon={def.icon}
         collapsed={collapsed}

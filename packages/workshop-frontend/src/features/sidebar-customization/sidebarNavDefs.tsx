@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import type { LinkProps } from '@tanstack/react-router'
-import { Blueprint, Compass, House, SquaresFour, Stack } from '@phosphor-icons/react'
+import { House } from '@phosphor-icons/react'
 import type { GatekeeperAppInfo } from '@gadgets/workshop-shared/api'
 import { GatekeeperAppIcon } from '../../components/GatekeeperAppIcon'
 import type { SidebarStructure } from './sidebarLayout'
@@ -10,6 +10,10 @@ export type SidebarItemDef = {
   label: string
   to: LinkProps['to']
   params?: LinkProps['params']
+  /** Search params of the link: an app entry row opens the app at the entry's route (`at`). */
+  search?: { at: string }
+  /** Set on the rows of an app that publishes several entries; drives the active highlight. */
+  entry?: { id: string; first: boolean }
   icon: ReactNode
 }
 
@@ -20,28 +24,28 @@ export type SidebarNavDefaults = {
   groupTitles: Map<string, string>
 }
 
-const builtin = (id: string, label: string, to: LinkProps['to'], icon: ReactNode): SidebarItemDef => ({
-  key: `builtin:${id}`,
-  label,
-  to,
-  icon,
-})
+const HOME: SidebarItemDef = {
+  key: 'builtin:home',
+  label: 'Home',
+  to: '/',
+  icon: <House size={14} weight="regular" />,
+}
 
-const HOME = builtin('home', 'Home', '/', <House size={14} weight="regular" />)
-const WORKSPACES = builtin('workspaces', 'Workspaces', '/workspaces', <SquaresFour size={14} weight="regular" />)
-const BLUEPRINTS = builtin('blueprints', 'Blueprints', '/blueprints', <Blueprint size={14} weight="regular" />)
-const OUTPUTS = builtin('outputs', 'Outputs', '/outputs', <Stack size={14} weight="regular" />)
-const EXPLORE = builtin('explore', 'Explore', '/explore', <Compass size={14} weight="regular" />)
+/** One row for a single-area app, one row per entry for an app that publishes `entries`. */
+const appItems = (app: GatekeeperAppInfo): SidebarItemDef[] => {
+  const base = { to: '/gatekeepers/$appId' as LinkProps['to'], params: { appId: app.id } as LinkProps['params'] }
+  if (!app.entries) return [{ ...base, key: `app:${app.id}`, label: app.title, icon: <GatekeeperAppIcon app={app} /> }]
+  return app.entries.map((entry, index) => ({
+    ...base,
+    key: `app:${app.id}:${entry.id}`,
+    label: entry.title,
+    search: { at: entry.route },
+    entry: { id: entry.id, first: index === 0 },
+    icon: <GatekeeperAppIcon app={{ ...app, icon: entry.icon ?? app.icon }} />,
+  }))
+}
 
-const appItem = (app: GatekeeperAppInfo): SidebarItemDef => ({
-  key: `app:${app.id}`,
-  label: app.title,
-  to: '/gatekeepers/$appId',
-  params: { appId: app.id } as LinkProps['params'],
-  icon: <GatekeeperAppIcon app={app} />,
-})
-
-/** The sidebar as modules declare it: built-ins, ungrouped apps, then one group per `VendorDescription.group`, in the order `apps` arrives (the backend sorts by group, then item order). */
+/** The sidebar as modules declare it: Home, ungrouped apps, then one group per `VendorDescription.group`, in the order `apps` arrives (the backend sorts by group, then item order). */
 export const buildSidebarDefaults = (apps: GatekeeperAppInfo[]): SidebarNavDefaults => {
   const items = new Map<string, SidebarItemDef>()
   const add = (def: SidebarItemDef): string => {
@@ -49,14 +53,7 @@ export const buildSidebarDefaults = (apps: GatekeeperAppInfo[]): SidebarNavDefau
     return def.key
   }
 
-  const main = [
-    add(HOME),
-    add(WORKSPACES),
-    add(BLUEPRINTS),
-    add(OUTPUTS),
-    ...apps.filter((app) => !app.group).map((app) => add(appItem(app))),
-    add(EXPLORE),
-  ]
+  const main = [add(HOME), ...apps.filter((app) => !app.group).flatMap(appItems).map(add)]
 
   const groupTitles = new Map<string, string>()
   const groups: { key: string; items: string[] }[] = []
@@ -69,7 +66,7 @@ export const buildSidebarDefaults = (apps: GatekeeperAppInfo[]): SidebarNavDefau
       groups.push(group)
       groupTitles.set(key, app.group.title)
     }
-    group.items.push(add(appItem(app)))
+    group.items.push(...appItems(app).map(add))
   }
 
   return { structure: { main, groups }, items, groupTitles }
