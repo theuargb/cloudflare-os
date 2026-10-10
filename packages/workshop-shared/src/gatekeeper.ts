@@ -80,12 +80,27 @@ export type VendorDescription = {
 }
 
 /**
+ * Authenticated actor facts the Workshop supplies to a gatekeeper: to an agent session (the human
+ * whose authority the domain must check) and to a management UI on each open. `isAdmin` is freshly
+ * computed by the Workshop and is never a claim made by a gatekeeper or agent.
+ */
+export type ActorContext = {
+  /**
+   * Canonical authenticated actor id — the username for password accounts, the email for Access
+   * and sign-in accounts. The same person has the same id in agent sessions and management UIs.
+   */
+  actorId: string;
+  /** Current display data used to identify the actor in audit trails and shared management activity. */
+  actor: { displayName: string; avatar?: AvatarImage };
+  /** Whether the actor is currently a deployment administrator under `ADMINS`. */
+  isAdmin: boolean;
+}
+
+/**
  * Per-open context the Workshop passes to GatekeeperUser.startAppUi(). `isAdmin` is supplied fresh
  * each time rather than baked into the account, since a user's admin status can change over time.
  */
-export type AppUiContext = {
-  isAdmin: boolean;
-}
+export type AppUiContext = ActorContext;
 
 // The agent catalog is bounded discovery metadata a gatekeeper exposes via
 // Gatekeeper.getAgentCatalog() so the agent can see *what* is reachable through a session (e.g. the
@@ -962,7 +977,7 @@ export interface Gatekeeper<Session> extends DurableObject {
    * ignore this parameter (and can even omit the parameter from their `applyAction()`
    * declaration).
    */
-  applyAction(action: number, cache: RpcStub<GitCache>): Promise<void>;
+  applyAction(action: number, cache: RpcStub<GitCache>, context?: ActorContext): Promise<void>;
 
   /**
    * Indicates that an action was rejected by the user. The gatekeeper should clean up any
@@ -1105,6 +1120,21 @@ export interface SlashCommandProvider extends RpcTarget {
  * called before applying them.
  */
 export interface ApprovalQueue extends ObservationAuthorizer {
+  /**
+   * Resolves the authenticated actor initiating this agent session, including current workspace
+   * admin status. Returns undefined for non-agent sessions. Agent callers must fail closed when
+   * this is undefined; the result is authority context, not caller-provided input.
+   */
+  getAgentActionContext?(): Promise<ActorContext | undefined>;
+  /**
+   * Resolves the authenticated user a gadget's calls through an ambient singleton session act
+   * for: the workspace owner, whose singleton account backs that session. Returns undefined for
+   * every other caller (agents, users, hooks) and for non-ambient gatekeepers. Like
+   * getAgentActionContext, it is authority context, not caller input; reads must still be
+   * authorized as observations, and observer verification keeps what the gadget read from
+   * collaborators who could not read it themselves.
+   */
+  getGadgetActorContext?(): Promise<ActorContext | undefined>;
   // TODO: Method to indicate that the gadget tried to perform an action that the gatekeeper itself
   //   hasn't been authorized to do (e.g. the user hasn't authorized the right OAuth scopes). The
   //   system should direct the user to the right UI to authorize the action.
