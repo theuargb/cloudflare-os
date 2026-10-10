@@ -20,6 +20,7 @@ import {
   AccountDescription,
   SupportedResource,
   VendorDescription,
+  compareGatekeeperOrder,
 } from '@gadgets/workshop-shared/gatekeeper'
 import { GatekeeperVendorInfo } from '@gadgets/workshop-shared/api'
 import { useDocumentTitle } from '../useDocumentTitle'
@@ -648,16 +649,18 @@ function ConnectorsPage() {
       vendors.find((v) => v.id === account.vendorId)?.supportedResources ??
       account.supportedResources
 
-    return accounts.filter((a) => {
-      const resources = resourcesForAccountFilter(a)
-      return (
-        matchesSearch(a.accountDescription.displayName) ||
-        matchesSearch(a.accountDescription.uniqueName) ||
-        matchesSearch(a.vendorDescription.displayName) ||
-        matchesSearch(a.vendorDescription.tagline) ||
-        resources.some((r) => matchesSearch(r.title))
-      )
-    })
+    return accounts
+      .filter((a) => {
+        const resources = resourcesForAccountFilter(a)
+        return (
+          matchesSearch(a.accountDescription.displayName) ||
+          matchesSearch(a.accountDescription.uniqueName) ||
+          matchesSearch(a.vendorDescription.displayName) ||
+          matchesSearch(a.vendorDescription.tagline) ||
+          resources.some((r) => matchesSearch(r.title))
+        )
+      })
+      .toSorted((a, b) => compareGatekeeperOrder(a.vendorDescription, b.vendorDescription))
   }, [accounts, vendors, searchLower])
 
   // Connectable vendors = OAuth/resource gatekeepers plus opt-in ambient ones, rendered identically.
@@ -675,12 +678,14 @@ function ConnectorsPage() {
     const matchesSearch = (text: string | undefined) =>
       !searchLower || (text ?? '').toLowerCase().includes(searchLower)
 
-    return availableVendors.filter(
-      (v) =>
-        matchesSearch(v.description.displayName) ||
-        matchesSearch(v.description.tagline) ||
-        v.supportedResources.some((r) => matchesSearch(r.title)),
-    )
+    return availableVendors
+      .filter(
+        (v) =>
+          matchesSearch(v.description.displayName) ||
+          matchesSearch(v.description.tagline) ||
+          v.supportedResources.some((r) => matchesSearch(r.title)),
+      )
+      .toSorted((a, b) => compareGatekeeperOrder(a.description, b.description))
   }, [availableVendors, searchLower])
 
   const activeAccount: AccountEntry | undefined =

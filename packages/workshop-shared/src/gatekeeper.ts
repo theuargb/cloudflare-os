@@ -17,7 +17,7 @@
 // `Adapter` type is the root interface implemented by the service binding.
 
 import type { WorkerEntrypoint, DurableObject, RpcTarget, RpcStub } from "cloudflare:workers";
-import type { AppInbox, AppNavigation, AppSearchHit } from "./app-host.js";
+import type { AppEntry, AppInbox, AppNavigation, AppSearchHit } from "./app-host.js";
 
 /**
  * A pagination cursor.
@@ -35,6 +35,9 @@ export interface Cursor<T> {
 export type AvatarImage = {
   url: string;
 }
+
+/** A gatekeeper's sidebar/connector group. `order` is the group's hundred, e.g. 100, 200. */
+export type VendorGroup = { title: string; order: number };
 
 /** Describes a connected GatekeeperVendor, for display purposes. */
 export type VendorDescription = {
@@ -78,6 +81,27 @@ export type VendorDescription = {
    * management UI (see AccountDescription.singleton / .providesUi).
    */
   autoProvisionsAccount?: boolean;
+
+  /** Group shared by related gatekeepers: one sidebar section, adjacent connector cards. */
+  group?: VendorGroup;
+
+  /** Default position: `group.order` + index inside the group (e.g. 101, 110). Lower first. */
+  order?: number;
+
+  /**
+   * Sidebar rows of an app that serves several business areas: one row per entry instead of one for
+   * the app (e.g. a trade module's "Purchases" and "Sales"). Vendor-level like `group`/`order`, so
+   * it follows module upgrades. Fewer than two valid entries are ignored (see sanitizeAppEntries).
+   */
+  entries?: AppEntry[];
+}
+
+type Ordered = { group?: VendorGroup; order?: number };
+const rank = (value: number | undefined) => value ?? Number.MAX_SAFE_INTEGER;
+
+/** Group order, then item order; undeclared values sort last; equal keys keep input order (stable sort). */
+export function compareGatekeeperOrder(a: Ordered, b: Ordered): number {
+  return rank(a.group?.order) - rank(b.group?.order) || rank(a.order) - rank(b.order);
 }
 
 /**
