@@ -1,6 +1,6 @@
 import { useState, type KeyboardEvent, type ReactNode } from 'react'
 import { CaretDown, PencilSimple } from '@phosphor-icons/react'
-import type { GatekeeperAppInfo } from '@gadgets/workshop-shared/api'
+import type { GatekeeperAppInfo, GatekeeperAppNavigation } from '@gadgets/workshop-shared/api'
 import SidebarItem from '../../components/AppShell/SidebarItem'
 import { useOptionalAuthenticatedApi } from '../../AuthContext'
 import { SidebarLabelEditor } from './SidebarLabelEditor'
@@ -61,21 +61,28 @@ const RenameButton = ({ label, group, onClick }: { label: string; group?: 'secti
 )
 
 /**
- * The sidebar's navigation: built-in rows, ungrouped module apps and module groups. Per-user order,
- * group membership and labels are layered over the module defaults and kept in localStorage.
+ * The sidebar's navigation: built-in rows, ungrouped module apps and module groups (or an app's own
+ * sidebar tree from its navigation). Per-user order, group membership and labels are layered over the
+ * module defaults and kept in localStorage.
  */
-export const SidebarNav = ({ apps, collapsed }: { apps: GatekeeperAppInfo[]; collapsed: boolean }) => {
+export const SidebarNav = ({ apps, navigation, collapsed }: {
+  apps: GatekeeperAppInfo[]
+  navigation: GatekeeperAppNavigation[]
+  collapsed: boolean
+}) => {
   const userId = useOptionalAuthenticatedApi()?.currentUser?.id ?? null
-  return <SidebarNavContent key={userId ?? ''} userId={userId} apps={apps} collapsed={collapsed} />
+  return <SidebarNavContent key={userId ?? ''} userId={userId} apps={apps} navigation={navigation} collapsed={collapsed} />
 }
 
 const SidebarNavContent = ({
   userId,
   apps,
+  navigation,
   collapsed,
 }: {
   userId: string | null
   apps: GatekeeperAppInfo[]
+  navigation: GatekeeperAppNavigation[]
   collapsed: boolean
 }) => {
   const [layout, setLayout] = useState<SidebarLayout>(() =>
@@ -84,7 +91,7 @@ const SidebarNavContent = ({
   const [closed, setClosed] = useState(readClosedGroups)
   const [editingKey, setEditingKey] = useState<string | null>(null)
 
-  const defaults = buildSidebarDefaults(apps)
+  const defaults = buildSidebarDefaults(apps, navigation)
   const resolved = resolveSidebar(defaults.structure, layout)
   const customizable = userId !== null && !collapsed
 

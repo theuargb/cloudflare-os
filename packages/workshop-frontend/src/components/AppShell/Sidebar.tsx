@@ -3,6 +3,7 @@ import { ArrowLeft, Hexagon, MagnifyingGlass, SidebarSimple } from '@phosphor-ic
 import { useSiteName } from '../../ServerConfigContext'
 import SiteLogo from '../SiteLogo'
 import { useGatekeeperApps } from '../../useGatekeeperApps'
+import { useAppNavigation } from '../AppNavigation/useAppNavigation'
 import { openCommandPalette } from './commandPaletteBus'
 import {
   SidebarWorkspacesProvider,
@@ -35,6 +36,8 @@ export default function Sidebar({
   // and is connected / enabled for everyone). Disabled or not-yet-connected ones aren't returned, so
   // they simply don't appear. The set is fully dynamic — no gatekeeper is hardcoded.
   const gatekeeperApps = useGatekeeperApps()
+  // An app's navigation may carry its own sidebar tree, which replaces its row (sidebarNavDefs).
+  const appNavigation = useAppNavigation()
 
   return (
     <aside
@@ -109,7 +112,7 @@ export default function Sidebar({
 
         {/* min-h-0 gives this region a bounded height between the pinned brand and profile rows. */}
         <div className="sidebar-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
-          <SidebarNav apps={gatekeeperApps} collapsed={collapsed} />
+          <SidebarNav apps={gatekeeperApps} navigation={appNavigation} collapsed={collapsed} />
 
           <div className="mt-1">
             <SidebarWorkspacesLists collapsed={collapsed} />
