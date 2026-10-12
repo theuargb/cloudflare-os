@@ -39,8 +39,18 @@ export type AppAction = {
 export type AppSectionKind = "overview" | "documents" | "registers" | "journals" | "reports" | "references" | "classifiers" | "settings";
 export type AppMenuKind = Exclude<AppSectionKind, "overview" | "settings">;
 
-/** What a management app exposes to the host shell: its launcher actions (topbar menus and ⌘K). */
-export type AppNavigation = { actions: AppAction[] };
+/**
+ * One sidebar section an app publishes (AppNavigation.sidebar); the Workshop merges it with other
+ * apps' sections of the same title and orders sections by `order` (VendorGroup.order). Items are
+ * entries: each route carries `entry=<id>` (APP_ENTRY_PARAM), which drives the row highlight.
+ */
+export type AppSidebarGroup = { title: string; order: number; items: AppEntry[] };
+
+/**
+ * What a management app exposes to the host shell: its launcher actions (topbar menus and ⌘K) and,
+ * optionally, its per-user sidebar tree, which replaces the app's own row or vendor entries.
+ */
+export type AppNavigation = { actions: AppAction[]; sidebar?: AppSidebarGroup[] };
 
 /**
  * Launcher navigation between the Workshop host and a sandboxed gatekeeper app. The frame has no
@@ -146,36 +156,77 @@ const MAX_ENTRIES = 12;
 const MAX_ENTRY_TITLE = 60;
 const ENTRY_ID = /^[a-z][a-z0-9-]{0,31}$/;
 
-/** Keep well-formed entries: unique kebab-case ids, a title, a valid route naming its own entry. Fewer than two valid entries means none. */
+/** One well-formed entry (unique kebab-case id, a title, a valid route naming its own entry), or null. */
+function sanitizeEntry(item: unknown, ids: Record<string, true>): AppEntry | null {
+  if (typeof item !== "object" || item === null) return null;
+  let { id, title, route, icon } = item as Record<string, unknown>;
+  if (typeof id !== "string" || !ENTRY_ID.test(id) || ids[id]) return null;
+  if (typeof title !== "string" || !title.trim() || !isAppRoute(route) || appRouteEntry(route) !== id) return null;
+  ids[id] = true;
+  let url = typeof icon === "object" && icon !== null ? (icon as Record<string, unknown>).url : undefined;
+  return { id, title: title.slice(0, MAX_ENTRY_TITLE), route, icon: typeof url === "string" ? { url } : undefined };
+}
+
+/** Keep well-formed entries (see sanitizeEntry). Fewer than two valid entries means none. */
 export function sanitizeAppEntries(raw: unknown): AppEntry[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   let result: AppEntry[] = [];
   let ids: Record<string, true> = {};
   for (let item of raw) {
     if (result.length >= MAX_ENTRIES) break;
-    if (typeof item !== "object" || item === null) continue;
-    let { id, title, route, icon } = item as Record<string, unknown>;
-    if (typeof id !== "string" || !ENTRY_ID.test(id) || ids[id]) continue;
-    if (typeof title !== "string" || !title.trim() || !isAppRoute(route) || appRouteEntry(route) !== id) continue;
-    ids[id] = true;
-    let url = typeof icon === "object" && icon !== null ? (icon as Record<string, unknown>).url : undefined;
-    result.push({ id, title: title.slice(0, MAX_ENTRY_TITLE), route, icon: typeof url === "string" ? { url } : undefined });
+    let entry = sanitizeEntry(item, ids);
+    if (entry) result.push(entry);
   }
   return result.length > 1 ? result : undefined;
 }
 
+const MAX_SIDEBAR_GROUPS = 24;
+const MAX_SIDEBAR_ITEMS = 240;
+
+/**
+ * Keep a well-formed sidebar tree: groups need a title and a finite order, items are entries with ids
+ * unique across the whole tree; empty groups are dropped, groups and items capped. No group left
+ * means no tree (the app keeps its own row).
+ */
+function sanitizeAppSidebar(raw: unknown): AppSidebarGroup[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  let result: AppSidebarGroup[] = [];
+  let ids: Record<string, true> = {};
+  let count = 0;
+  for (let group of raw) {
+    if (result.length >= MAX_SIDEBAR_GROUPS || count >= MAX_SIDEBAR_ITEMS) break;
+    if (typeof group !== "object" || group === null) continue;
+    let { title, order, items } = group as Record<string, unknown>;
+    if (typeof title !== "string" || !title.trim() || typeof order !== "number" || !Number.isFinite(order)) continue;
+    if (!Array.isArray(items)) continue;
+    let kept: AppEntry[] = [];
+    for (let item of items) {
+      if (count >= MAX_SIDEBAR_ITEMS) break;
+      let entry = sanitizeEntry(item, ids);
+      if (!entry) continue;
+      kept.push(entry);
+      count++;
+    }
+    if (kept.length > 0) result.push({ title: title.trim().slice(0, MAX_GROUP), order, items: kept });
+  }
+  return result.length > 0 ? result : undefined;
+}
+
 const ACTION_KINDS: Record<AppActionKind, true> = { create: true, list: true, report: true, operation: true, settings: true };
 const MENU_KINDS: Record<AppMenuKind, true> = { documents: true, registers: true, journals: true, reports: true, references: true, classifiers: true };
-const MAX_ACTIONS = 300;
+// One app may publish every module's actions (a composed app), hence the generous cap.
+const MAX_ACTIONS = 1000;
 const MAX_TEXT = 120;
 const MAX_KEYWORDS = 12;
 const MAX_KEYWORD = 40;
 const MAX_GROUP = 60;
 
-/** Keep a well-formed navigation payload from an untrusted app: invalid actions are dropped, the rest capped. */
+/** Keep a well-formed navigation payload from an untrusted app: invalid actions and sidebar items are dropped, the rest capped. */
 export function sanitizeAppNavigation(raw: unknown): AppNavigation {
   if (typeof raw !== "object" || raw === null) return { actions: [] };
-  return { actions: sanitizeAppActions((raw as Record<string, unknown>).actions) };
+  let { actions, sidebar } = raw as Record<string, unknown>;
+  let tree = sanitizeAppSidebar(sidebar);
+  return tree ? { actions: sanitizeAppActions(actions), sidebar: tree } : { actions: sanitizeAppActions(actions) };
 }
 
 /** Keep well-formed actions from an untrusted app: unique ids, known kinds and menus, valid routes, capped text. */
