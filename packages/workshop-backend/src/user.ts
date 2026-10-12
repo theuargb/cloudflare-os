@@ -1894,7 +1894,7 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
   }
 
   async startCreationConfigurator(accountId: number, resourceUrlPattern: string)
-      : Promise<GatekeeperUiFrame> {
+      : Promise<ResourceConfiguratorFrame> {
     let record = this.storage.connectedAccounts.get(accountId);
     if (!record) throw new Error("No such account.");
     return (record.account as unknown as CreationConfiguratorStub)

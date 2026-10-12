@@ -72,7 +72,7 @@ type OverlayState = 'full' | null
 // Upper bound on one workspace-title lookup, matching the app's page size.
 const MAX_RESOLVED_WORKSPACES = 100
 
-// Reported routes the Workshop URL has not shown yet; bounded in case it never shows some.
+// Reported routes the Workshop URL has not shown yet; bounded while the app reports but is hidden.
 const MAX_UNSEEN_ROUTES = 32
 
 // Apps may ask for a navigation refetch at most this often (each one fans out to every app).
@@ -278,8 +278,8 @@ class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
     this.#routing.report(route, mode ?? 'replace')
   }
 
-  // The Workshop URL shows `route`. A route the app reported is its own echo: consume the queue up
-  // to it.
+  // The Workshop URL shows `route` (every change while the app is on screen, and once more when it
+  // comes back on screen). A route the app reported is its own echo: consume the queue up to it.
   // Anything else (sidebar row, launcher pick, Back/Forward, app link) is pushed into the open app.
   pushRoute(route: string) {
     const index = this.#unseen.indexOf(route)
@@ -354,14 +354,9 @@ class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
     for (const resolve of resolvers) resolve(ack)
   }
 
-  // Cancel the rate limiter's pending resume timer once this host is no longer in use.
-  dispose() {
-    this.#disposeRateLimiter()
-    this.#cancelUserPicker()
-    this.#themeReceiver?.[Symbol.dispose]?.()
-    this.#themeReceiver = null
-    this.#routeReceiver?.[Symbol.dispose]?.()
-    this.#routeReceiver = null
+  // Restore the iframe from a full-viewport overlay and settle queued presentation calls: on dispose,
+  // and when the app leaves the screen (kept mounted but hidden) so its overlay never covers others.
+  suspendPresentation() {
     if (this.#frameId !== null) {
       cancelAnimationFrame(this.#frameId)
       this.#frameId = null
@@ -374,18 +369,31 @@ class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
       this.#present(false)
     }
   }
+
+  // Cancel the rate limiter's pending resume timer once this host is no longer in use.
+  dispose() {
+    this.#disposeRateLimiter()
+    this.#cancelUserPicker()
+    this.#themeReceiver?.[Symbol.dispose]?.()
+    this.#themeReceiver = null
+    this.#routeReceiver?.[Symbol.dispose]?.()
+    this.#routeReceiver = null
+    this.suspendPresentation()
+  }
 }
 
 /**
  * Hosts a gatekeeper's full-page management SPA in a sandboxed, network-isolated iframe. The app
  * talks to the gatekeeper only through the `ui` capability carried over the MessagePort RPC session.
- * The iframe fills its parent container.
+ * The iframe fills its parent container; a hidden app stays loaded (kept mounted by the shell).
  */
-export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, route = '', onRouteChange }: {
+export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, route = '', visible = true, onRouteChange }: {
   frame: GatekeeperUiFrame,
   gatekeeperVendorId: string,
   /** The app route held in the Workshop URL; changes the app did not report are pushed into it. */
   route?: string,
+  /** Whether the app is on screen. A hidden app keeps running but drops any full-viewport overlay. */
+  visible?: boolean,
   /** Called with each route the app navigates to, to mirror it into the Workshop URL. */
   onRouteChange?: (route: string, mode: AppRouteMode) => void,
 }) {
@@ -417,14 +425,15 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, rout
     hostRef.current?.updateTheme({ mode: resolvedThemeMode, accentColor })
   }, [resolvedThemeMode, accentColor])
   // The URL route is read when the app subscribes; later changes reach the open app through
-  // pushRoute, which filters out the app's own reports.
+  // pushRoute, which filters out the app's own reports. Coming back on screen re-syncs once.
   const routeRef = useRef(route)
   routeRef.current = route
   const onRouteChangeRef = useRef(onRouteChange)
   onRouteChangeRef.current = onRouteChange
   useEffect(() => {
-    hostRef.current?.pushRoute(route)
-  }, [route])
+    if (visible) hostRef.current?.pushRoute(route)
+    else hostRef.current?.suspendPresentation()
+  }, [route, visible])
 
   const setOverlayPhase = useCallback((next: OverlayState) => {
     if (overlayRef.current === next) return
@@ -585,16 +594,17 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, rout
       hostRef.current = null
       setOverlayPhase(null)
     }
-    // Re-establish the session if either the HTML or the `ui` capability changes, so a new frame
+    // Re-establish the session if the document or the `ui` capability changes, so a new frame
     // carrying a fresh stub (even with identical HTML) never keeps talking through the stale one.
-  }, [frame.iframeHtml, frame.ui, gatekeeperVendorId, navigate, router, cancelUserPicker, openPrompt, openTarget,
+  }, [frame.iframeHtml, frame.iframeUrl, frame.ui, gatekeeperVendorId, navigate, router, cancelUserPicker, openPrompt, openTarget,
       openUserPicker, present, resolveWorkspaceTitles, refreshNavigation, setOverlayPhase])
 
   return (
     <>
       <iframe
         ref={iframeRef}
-        srcDoc={frame.iframeHtml}
+        // A frame URL is validated by the page (isAppFrameUrl); it loads inside the same sandbox.
+        {...(frame.iframeUrl !== undefined ? { src: frame.iframeUrl } : { srcDoc: frame.iframeHtml })}
         // allow-scripts: run the app's JS. allow-modals: its beforeunload unsaved-changes guard.
         // allow-downloads: save files the app already holds (exports, print forms) — browsers block every
         // download from a sandboxed frame without it, even from a user-clicked <a download>. Not
