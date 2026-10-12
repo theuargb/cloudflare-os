@@ -41,6 +41,10 @@ export const DEVICE_SESSION_LIFETIME_MS = 30 * 24 * 60 * 60_000;
  */
 export const GATEKEEPER_USER_SELECTION_LIFETIME_MS = 30 * 60 * 1000;
 
+// How long a cached vendor describe() result stays fresh. Descriptions only change on redeploy, but
+// the TTL bounds how long a stale Worker binding's description lingers after a rolling deploy.
+const DESCRIBE_TTL_MS = 5 * 60_000;
+
 /**
  * Metadata about an auto-provisioned account that provides an agent singleton and/or a management UI.
  * Returned to the overseer (ambient capsules / catalog) and the management-UI listing.
@@ -204,6 +208,21 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
   private vendors: Map<string, Service<GatekeeperVendor>>;
   private adminSettings: DurableObjectNamespace<AdminSettings>;
   #notificationSubscribers = new Map<object, RpcStub<NotificationSubscriber>>();
+  // Cached describe() promises. Every app list/provision fans out describe() to each bound vendor,
+  // but a vendor's description only changes on redeploy, so a short in-process TTL suffices. Failed
+  // describes are never cached: the rejection handler drops the entry so the next caller retries.
+  #descriptions = new Map<string, {at: number, description: Promise<VendorDescription>}>();
+
+  #describe(vendorId: string, vendor: Service<GatekeeperVendor>): Promise<VendorDescription> {
+    let cached = this.#descriptions.get(vendorId);
+    if (cached && Date.now() - cached.at < DESCRIBE_TTL_MS) return cached.description;
+    let entry = {at: Date.now(), description: vendor.describe()};
+    this.#descriptions.set(vendorId, entry);
+    entry.description.catch(() => {
+      if (this.#descriptions.get(vendorId) === entry) this.#descriptions.delete(vendorId);
+    });
+    return entry.description;
+  }
 
   constructor(ctx: DurableObjectState, env: Cloudflare.Env) {
     super(ctx, env);
@@ -1375,7 +1394,7 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
       Promise<Array<{vendorId: string, vendor: Service<GatekeeperVendor>, description: VendorDescription}>> {
     let described = await Promise.all([...this.vendors].map(async ([vendorId, vendor]) => {
       try {
-        let description = await vendor.describe();
+        let description = await this.#describe(vendorId, vendor);
         return description.autoProvisionsAccount ? {vendorId, vendor, description} : null;
       } catch (err) {
         logger.warn("failed to describe vendor", {
@@ -1427,7 +1446,7 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
       throw new Error(`The "${vendorId}" gatekeeper is disabled on this deployment.`);
     }
 
-    let description = await vendor.describe();
+    let description = await this.#describe(vendorId, vendor);
     if (!description.autoProvisionsAccount) {
       throw new Error(`The "${vendorId}" gatekeeper can't be added this way.`);
     }
