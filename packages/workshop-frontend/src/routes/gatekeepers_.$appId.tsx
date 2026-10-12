@@ -1,7 +1,6 @@
-import { useCallback } from 'react'
 import { createFileRoute } from '@tanstack/react-router'
-import { appRouteEntry, isAppRoute, type AppRouteMode } from '@gadgets/workshop-shared/app-host'
-import GatekeeperAppPage from '../GatekeeperAppPage'
+import { appRouteEntry, isAppRoute } from '@gadgets/workshop-shared/app-host'
+import { useShowGatekeeperApp } from '../KeptGatekeeperApp'
 import { useDocumentTitle } from '../useDocumentTitle'
 import { useGatekeeperApps } from '../useGatekeeperApps'
 
@@ -13,7 +12,9 @@ type GatekeeperAppSearch = {
 /**
  * Generic host for any gatekeeper-served management app (VendorDescription.providesUi). The set of
  * apps and their nav entries come from the backend (useGatekeeperApps); nothing about a specific
- * gatekeeper is hardcoded here. GatekeeperAppPage renders "not available" if the id isn't bound.
+ * gatekeeper is hardcoded here. The app itself is rendered by the shell (KeptGatekeeperApp), which
+ * keeps it mounted after the user leaves this route; this route only puts it on screen at `at`.
+ * GatekeeperAppPage renders "not available" if the id isn't bound.
  *
  * The file is `gatekeepers_.$appId` (trailing underscore) so the URL is /gatekeepers/$appId without
  * nesting inside the /gatekeepers connectors page's component.
@@ -28,15 +29,9 @@ export const Route = createFileRoute('/gatekeepers_/$appId')({
 function GatekeeperApp() {
   const { appId } = Route.useParams()
   const { at } = Route.useSearch()
-  const navigate = Route.useNavigate()
   const app = useGatekeeperApps().find((a) => a.id === appId)
   const entry = app?.entries?.find((candidate) => candidate.id === appRouteEntry(at))
   useDocumentTitle(entry?.title ?? app?.title ?? 'App')
-  // The URL mirrors the app's route; a new screen adds a history entry, so Back returns to it, and
-  // a params-only change replaces the entry. Other URL changes are pushed into the open app.
-  const onRouteChange = useCallback(
-    (route: string, mode: AppRouteMode) => navigate({ search: { at: route || undefined }, replace: mode !== 'push' }),
-    [navigate],
-  )
-  return <GatekeeperAppPage appId={appId} route={at ?? ''} onRouteChange={onRouteChange} />
+  useShowGatekeeperApp(appId, at ?? '')
+  return null
 }
