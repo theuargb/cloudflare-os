@@ -85,6 +85,20 @@ const WORKSPACE_TITLES_TTL_MS = 10_000
 // Near the max int, so the full-viewport iframe sits above all Workshop chrome.
 const overlayZIndex = 2147483000
 
+// Each acquired frame gets its own iframe document: an already-loaded app handshakes once, so a
+// fresh `ui` capability (e.g. after the Workshop socket reconnected) is reachable only through a
+// reloaded document. Identity-keyed, so re-renders with the same frame never reload the app.
+const frameKeys = new WeakMap<GatekeeperUiFrame, number>();
+let nextFrameKey = 0;
+function frameKey(frame: GatekeeperUiFrame): number {
+  let key = frameKeys.get(frame);
+  if (key === undefined) {
+    key = ++nextFrameKey;
+    frameKeys.set(frame, key);
+  }
+  return key;
+}
+
 const baseIframeStyle: CSSProperties = {
   border: 0,
   background: 'transparent',
@@ -521,9 +535,10 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, rout
     const open = openPickerRef.current
     if (open) finishUserPicker(open)
   }, [finishUserPicker])
-  // The gatekeeper-defined capability remains opaque; this host only relays it through `ui`.
-  const capabilityRef = useRef<unknown>(null)
-  capabilityRef.current = frame.ui
+  // The live session reads these at call time, so a changed handler (new stub after a reconnect)
+  // never tears the session down.
+  const handlersRef = useRef({ openTarget, openPrompt, resolveWorkspaceTitles, refreshNavigation, navigate, router });
+  handlersRef.current = { openTarget, openPrompt, resolveWorkspaceTitles, refreshNavigation, navigate, router };
 
   useEffect(() => {
     connectedRef.current = false
@@ -541,28 +556,29 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, rout
         setOverlayPhase(null)
         return
       }
-      if (invalidatedRef.current || !capabilityRef.current) {
+      if (invalidatedRef.current || !frame.ui) {
         port.close()
         return
       }
       const host = new GatekeeperAppHostImpl(
-        capabilityRef.current,
+        frame.ui,
         present,
         themeRef.current,
-        openTarget,
-        openPrompt,
-        resolveWorkspaceTitles,
+        (target) => handlersRef.current.openTarget(target),
+        (prompt) => handlersRef.current.openPrompt(prompt),
+        (ids) => handlersRef.current.resolveWorkspaceTitles(ids),
         openUserPicker,
         cancelUserPicker,
         {
           current: () => routeRef.current,
           report: (next, mode) => onRouteChangeRef.current?.(next, mode),
           openApp: (appId, at, newTab) => {
+            const { navigate, router } = handlersRef.current;
             const target = { to: '/gatekeepers/$appId', params: { appId }, search: at ? { at } : {} } as const
             if (newTab) window.open(router.buildLocation(target).href, '_blank', 'noopener')
             else void navigate(target)
           },
-          refreshNavigation,
+          refreshNavigation: () => handlersRef.current.refreshNavigation(),
         },
       )
       hostRef.current = host
@@ -594,14 +610,14 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, rout
       hostRef.current = null
       setOverlayPhase(null)
     }
-    // Re-establish the session if the document or the `ui` capability changes, so a new frame
-    // carrying a fresh stub (even with identical HTML) never keeps talking through the stale one.
-  }, [frame.iframeHtml, frame.iframeUrl, frame.ui, gatekeeperVendorId, navigate, router, cancelUserPicker, openPrompt, openTarget,
-      openUserPicker, present, resolveWorkspaceTitles, refreshNavigation, setOverlayPhase])
+    // One session per acquired frame (the iframe is keyed by it, so a new frame always handshakes
+    // again); handler changes reach the live session through handlersRef instead of tearing it down.
+  }, [frame, gatekeeperVendorId, present, setOverlayPhase, openUserPicker, cancelUserPicker])
 
   return (
     <>
       <iframe
+        key={frameKey(frame)}
         ref={iframeRef}
         // A frame URL is validated by the page (isAppFrameUrl); it loads inside the same sandbox.
         {...(frame.iframeUrl !== undefined ? { src: frame.iframeUrl } : { srcDoc: frame.iframeHtml })}

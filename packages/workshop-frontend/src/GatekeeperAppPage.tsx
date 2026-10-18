@@ -52,6 +52,7 @@ export default function GatekeeperAppPage({ appId, route, visible, onRouteChange
           disposeFrame(frame)
           return
         }
+        setError(null);
         acquired = frame
         setState({ frame })
       })

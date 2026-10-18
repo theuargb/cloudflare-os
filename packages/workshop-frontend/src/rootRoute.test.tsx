@@ -19,8 +19,8 @@ const testState = vi.hoisted(() => ({
 // here, and the routed page is a marker so no real screen renders.
 vi.mock('@tanstack/react-router', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@tanstack/react-router')>()),
-  useRouterState: ({ select }: { select: (s: { location: { pathname: string } }) => unknown }) =>
-    select({ location: { pathname: testState.pathname } }),
+  useMatches: ({ select }: { select: (matches: { pathname: string }[]) => unknown }) =>
+    select([{ pathname: "/" }, { pathname: testState.pathname }]),
   Outlet: () => <div data-testid="outlet">routed page</div>,
 }))
 
