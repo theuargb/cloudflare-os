@@ -169,11 +169,11 @@ const SidebarNavContent = ({
   if (collapsed) {
     return (
       <>
-        <nav aria-label="Primary" className="flex flex-col gap-0.5 px-2 pt-2">
+        <nav aria-label="Primary" className="flex flex-col items-center gap-0.5 pt-2">
           {rows(resolved.main)}
         </nav>
         {resolved.groups.some((group) => group.items.length > 0) && (
-          <nav aria-label="Modules" className="flex flex-col gap-0.5 px-2 pt-2">
+          <nav aria-label="Modules" className="flex flex-col items-center gap-0.5 pt-2">
             {resolved.groups.flatMap((group) => rows(group.items))}
           </nav>
         )}
@@ -194,7 +194,16 @@ const SidebarNavContent = ({
       </nav>
 
       <nav aria-label="Modules" className={resolved.groups.length > 0 ? 'flex flex-col' : 'hidden'}>
-        {resolved.groups.map((group) => {
+        {plainRuns(resolved.groups, customizable).map((run) => {
+          // Outside customization a one-item group is just its row: adjacent ones stack as one plain list.
+          if (run.plain) {
+            return (
+              <div key={run.groups[0]!.key} className="mt-3 flex flex-col gap-0.5 px-2">
+                {run.groups.flatMap((group) => rows(group.items))}
+              </div>
+            );
+          }
+          const group = run.groups[0]!;
           const title = defaults.groupTitles.get(group.key) ?? group.key
           const label = layout.labels[group.key] ?? title
           const open = !closed.includes(title)
@@ -264,4 +273,21 @@ const SidebarNavContent = ({
       </nav>
     </>
   )
+};
+
+type GroupRun<G> = { plain: boolean; groups: G[] };
+
+/** Groups in order; outside customization, consecutive one-item groups merge into one plain run. */
+function plainRuns<G extends { key: string; items: string[] }>(
+  groups: readonly G[],
+  customizable: boolean,
+): GroupRun<G>[] {
+  const runs: GroupRun<G>[] = [];
+  for (const group of groups) {
+    const plain = !customizable && group.items.length === 1;
+    const last = runs.at(-1);
+    if (plain && last?.plain) last.groups.push(group);
+    else runs.push({ plain, groups: [group] });
+  }
+  return runs;
 }

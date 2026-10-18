@@ -110,8 +110,14 @@ export default function Sidebar({
           <SidebarWorkspacesTools collapsed={collapsed} />
         </div>
 
-        {/* min-h-0 gives this region a bounded height between the pinned brand and profile rows. */}
-        <div className="sidebar-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain">
+        {/* min-h-0 gives this region a bounded height between the pinned brand and profile rows.
+            Collapsed: symmetric scrollbar gutters keep the icon tiles centred under the pinned search button. */}
+        <div
+          className={[
+            'sidebar-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain',
+            collapsed ? '[scrollbar-gutter:stable_both-edges]' : '',
+          ].join(' ')}
+        >
           <SidebarNav apps={gatekeeperApps} navigation={appNavigation} collapsed={collapsed} />
 
           <div className="mt-1">
