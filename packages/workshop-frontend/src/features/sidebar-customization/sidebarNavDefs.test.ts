@@ -24,6 +24,53 @@ describe("sanitizeAppNavigation sidebar", () => {
   it("omits the tree when no group survives", () => {
     expect(sanitizeAppNavigation({ actions: [], sidebar: [{ title: "Облік", order: 100, items: [] }] })).toEqual({ actions: [] });
   });
+
+  it("keeps http(s) links, drops other schemes, and keeps a group that only has links", () => {
+    const navigation = sanitizeAppNavigation({
+      actions: [],
+      sidebar: [
+        {
+          title: "Зовнішні системи",
+          order: 9000,
+          items: [],
+          links: [
+            { id: "wms", title: " Склад ", href: "https://wms.example.com/app" },
+            { id: "bad", title: "Bad", href: "javascript:alert(1)" },
+            { id: "data", title: "Data", href: "data:text/html,x" },
+          ],
+        },
+      ],
+    });
+    expect(navigation.sidebar).toEqual([
+      {
+        title: "Зовнішні системи",
+        order: 9000,
+        items: [],
+        links: [{ id: "wms", title: "Склад", href: "https://wms.example.com/app" }],
+      },
+    ]);
+  });
+
+  it("drops a workplace switcher whose current option is unknown", () => {
+    const options = [
+      { id: "standard", title: "Стандартне" },
+      { id: "cashier", title: "Касира", description: "Каса" },
+    ];
+    expect(
+      sanitizeAppNavigation({ actions: [], workplaces: { label: "АРМ", current: "missing", options } }).workplaces,
+    ).toBeUndefined();
+    expect(
+      sanitizeAppNavigation({
+        actions: [],
+        workplaces: {
+          label: "АРМ",
+          current: "cashier",
+          options,
+          external: { title: "Системи", links: [{ id: "x", title: "X", href: "ftp://x" }] },
+        },
+      }).workplaces,
+    ).toEqual({ label: "АРМ", current: "cashier", options });
+  });
 });
 
 describe("buildSidebarDefaults", () => {
@@ -56,5 +103,28 @@ describe("buildSidebarDefaults", () => {
     const defaults = buildSidebarDefaults([ledger, peak], [{ appId: "peak", actions: [] }]);
     expect(defaults.structure.main).toEqual(["builtin:home", "app:peak"]);
     expect(defaults.structure.groups).toEqual([{ key: "group:Облік", items: ["app:ledger"] }]);
+  });
+
+  it("adds a tree's external links as href rows next to its entries", () => {
+    const defaults = buildSidebarDefaults(
+      [peak],
+      [
+        {
+          appId: "peak",
+          actions: [],
+          sidebar: [
+            {
+              title: "Зовнішні системи",
+              order: 9000,
+              items: [],
+              links: [{ id: "wms", title: "Склад", href: "https://wms.example.com" }],
+            },
+          ],
+        },
+      ],
+    );
+    expect(defaults.structure.groups).toEqual([{ key: "group:Зовнішні системи", items: ["link:peak:wms"] }]);
+    expect(defaults.items.get("link:peak:wms")).toMatchObject({ href: "https://wms.example.com", label: "Склад" });
+    expect(defaults.items.get("link:peak:wms")?.to).toBeUndefined();
   });
 });
