@@ -107,6 +107,9 @@ function activityStatus(
   if (record.state === 'rejected') {
     return { label: 'Denied', dotClass: 'bg-kumo-danger', textClass: 'text-kumo-danger' }
   }
+  if (record.state === "failed") {
+    return { label: "Failed", dotClass: "bg-kumo-danger", textClass: "text-kumo-danger" };
+  }
   return { label: 'Approved', dotClass: 'bg-kumo-success', textClass: 'text-kumo-subtle' }
 }
 
@@ -590,8 +593,8 @@ function AutoApprovalPanel({
                     </span>
                     <span className="mt-0.5 block text-[12px] leading-4 tracking-[-0.2px] text-kumo-inactive">
                       {restricted
-                        // Rules don't apply while restricted; say so, but keep them revocable.
-                        ? "Won't apply: this workspace has read sensitive data, so actions always require manual approval."
+                        ? // Rules don't apply while restricted; say so, but keep them revocable.
+                          "Won't apply: this workspace has read sensitive data, so actions always require manual approval."
                         : entry.orphaned
                           ? 'This connection no longer offers this action; the rule still applies.'
                           : entry.enabled
@@ -779,6 +782,11 @@ function HistoryRow({
 
       {expanded && (
         <div className="border-b border-kumo-line/70 px-5 pb-3 pl-[86px] pt-1">
+          {record.type === "action" && record.error && (
+            <p className="m-0 mb-1.5 whitespace-pre-wrap text-[13px] leading-[18px] tracking-[-0.25px] text-kumo-danger">
+              {record.error}
+            </p>
+          )}
           {record.description.description && (
             <p className="m-0 whitespace-pre-wrap text-[13px] leading-[18px] tracking-[-0.25px] text-kumo-subtle">
               {record.description.description}
