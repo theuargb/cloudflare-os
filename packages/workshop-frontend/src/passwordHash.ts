@@ -33,11 +33,3 @@ async function argon2Hash(saltName: string, password: string): Promise<Uint8Arra
 export async function hashPassword(username: string, password: string): Promise<Uint8Array> {
   return argon2Hash(normalizeUsername(username), password)
 }
-
-/**
- * Reproduces the pre-normalization hash, salted with the username exactly as typed at signup.
- * Exists only so LoginPage can re-salt old mixed-case accounts; delete once no deployment has any.
- */
-export async function hashPasswordLegacyCase(username: string, password: string): Promise<Uint8Array> {
-  return argon2Hash(username, password)
-}
