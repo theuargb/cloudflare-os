@@ -12,7 +12,10 @@ import type {
   GatekeeperAppThemeReceiver,
 } from '@gadgets/workshop-shared/theme'
 import { isAppId, isAppRoute, type AppRouteMode, type GatekeeperAppRouteReceiver } from '@gadgets/workshop-shared/app-host'
-import type { GatekeeperAppHost } from '@gadgets/workshop-shared/app-host'
+import type { GatekeeperAppHost, GatekeeperAppTourLocator } from '@gadgets/workshop-shared/app-host'
+import { sanitizeTour, type Tour } from "@gadgets/workshop-shared/tour";
+import { locateInFrame } from "./features/tour/frameTarget";
+import { dropAppTours, requestTour } from "./features/tour/tourStore";
 import { openCommandPalette } from './components/AppShell/commandPaletteBus'
 import { createRateLimitedCapability } from './rateLimitedCapability'
 import { useTheme } from './ThemeContext'
@@ -57,6 +60,9 @@ type UserPicker = {
 }
 
 const USER_PICKER_CANCELLED = 'Person selection cancelled. A delivery may already have been accepted.'
+
+// Queue a validated tour of this app; the locator answers its frame anchor lookups.
+type StartTour = (tour: Tour, locator: RpcStub<GatekeeperAppTourLocator>, replay: boolean) => void;
 // The app's route as mirrored in the Workshop URL ('' = the app's start screen), navigation to
 // another app's route (an inbox card, a cross-module link), here or in a new browser tab, and a
 // refetch of the user's apps and navigation.
@@ -139,6 +145,8 @@ class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
   readonly #openUserPicker: OpenUserPicker
   readonly #cancelUserPicker: CancelUserPicker
   readonly #routing: AppRouting
+  readonly #startTour: StartTour;
+  #tourLocator: RpcStub<GatekeeperAppTourLocator> | null = null;
   #presenting = false
   #theme: GatekeeperAppTheme
   #themeReceiver: RpcStub<GatekeeperAppThemeReceiver> | null = null
@@ -164,6 +172,7 @@ class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
     openUserPicker: OpenUserPicker,
     cancelUserPicker: CancelUserPicker,
     routing: AppRouting,
+    startTour: StartTour,
   ) {
     super()
     this.#theme = theme
@@ -183,6 +192,7 @@ class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
     this.#openUserPicker = openUserPicker
     this.#cancelUserPicker = cancelUserPicker
     this.#routing = routing
+    this.#startTour = startTour;
   }
 
   get ui(): RpcStub<RpcTarget> {
@@ -240,6 +250,17 @@ class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
 
   setAppPreference(key: string, value: string): void {
     writeGatekeeperAppPreference(key, value)
+  }
+
+  // Validated here: the tour comes from the untrusted app. The host decides whether it runs (once
+  // per user and version, only while the app is on screen); the frame only answers anchor lookups.
+  startTour(tour: unknown, locator: RpcStub<GatekeeperAppTourLocator>, replay?: unknown): void {
+    const clean = sanitizeTour(tour);
+    if (!clean || (replay !== undefined && typeof replay !== "boolean")) throw new TypeError("Invalid tour.");
+    this.#tourLocator?.[Symbol.dispose]?.();
+    // The argument stub is disposed when this call returns, so keep our own dup (released in dispose).
+    this.#tourLocator = locator.dup();
+    this.#startTour(clean, this.#tourLocator, replay === true);
   }
 
   // The app calls this once to learn the current theme and register a receiver for later changes.
@@ -390,6 +411,8 @@ class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
     this.#cancelUserPicker()
     this.#themeReceiver?.[Symbol.dispose]?.()
     this.#themeReceiver = null
+    this.#tourLocator?.[Symbol.dispose]?.();
+    this.#tourLocator = null;
     this.#routeReceiver?.[Symbol.dispose]?.()
     this.#routeReceiver = null
     this.suspendPresentation()
@@ -553,6 +576,7 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, rout
         sessionRef.current = null
         hostRef.current?.dispose()
         hostRef.current = null
+        dropAppTours(gatekeeperVendorId);
         setOverlayPhase(null)
         return
       }
@@ -580,6 +604,14 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, rout
           },
           refreshNavigation: () => handlersRef.current.refreshNavigation(),
         },
+        (tour, locator, replay) =>
+          requestTour({
+            key: `app:${gatekeeperVendorId}:${tour.id}`,
+            tour,
+            route: { kind: "app", appId: gatekeeperVendorId },
+            replay,
+            locateFrame: (anchor, reveal) => locateInFrame(locator, iframeRef.current, anchor, reveal),
+          }),
       )
       hostRef.current = host
       sessionRef.current = newMessagePortRpcSession(port, host)
@@ -608,6 +640,7 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, rout
       sessionRef.current = null
       hostRef.current?.dispose()
       hostRef.current = null
+      dropAppTours(gatekeeperVendorId);
       setOverlayPhase(null)
     }
     // One session per acquired frame (the iframe is keyed by it, so a new frame always handshakes

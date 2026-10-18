@@ -53,6 +53,7 @@ export default function InboxBell() {
         render={
           <button
             type="button"
+            data-tour="inbox"
             aria-label={inbox.unread > 0 ? `Notifications: ${badge} unread` : 'Notifications'}
             title="Notifications"
             className="press relative flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-kumo-inactive transition-colors hover:bg-kumo-tint hover:text-kumo-default"

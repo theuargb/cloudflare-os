@@ -173,7 +173,7 @@ const SidebarNavContent = ({
           {rows(resolved.main)}
         </nav>
         {resolved.groups.some((group) => group.items.length > 0) && (
-          <nav aria-label="Modules" className="flex flex-col items-center gap-0.5 pt-2">
+          <nav aria-label="Modules" data-tour="sidebar-modules" className="flex flex-col items-center gap-0.5 pt-2">
             {resolved.groups.flatMap((group) => rows(group.items))}
           </nav>
         )}
@@ -193,7 +193,7 @@ const SidebarNavContent = ({
         {rows(resolved.main)}
       </nav>
 
-      <nav aria-label="Modules" className={resolved.groups.length > 0 ? 'flex flex-col' : 'hidden'}>
+      <nav aria-label="Modules" data-tour="sidebar-modules" className={resolved.groups.length > 0 ? 'flex flex-col' : 'hidden'}>
         {plainRuns(resolved.groups, customizable).map((run) => {
           // Outside customization a one-item group is just its row: adjacent ones stack as one plain list.
           if (run.plain) {
@@ -218,6 +218,8 @@ const SidebarNavContent = ({
           return (
             <section
               key={group.key}
+              data-tour="sidebar-group"
+              data-tour-group={title}
               className="relative mt-3 flex flex-col px-2"
               {...dragProps(drag.containerProps(group.key))}
             >
