@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from '@tanstack/react-router'
 import { Popover } from '@cloudflare/kumo'
 import { BellIcon, InfoIcon, WarningIcon, WarningOctagonIcon } from '@phosphor-icons/react'
+import { useCloseOnFrameFocus } from "../useCloseOnFrameFocus";
 import type { AppInboxItem, AppInboxSeverity } from '@gadgets/workshop-shared/app-host'
 import { useInbox } from './useInbox'
 
@@ -30,6 +31,7 @@ export default function InboxBell() {
   const navigate = useNavigate()
   const { inbox, refresh, markRead } = useInbox()
   const [open, setOpen] = useState(false)
+  useCloseOnFrameFocus(open, setOpen);
   if (!inbox) return null
 
   const pick = (item: AppInboxItem) => {
