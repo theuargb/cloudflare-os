@@ -84,13 +84,19 @@ import { createWorkshopLogger, obsContext } from "./observability";
 import { traceAgentTurn, traceToolApproval } from "./agent-tracing";
 import { isLoopLimitError, retryOnDoReset, shouldRetryAfterReset, wrapDoStubForTelemetry } from "./do-retry";
 import type { ChatGatewayRpcTarget, SubmitExternalMessageResult } from "@gadgets/workshop-shared/external-message-gateway";
-import type { CreationApproval, GadgetExportFormat } from "@gadgets/workshop-shared/api";
+import type { CreationApproval, GadgetExportFormat, LargeChatAttachmentUploadBegin,
+  LargeChatAttachmentUploadPart, LargeChatAttachmentUploadTicket } from "@gadgets/workshop-shared/api";
+import { MAX_LARGE_CHAT_ATTACHMENT_TOTAL_BYTES } from "@gadgets/workshop-shared/api";
 import {
   assertChatAttachmentSize,
   decodeChatAttachmentText,
   isAllowedChatAttachmentImageMimeType,
+  LARGE_CHAT_ATTACHMENT_PART_BYTES,
   validateChatAttachmentUpload,
+  validateLargeChatAttachmentBegin,
+  validateLargeChatAttachmentPart,
 } from "./chat-attachment-validation";
+import { makeChatAttachmentHandle, parseChatAttachmentHandle } from "./chat-attachment-content";
 import { renderGadgetInBrowser } from "./browser-export";
 import {
   defaultExportFormats,
@@ -407,6 +413,9 @@ function validateBlueprintScreenshotUpload(screenshot: BlueprintScreenshotUpload
 
 const MAX_CHAT_ATTACHMENTS_PER_MESSAGE = 5;
 const MAX_CHAT_ATTACHMENT_TOTAL_BYTES = 5 * 1024 * 1024;
+// A large attachment upload that no message has claimed is deleted this long after it started,
+// when the next large upload starts.
+const MAX_UNATTACHED_LARGE_CHAT_ATTACHMENT_AGE_MS = 24 * 60 * 60 * 1000;
 
 const CHAT_ATTACHMENT_EXTENSION_BY_MIME = new Map([
   ["text/csv", ".csv"],
@@ -5374,7 +5383,143 @@ class OverseerImpl implements AgentHooks {
     }
   }
 
+  // The bucket for large chat attachments, which a deployment may leave unbound.
+  #largeChatAttachmentBucket(): R2Bucket {
+    let bucket = this.env.CHAT_ATTACHMENT_CONTENT;
+    if (!bucket) throw new Error("This deployment does not store large chat attachments.");
+    return bucket;
+  }
+
+  // A large attachment that a sent message has committed to chat `chatId`.
+  #getCommittedLargeChatAttachment(chatId: number, id: string) {
+    let record = this.storage.largeChatAttachments.get(validateChatAttachmentId(id));
+    if (record?.chatId !== chatId) throw new Error("Chat attachment not found.");
+    return record;
+  }
+
+  // Serves `Overseer.getChatAttachmentContentPart()`.
+  async getLargeChatAttachmentPart(chatId: number, id: string, offset: number):
+      Promise<{size: number; bytes: Uint8Array}> {
+    let record = this.#getCommittedLargeChatAttachment(chatId, id);
+    if (!Number.isSafeInteger(offset) || offset < 0 || offset > record.size) {
+      throw new Error("Invalid chat attachment offset.");
+    }
+    let length = Math.min(LARGE_CHAT_ATTACHMENT_PART_BYTES, record.size - offset);
+    if (length === 0) return {size: record.size, bytes: new Uint8Array()};
+    let object = await this.#largeChatAttachmentBucket().get(record.key, {range: {offset, length}});
+    if (!object) throw new Error("Chat attachment content is missing.");
+    return {size: record.size, bytes: new Uint8Array(await object.arrayBuffer())};
+  }
+
+  // The handle by which a PEAK module streams a large attachment from the `ChatAttachmentContent`
+  // entrypoint. It names this Overseer, since the entrypoint is stateless; opening it re-checks the
+  // record, so a handle for a deleted attachment opens nothing.
+  makeLargeChatAttachmentHandle(chatId: number, id: string): string {
+    this.#getCommittedLargeChatAttachment(chatId, id);
+    return makeChatAttachmentHandle({overseerId: this.ctx.id.toString(), chatId, fileId: id});
+  }
+
+  async openLargeChatAttachment(handle: string):
+      Promise<{size: number; mime: string; stream: ReadableStream<Uint8Array>}> {
+    let {chatId, fileId} = parseChatAttachmentHandle(handle);
+    let record = this.#getCommittedLargeChatAttachment(chatId, fileId);
+    let object = await this.#largeChatAttachmentBucket().get(record.key);
+    if (!object) throw new Error("Chat attachment content is missing.");
+    return {size: record.size, mime: record.mimeType, stream: object.body};
+  }
+
+  // Delete the R2 content of a large attachment whose record the caller has deleted, including an
+  // unfinished multipart upload. Best effort: the record is gone either way, so a failure only
+  // strands an object, which is logged.
+  async deleteLargeChatAttachmentContent(record: {key: string; uploadId?: string}): Promise<void> {
+    try {
+      let bucket = this.env.CHAT_ATTACHMENT_CONTENT;
+      if (record.uploadId !== undefined) {
+        await bucket?.resumeMultipartUpload(record.key, record.uploadId).abort();
+      } else {
+        await bucket?.delete(record.key);
+      }
+    } catch (error) {
+      this.logger.warn("failed to delete large chat attachment content", {
+        event: "chat.attachment.large.delete.failed", error,
+      });
+    }
+  }
+
+  // Start of `Overseer.beginLargeChatAttachmentUpload()`. Stale unattached uploads are swept here,
+  // so the bucket can't fill with uploads nobody finished or sent.
+  async beginLargeChatAttachmentUpload(request: LargeChatAttachmentUploadBegin):
+      Promise<LargeChatAttachmentUploadTicket> {
+    let bucket = this.#largeChatAttachmentBucket();
+    request = validateLargeChatAttachmentBegin(request);
+
+    let stale = Array.from(this.storage.largeChatAttachments.unattachedByUploadedAt.list(
+        {end: Date.now() - MAX_UNATTACHED_LARGE_CHAT_ATTACHMENT_AGE_MS}));
+    for (let record of stale) this.storage.largeChatAttachments.delete(record.fileId);
+    await Promise.all(stale.map(record => this.deleteLargeChatAttachmentContent(record)));
+
+    let fileId = crypto.randomUUID();
+    let key = `chat-attachments/${fileId}`;
+    let upload = await bucket.createMultipartUpload(key, {httpMetadata: {contentType: request.mimeType}});
+    this.storage.largeChatAttachments.put({
+      fileId, key, size: request.size, mimeType: request.mimeType, name: request.name,
+      uploadedAt: Date.now(), uploadId: upload.uploadId, parts: [],
+    });
+    return {id: fileId, partBytes: LARGE_CHAT_ATTACHMENT_PART_BYTES};
+  }
+
+  // A large attachment whose upload is still open, with its R2 multipart upload.
+  #resumeLargeChatAttachmentUpload(id: string) {
+    let record = this.storage.largeChatAttachments.get(validateChatAttachmentId(id));
+    if (record?.uploadId === undefined) throw new Error("Chat attachment upload not found.");
+    let upload = this.#largeChatAttachmentBucket().resumeMultipartUpload(record.key, record.uploadId);
+    return {record, upload};
+  }
+
+  async uploadLargeChatAttachmentPart(part: LargeChatAttachmentUploadPart): Promise<void> {
+    let {record, upload} = this.#resumeLargeChatAttachmentUpload(part.id);
+    validateLargeChatAttachmentPart(record.size, record.mimeType, part.partNo, part.bytes);
+    let uploaded = await upload.uploadPart(part.partNo, part.bytes);
+
+    // Re-read the record: other parts may have been recorded while this one uploaded.
+    let current = this.storage.largeChatAttachments.get(record.fileId);
+    if (!current || current.uploadId !== record.uploadId) {
+      throw new Error("Chat attachment upload not found.");
+    }
+    this.storage.largeChatAttachments.put({...current, parts: [
+      ...current.parts.filter(({partNumber}) => partNumber !== uploaded.partNumber),
+      {partNumber: uploaded.partNumber, etag: uploaded.etag},
+    ]});
+  }
+
+  async completeLargeChatAttachmentUpload(id: string): Promise<ChatAttachmentHandle> {
+    let {record, upload} = this.#resumeLargeChatAttachmentUpload(id);
+    try {
+      if (record.parts.length !== Math.ceil(record.size / LARGE_CHAT_ATTACHMENT_PART_BYTES)) {
+        throw new Error("Chat attachment upload is missing parts.");
+      }
+      await upload.complete(record.parts.toSorted((a, b) => a.partNumber - b.partNumber));
+    } catch (error) {
+      // The upload can't be finished, so discard it rather than strand its parts.
+      await this.discardLargeChatAttachmentUpload(id);
+      throw error;
+    }
+    let {uploadId: _, ...completed} = record;
+    this.storage.largeChatAttachments.put(completed);
+    return {id: record.fileId};
+  }
+
+  async discardLargeChatAttachmentUpload(id: string): Promise<void> {
+    let record = this.storage.largeChatAttachments.get(validateChatAttachmentId(id));
+    if (!record || record.chatId !== undefined) return;
+    this.storage.largeChatAttachments.delete(record.fileId);
+    await this.deleteLargeChatAttachmentContent(record);
+  }
+
   async getChatAttachmentData(chatId: number, id: string): Promise<Uint8Array> {
+    if (this.storage.largeChatAttachments.get(validateChatAttachmentId(id))) {
+      throw new Error("This chat attachment is too large to read whole; read it in parts.");
+    }
     let content = this.storage.chatAttachmentContent.get(validateChatAttachmentId(id));
     if (!content || content.state.type !== "committed" || content.state.chatId !== chatId) {
       throw new Error("Chat attachment not found.");
@@ -5475,6 +5620,7 @@ class OverseerImpl implements AgentHooks {
 
     let files = new Map<string, FileContent>();
     for (let attachment of attachments) {
+      if (attachment.large) continue;  // Large attachments are never workspace files.
       const data = attachment.oid !== undefined
         ? this.gitStore.readBlob(attachment.oid)
         : this.storage.chatAttachmentContent.get(attachment.id)?.data;
@@ -5675,6 +5821,7 @@ class OverseerImpl implements AgentHooks {
     }
 
     let total = 0;
+    let largeTotal = 0;
     let result: ChatAttachmentRef[] = [];
     let seenIds = new Set<string>();
     for (let attachment of attachments) {
@@ -5693,6 +5840,15 @@ class OverseerImpl implements AgentHooks {
       let id = validateChatAttachmentId(attachment.id);
       if (seenIds.has(id)) throw new Error("Duplicate chat attachment.");
       seenIds.add(id);
+      let large = this.storage.largeChatAttachments.get(id);
+      if (large) {
+        if (large.chatId !== undefined || large.uploadId !== undefined) {
+          throw new Error("Chat attachment not found.");
+        }
+        largeTotal += large.size;
+        result.push({id, mimeType: large.mimeType, name: large.name, size: large.size, large: true});
+        continue;
+      }
       let content = this.storage.chatAttachmentContent.get(id);
       if (!content || content.state.type !== "staged") {
         throw new Error("Chat attachment not found.");
@@ -5708,7 +5864,7 @@ class OverseerImpl implements AgentHooks {
         size: data.byteLength,
       });
     }
-    if (total > MAX_CHAT_ATTACHMENT_TOTAL_BYTES) {
+    if (total > MAX_CHAT_ATTACHMENT_TOTAL_BYTES || largeTotal > MAX_LARGE_CHAT_ATTACHMENT_TOTAL_BYTES) {
       throw new Error("Attached files are too large.");
     }
     return result;
@@ -5718,6 +5874,14 @@ class OverseerImpl implements AgentHooks {
       chatId: number, attachments?: ChatAttachmentRef[], workspaceCommitId?: string): void {
     for (let attachment of attachments ?? []) {
       let id = validateChatAttachmentId(attachment.id);
+      if (attachment.large) {
+        let record = this.storage.largeChatAttachments.get(id);
+        if (!record || record.chatId !== undefined || record.uploadId !== undefined) {
+          throw new Error("Chat attachment is no longer available.");
+        }
+        this.storage.largeChatAttachments.put({...record, chatId});
+        continue;
+      }
       if (attachment.oid !== undefined) {
         this.storage.chatAttachmentContent.put({fileId: id, state: {
           type: "committed", chatId, oid: attachment.oid,
@@ -10380,6 +10544,16 @@ export class OverseerDurableObject extends DurableObject<Cloudflare.Env> {
   }
 
   /**
+   * Stream a large chat attachment, for the `ChatAttachmentContent` entrypoint. The handle is a
+   * capability from `env.ATTACHMENTS.list()`, and opens only an attachment still committed to
+   * the chat it names.
+   */
+  async openLargeChatAttachment(handle: string):
+      Promise<{ size: number; mime: string; stream: ReadableStream<Uint8Array> }> {
+    return await this.impl.openLargeChatAttachment(handle);
+  }
+
+  /**
    * `notifyClosed` should be invoked when the return `Overseer` stub is disposed, which is used
    * by AuthenticatedApiImpl.#openGadgetInternal() to detect Durable Object disconnects.
    */
@@ -10869,8 +11043,8 @@ class ChatAttachmentsSession extends NativeRpcTarget {
     super();
   }
 
-  async list(): Promise<Array<{ id: string; name: string | null; mime: string; size: number }>> {
-    let result: Array<{ id: string; name: string | null; mime: string; size: number }> = [];
+  async list(): Promise<Array<{ id: string; name: string | null; mime: string; size: number; handle?: string }>> {
+    let result: Array<{ id: string; name: string | null; mime: string; size: number; handle?: string }> = [];
     let ids = new Set<string>();
     for (let message of this.overseer.storage.chats.list({prefix: `${keyString(this.chatId)}.`})) {
       if (message.type !== "message") continue;
@@ -10882,6 +11056,9 @@ class ChatAttachmentsSession extends NativeRpcTarget {
           name: attachment.name ?? null,
           mime: attachment.mimeType,
           size: attachment.size,
+          // A large attachment is read by streaming it through its handle, not with `get()`.
+          ...(attachment.large
+              ? {handle: this.overseer.makeLargeChatAttachmentHandle(this.chatId, attachment.id)} : {}),
         });
       }
     }
@@ -10891,6 +11068,10 @@ class ChatAttachmentsSession extends NativeRpcTarget {
   async get(id: string): Promise<{ id: string; name: string | null; mime: string; bytes: Uint8Array }> {
     let attachment = (await this.list()).find(candidate => candidate.id === id);
     if (!attachment) throw new Error("attachment not found in this chat");
+    if (attachment.handle !== undefined) {
+      throw new Error("attachment is too large to return as bytes; stream it with its `handle` " +
+          "from list() through a module that accepts attachment handles");
+    }
     return {...attachment, bytes: await this.overseer.getChatAttachmentData(this.chatId, id)};
   }
 }
@@ -12064,6 +12245,28 @@ class OverseerClientInterface extends RpcTarget implements Overseer {
     return await this.impl.getChatAttachmentData(chatId, id);
   }
 
+  async beginLargeChatAttachmentUpload(request: LargeChatAttachmentUploadBegin):
+      Promise<LargeChatAttachmentUploadTicket> {
+    return await this.impl.beginLargeChatAttachmentUpload(request);
+  }
+
+  async uploadLargeChatAttachmentPart(part: LargeChatAttachmentUploadPart): Promise<void> {
+    await this.impl.uploadLargeChatAttachmentPart(part);
+  }
+
+  async completeLargeChatAttachmentUpload(id: string): Promise<ChatAttachmentHandle> {
+    return await this.impl.completeLargeChatAttachmentUpload(id);
+  }
+
+  async discardLargeChatAttachmentUpload(id: string): Promise<void> {
+    await this.impl.discardLargeChatAttachmentUpload(id);
+  }
+
+  async getChatAttachmentContentPart(chatId: number, id: string, offset: number):
+      Promise<{ size: number; bytes: Uint8Array }> {
+    return await this.impl.getLargeChatAttachmentPart(chatId, id, offset);
+  }
+
   // Compaction boundaries delimit the pages: the newest page is the tail replay still scans, and each
   // earlier page is the span one checkpoint summarized. A thread that was never compacted has a
   // single page.
@@ -12306,6 +12509,7 @@ class OverseerClientInterface extends RpcTarget implements Overseer {
 
     // Delete the chat's messages and the attachment content referenced by them. Attachment metadata
     // is canonical in each message's ChatAttachmentRef, so no separate attachment index is needed.
+    let deletedLargeAttachments: Array<{key: string}> = [];
     this.impl.ctx.storage.transactionSync(() => {
       for (let msg of this.impl.storage.chats.list({prefix: chatKeyPrefix(chatId)})) {
         if (msg.type === "message") {
@@ -12314,11 +12518,18 @@ class OverseerClientInterface extends RpcTarget implements Overseer {
             if (content?.state.type === "committed" && content.state.chatId === chatId) {
               this.impl.storage.chatAttachmentContent.delete(attachment.id);
             }
+            let large = this.impl.storage.largeChatAttachments.get(attachment.id);
+            if (large?.chatId === chatId) {
+              deletedLargeAttachments.push(large);
+              this.impl.storage.largeChatAttachments.delete(attachment.id);
+            }
           }
         }
         this.impl.storage.chats.deleteRecord(msg);
       }
     });
+    await Promise.all(deletedLargeAttachments.map(
+        record => this.impl.deleteLargeChatAttachmentContent(record)));
 
     // Clean up agentCallbackArgs for this chat, and any calls to its agent not yet delivered.
     for (let entry of this.impl.storage.agentCallbackArgs.list(
@@ -12893,6 +13104,15 @@ class UseOverseerInterface extends RpcTarget implements Overseer {
     this.#deny();
   }
   async uploadBlob(_content: Uint8Array): Promise<string> { this.#deny(); }
+  async beginLargeChatAttachmentUpload(_request: LargeChatAttachmentUploadBegin):
+      Promise<LargeChatAttachmentUploadTicket> { this.#deny(); }
+  async uploadLargeChatAttachmentPart(_part: LargeChatAttachmentUploadPart): Promise<void> {
+    this.#deny();
+  }
+  async completeLargeChatAttachmentUpload(_id: string): Promise<ChatAttachmentHandle> { this.#deny(); }
+  async discardLargeChatAttachmentUpload(_id: string): Promise<void> { this.#deny(); }
+  async getChatAttachmentContentPart(_chatId: number, _id: string, _offset: number):
+      Promise<{ size: number; bytes: Uint8Array }> { this.#deny(); }
   async getChatAttachmentContent(_chatId: number, _id: string): Promise<Uint8Array> { this.#deny(); }
   async setChatTitle(_chatId: number, _title: string): Promise<void> { this.#deny(); }
   async mergeChanges(_chatId: number): Promise<MergeChangesResult> {

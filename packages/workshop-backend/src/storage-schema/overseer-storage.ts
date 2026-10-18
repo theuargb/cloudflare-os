@@ -883,6 +883,26 @@ type ChatAttachmentContentRecord = {
   };
 };
 
+/**
+ * A chat attachment over the Git-blob size limit, whose bytes live in the CHAT_ATTACHMENT_CONTENT
+ * R2 bucket under `key`. It is staged (no `chatId`) from the upload's start until a message
+ * commits it, and unattached uploads are swept after a day.
+ */
+type LargeChatAttachmentRecord = {
+  fileId: string;
+  key: string;
+  size: number;
+  mimeType: string;
+  name?: string;
+  uploadedAt: number;
+  /** The chat the attachment belongs to, once a sent message commits it. */
+  chatId?: number;
+  /** The R2 multipart upload, until `completeLargeChatAttachmentUpload()` finishes it. */
+  uploadId?: string;
+  /** The parts received so far, for completing the multipart upload. */
+  parts: Array<{ partNumber: number; etag: string }>;
+};
+
 // =======================================================================================
 // Chat code changes
 
@@ -1527,6 +1547,16 @@ export function makeOverseerStorage(storage: DurableObjectStorage) {
         nonUniqueIndexes: {
           stagedByUploadedAt(record: ChatAttachmentContentRecord) {
             return record.state.type === "staged" ? record.state.uploadedAt : null;
+          },
+        },
+      }),
+
+      // Chat attachments stored in R2 instead of the Git store; see `LargeChatAttachmentRecord`.
+      largeChatAttachments: collection<LargeChatAttachmentRecord>()({
+        primaryKey: "fileId",
+        nonUniqueIndexes: {
+          unattachedByUploadedAt(record: LargeChatAttachmentRecord) {
+            return record.chatId === undefined ? record.uploadedAt : null;
           },
         },
       }),
