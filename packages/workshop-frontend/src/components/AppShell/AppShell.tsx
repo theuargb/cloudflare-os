@@ -10,6 +10,7 @@ import CommandPalette from '../Spotlight/Spotlight'
 import ShellTopbarActions from './ShellTopbarActions'
 import { OPEN_COMMAND_PALETTE_EVENT } from './commandPaletteBus'
 import { KeptGatekeeperApp, KeptGatekeeperAppProvider } from '../../KeptGatekeeperApp'
+import TourHost, { useTourActive } from "../../features/tour/TourHost";
 
 const STORAGE_KEY_COLLAPSED = 'gadgets:sidebar-collapsed'
 
@@ -99,6 +100,12 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
     setMobileOpen(false)
   }, [pathname])
 
+  // A tour highlights the page, not the drawer: close it so the tour is not trapped under its modal.
+  const tourActive = useTourActive();
+  useEffect(() => {
+    if (tourActive) setMobileOpen(false);
+  }, [tourActive]);
+
   // Global ⌘K / Ctrl+K opens the command palette; the rail's search button opens it via a custom
   // event so it doesn't have to prop-drill into the palette.
   useEffect(() => {
@@ -157,6 +164,7 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
         <div className="relative flex h-14 shrink-0 items-center justify-between border-b border-kumo-line bg-kumo-base px-3">
           <button
             type="button"
+            data-tour="menu-button"
             ref={menuButtonRef}
             onClick={() => setMobileOpen((o) => !o)}
             aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
@@ -184,6 +192,7 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
       </div>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <TourHost />
     </div>
   )
 }

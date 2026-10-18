@@ -1,6 +1,7 @@
 import type { RpcTarget } from "capnweb";
 import type { RpcStub } from "capnweb";
 import type { GatekeeperAppTheme, GatekeeperAppThemeReceiver } from "./theme.js";
+import type { Tour, TourRect } from "./tour.js";
 
 /**
  * What a launcher action does; the host colours, filters and ranks by it. `create` opens a new
@@ -139,6 +140,19 @@ export interface GatekeeperAppHost extends RpcTarget {
   getAppPreference(key: string): string | null;
   /** Write a UI preference (see getAppPreference); values are at most 256 characters. */
   setAppPreference(key: string, value: string): void;
+  /**
+   * Ask the Workshop to run an interface tour over its chrome and this frame. The host runs it once
+   * per user and tour version unless `replay`; it waits until the app is on screen. Invalid tours throw.
+   */
+  startTour(tour: Tour, locator: RpcStub<GatekeeperAppTourLocator>, replay?: boolean): void;
+}
+
+/**
+ * Frame side of a tour: where a `data-tour` anchor is, in the frame's viewport px; null when it is
+ * absent or hidden. `reveal` scrolls it into view first.
+ */
+export interface GatekeeperAppTourLocator extends RpcTarget {
+  locate(anchor: string, reveal: boolean): TourRect | null;
 }
 
 /**

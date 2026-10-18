@@ -199,25 +199,27 @@ export function HomePageContent({ prompt }: HomeSearch) {
         </header>
 
         {/* Composer */}
-        <ChatComposer
-          createCapsuleGatekeeper={createCapsuleGatekeeper}
-          getOverseer={getOverseer}
-          onSend={handleSend}
-          isAgentActive={false}
-          models={models}
-          selectedModel={selectedModel === null ? null : { id: selectedModel }}
-          onModelChange={handleModelChange}
-          newChat
-          offerFormats
-          autoFocus
-          minRows={3}
-          seedText={seed?.text}
-          seedNonce={seed?.nonce}
-          onTextChange={setDraft}
-          draftStorageKey={currentUser
-            ? composerDraftStorageKey(currentUser.id, "home")
-            : undefined}
-        />
+        <div data-tour="home-composer">
+          <ChatComposer
+            createCapsuleGatekeeper={createCapsuleGatekeeper}
+            getOverseer={getOverseer}
+            onSend={handleSend}
+            isAgentActive={false}
+            models={models}
+            selectedModel={selectedModel === null ? null : { id: selectedModel }}
+            onModelChange={handleModelChange}
+            newChat
+            offerFormats
+            autoFocus
+            minRows={3}
+            seedText={seed?.text}
+            seedNonce={seed?.nonce}
+            onTextChange={setDraft}
+            draftStorageKey={currentUser
+              ? composerDraftStorageKey(currentUser.id, "home")
+              : undefined}
+          />
+        </div>
 
         {/* Quick actions: recent and featured module actions; the full catalog is ⌘K. */}
         <QuickActions query={actionQuery} />
