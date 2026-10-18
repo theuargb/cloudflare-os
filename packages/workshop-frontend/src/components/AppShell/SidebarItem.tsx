@@ -66,7 +66,11 @@ export default function SidebarItem({
       {...linkProps}
       title={collapsed ? label : undefined}
       className={[
-        'group relative flex h-11 items-center gap-2.5 rounded-lg px-2.5 text-[14px] leading-5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kumo-ring focus-visible:ring-offset-2 focus-visible:ring-offset-kumo-elevated md:h-8 md:text-[13px] md:leading-[18px]',
+        'group relative flex items-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kumo-ring focus-visible:ring-offset-2 focus-visible:ring-offset-kumo-elevated',
+        // Collapsed: a centered 36px tile like the rail's search button, so the hover/active box sits on the icon.
+        collapsed
+          ? 'mx-auto h-9 w-9 justify-center'
+          : 'h-11 gap-2.5 px-2.5 text-[14px] leading-5 md:h-8 md:text-[13px] md:leading-[18px]',
         isActive
           ? 'bg-kumo-fill font-medium text-kumo-strong'
           : 'font-normal text-kumo-default hover:bg-kumo-tint',
