@@ -1,15 +1,18 @@
 import type { ReactNode } from 'react'
 import type { LinkProps } from '@tanstack/react-router'
-import { House } from '@phosphor-icons/react'
+import { GlobeSimple, House } from '@phosphor-icons/react'
 import type { GatekeeperAppInfo, GatekeeperAppNavigation } from '@gadgets/workshop-shared/api'
-import type { AppEntry } from '@gadgets/workshop-shared/app-host'
+import type { AppEntry, AppExternalLink } from '@gadgets/workshop-shared/app-host'
 import { GatekeeperAppIcon } from '../../components/GatekeeperAppIcon'
 import type { SidebarStructure } from './sidebarLayout'
 
 export type SidebarItemDef = {
   key: string
   label: string
-  to: LinkProps['to']
+  /** Route of an in-app row; absent on external link rows (`href`). */
+  to?: LinkProps['to'];
+  /** External page opened in a new tab; the row is a plain anchor, never active. */
+  href?: string;
   params?: LinkProps['params']
   /** Search params of the link: an app entry row opens the app at the entry's route (`at`). */
   search?: { at: string }
@@ -36,6 +39,14 @@ const appLink = (app: GatekeeperAppInfo) => ({
   to: '/gatekeepers/$appId' as LinkProps['to'],
   params: { appId: app.id } as LinkProps['params'],
 })
+
+/** A row that opens an external page in a new tab. */
+const externalItem = (app: GatekeeperAppInfo, link: AppExternalLink): SidebarItemDef => ({
+  key: `link:${app.id}:${link.id}`,
+  label: link.title,
+  href: link.href,
+  icon: <GlobeSimple size={14} weight="regular" />,
+});
 
 /** A row that opens the app at an entry's route; `first` marks the row highlighted while the open route names no entry. */
 const entryItem = (app: GatekeeperAppInfo, entry: AppEntry, first: boolean): SidebarItemDef => ({
@@ -93,6 +104,7 @@ export const buildSidebarDefaults = (apps: GatekeeperAppInfo[], navigation: Gate
           target.sidebarItems.push(add(entryItem(app, entry, first)))
           first = false
         }
+        for (const link of group.links ?? []) target.sidebarItems.push(add(externalItem(app, link)));
       }
     } else if (app.group) {
       container(app.group.title, app.group.order).appItems.push(...appItems(app).map(add))
