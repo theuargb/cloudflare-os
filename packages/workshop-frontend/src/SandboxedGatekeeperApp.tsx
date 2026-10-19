@@ -15,6 +15,7 @@ import { createRateLimitedCapability } from './rateLimitedCapability'
 import { useTheme } from './ThemeContext'
 import { useServerConfig } from './ServerConfigContext'
 import { forwardTrustedFrameError } from './errorReporting'
+import { classifyRpcError } from './rpcErrors'
 import { useAuthenticatedApi } from './AuthContext'
 import {
   normalizeGatekeeperAppPrompt,
@@ -264,12 +265,19 @@ class GatekeeperAppHostImpl extends RpcTarget {
  * talks to the gatekeeper only through the `ui` capability carried over the MessagePort RPC session.
  * The iframe fills its parent container.
  */
-export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId }: {
+export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, onCapabilityLost }: {
   frame: GatekeeperUiFrame,
   gatekeeperVendorId: string,
+  /**
+   * Called when a call relayed to the frame failed because the frame's server-side capability died
+   * (do-reset class); the owner re-acquires the frame.
+   */
+  onCapabilityLost: (frame: GatekeeperUiFrame, error: unknown) => void,
 }) {
   const navigate = useNavigate()
   const { authenticatedApi } = useAuthenticatedApi()
+  const onCapabilityLostRef = useRef(onCapabilityLost)
+  onCapabilityLostRef.current = onCapabilityLost
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const sessionRef = useRef<{ [Symbol.dispose]?(): void } | null>(null)
   const hostRef = useRef<GatekeeperAppHostImpl | null>(null)
@@ -412,7 +420,15 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId }: {
         cancelUserPicker,
       )
       hostRef.current = host
-      sessionRef.current = newMessagePortRpcSession(port, host)
+      sessionRef.current = newMessagePortRpcSession(port, host, {
+        // Every failure relayed to the frame — `ui`, module stubs it handed out, host methods — is
+        // serialized here. A do-reset-class one means the capability behind the frame is gone (its
+        // proxying Durable Object was evicted or reset) while the Workshop socket stays healthy, so
+        // the reconnect path never fires; the owner must fetch a fresh frame.
+        onSendError: (error) => {
+          if (classifyRpcError(error) === 'do-reset') onCapabilityLostRef.current(frame, error)
+        },
+      })
       connectedRef.current = true
     }
 
