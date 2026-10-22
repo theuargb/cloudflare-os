@@ -2,6 +2,8 @@ import { useState, type KeyboardEvent, type ReactNode } from 'react'
 import { CaretDown, PencilSimple } from '@phosphor-icons/react'
 import type { GatekeeperAppInfo, GatekeeperAppNavigation } from '@gadgets/workshop-shared/api'
 import SidebarItem from '../../components/AppShell/SidebarItem'
+import AppSectionTree from '../app-section-nav/AppSectionTree'
+import AppSectionFlyout from '../app-section-nav/AppSectionFlyout'
 import { useOptionalAuthenticatedApi } from '../../AuthContext'
 import { SidebarLabelEditor } from './SidebarLabelEditor'
 import {
@@ -65,13 +67,15 @@ const RenameButton = ({ label, group, onClick }: { label: string; group?: 'secti
  * sidebar tree from its navigation). Per-user order, group membership and labels are layered over the
  * module defaults and kept in localStorage.
  */
-export const SidebarNav = ({ apps, navigation, collapsed }: {
+export const SidebarNav = ({ apps, navigation, collapsed, drawer }: {
   apps: GatekeeperAppInfo[]
   navigation: GatekeeperAppNavigation[]
   collapsed: boolean
+  /** The mobile drawer instance (the open app's section tree shows in the drawer on mobile, in the rail on desktop). */
+  drawer: boolean
 }) => {
   const userId = useOptionalAuthenticatedApi()?.currentUser?.id ?? null
-  return <SidebarNavContent key={userId ?? ''} userId={userId} apps={apps} navigation={navigation} collapsed={collapsed} />
+  return <SidebarNavContent key={userId ?? ''} userId={userId} apps={apps} navigation={navigation} collapsed={collapsed} drawer={drawer} />
 }
 
 const SidebarNavContent = ({
@@ -79,11 +83,13 @@ const SidebarNavContent = ({
   apps,
   navigation,
   collapsed,
+  drawer,
 }: {
   userId: string | null
   apps: GatekeeperAppInfo[]
   navigation: GatekeeperAppNavigation[]
   collapsed: boolean
+  drawer: boolean
 }) => {
   const [layout, setLayout] = useState<SidebarLayout>(() =>
     userId ? readSidebarLayout(userId) : EMPTY_SIDEBAR_LAYOUT,
@@ -149,6 +155,8 @@ const SidebarNavContent = ({
         icon={def.icon}
         collapsed={collapsed}
         endAction={customizable ? <RenameButton label={label} onClick={() => setEditingKey(def.key)} /> : undefined}
+        nested={def.appId && !collapsed ? <AppSectionTree appId={def.appId} entry={def.entry} drawer={drawer} /> : undefined}
+        flyout={def.appId && collapsed ? (link) => <AppSectionFlyout appId={def.appId!} entry={def.entry} label={label}>{link}</AppSectionFlyout> : undefined}
       />
     )
     if (!customizable) return <div key={def.key}>{item}</div>
