@@ -30,7 +30,7 @@ vi.mock("./AuthContext", () => ({
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 const makeFrame = () => {
-  const dispose = vi.fn();
+  const dispose = vi.fn<() => void>();
   return { frame: { iframeHtml: "<!doctype html>", ui: { [Symbol.dispose]: dispose } } as unknown as GatekeeperUiFrame, dispose };
 };
 
