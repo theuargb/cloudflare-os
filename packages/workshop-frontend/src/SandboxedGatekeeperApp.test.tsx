@@ -436,7 +436,7 @@ describe("SandboxedGatekeeperApp navigation", () => {
       iframeHtml: "<!doctype html><title>Scheduler</title>",
       ui: new RpcStub(new FlakyUi()),
     } as unknown as GatekeeperUiFrame;
-    const onCapabilityLost = vi.fn();
+    const onCapabilityLost = vi.fn<(frame: GatekeeperUiFrame, error: unknown) => void>();
     const rootRoute = createRootRoute({
       component: () => (
         <SandboxedGatekeeperApp
@@ -473,7 +473,7 @@ describe("SandboxedGatekeeperApp navigation", () => {
     await expect(session.ui.ordinary()).rejects.toThrow("Invalid input");
     expect(onCapabilityLost).not.toHaveBeenCalled();
 
-    await expect(session.ui.reset()).rejects.toThrow();
+    await expect(session.ui.reset()).rejects.toThrow("Durable Object reset");
     await vi.waitFor(() => expect(onCapabilityLost).toHaveBeenCalledTimes(1));
     expect(onCapabilityLost.mock.calls[0]![0]).toBe(frame);
     session[Symbol.dispose]();
