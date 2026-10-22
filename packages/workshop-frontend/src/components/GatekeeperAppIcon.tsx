@@ -1,8 +1,8 @@
 import { BookOpenIcon } from '@phosphor-icons/react'
 import type { GatekeeperAppInfo } from '@gadgets/workshop-shared/api'
 
-/** A gatekeeper management app's (monochrome) icon, as a CSS mask tinted like Phosphor icons. */
-export function GatekeeperAppIcon({ app }: { app: GatekeeperAppInfo }) {
+/** A gatekeeper management app's (monochrome) icon, as a CSS mask tinted like Phosphor icons. Also renders a composed module's icon. */
+export function GatekeeperAppIcon({ app }: { app: Pick<GatekeeperAppInfo, 'icon'> }) {
   if (!app.icon) return <BookOpenIcon size={14} weight="regular" />
   // Escape the icon URL for safe interpolation into a CSS url("…") string.
   const maskUrl = `url("${app.icon.url.replace(/[\\"]/g, '\\$&')}")`

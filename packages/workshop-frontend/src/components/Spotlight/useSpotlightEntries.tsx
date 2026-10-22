@@ -4,14 +4,12 @@ import { useKumoToastManager } from '@cloudflare/kumo'
 import { SquaresFourIcon } from '@phosphor-icons/react'
 import type { OutputFormatOffer } from '@gadgets/workshop-shared/api'
 import { useAuthenticatedApi } from '../../AuthContext'
-import { useGatekeeperApps } from '../../useGatekeeperApps'
-import { useAppNavigation } from '../AppNavigation/useAppNavigation'
 import { createFromFormat } from '../format/useOutputFormats'
-import { GatekeeperAppIcon } from '../GatekeeperAppIcon'
 import type { SpotlightEntry } from './ranking'
+import { useAppActionEntries } from './useAppActionEntries'
 
 // Output formats are served instantly on open and refetched when older than the TTL
-// (stale-while-revalidate). App actions come from the shared navigation store.
+// (stale-while-revalidate). App actions come from useAppActionEntries.
 const CACHE_TTL_MS = 30_000
 const CORE_MODULE = 'Workspaces'
 let formatsCache: { data: OutputFormatOffer[]; fetchedAt: number } | null = null
@@ -24,8 +22,7 @@ export function useSpotlightEntries(): SpotlightEntry[] {
   const { authenticatedApi } = useAuthenticatedApi()
   const navigate = useNavigate()
   const toasts = useKumoToastManager()
-  const apps = useGatekeeperApps()
-  const navigation = useAppNavigation()
+  const appEntries = useAppActionEntries()
   const [formats, setFormats] = useState<OutputFormatOffer[]>(() => formatsCache?.data ?? [])
 
   useEffect(() => {
@@ -47,29 +44,7 @@ export function useSpotlightEntries(): SpotlightEntry[] {
   )
 
   return useMemo(() => {
-    const actionsByApp = new Map(navigation.map(({ appId, actions }) => [appId, actions]))
-    const entries: SpotlightEntry[] = []
-    // Modules in sidebar order; actions of apps the user can no longer open (stale localStorage copy) are skipped.
-    for (const app of apps) {
-      const appId = app.id
-      const moduleIcon = <GatekeeperAppIcon app={app} />
-      for (const action of actionsByApp.get(appId) ?? []) {
-        entries.push({
-          id: `app:${appId}:${action.id}`,
-          kind: action.kind,
-          appId,
-          module: app.title,
-          moduleIcon,
-          section: action.subtitle,
-          menu: action.menu,
-          group: action.group,
-          title: action.title,
-          keywords: action.keywords,
-          featured: action.featured,
-          run: () => navigate({ to: '/gatekeepers/$appId', params: { appId }, search: { at: action.route } }),
-        })
-      }
-    }
+    const entries = [...appEntries]
     const coreIcon = <SquaresFourIcon size={14} />
     entries.push({
       id: 'core:new-workspace',
@@ -92,5 +67,5 @@ export function useSpotlightEntries(): SpotlightEntry[] {
       })
     }
     return entries
-  }, [apps, navigation, formats, navigate, createFormat])
+  }, [appEntries, formats, navigate, createFormat])
 }

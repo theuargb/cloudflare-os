@@ -30,6 +30,8 @@ export type AppAction = {
   menu?: AppMenuKind;
   /** Sub-heading inside the app's block of a menu: the sidebar entry title, else the section label. */
   group?: string;
+  /** Id of the `AppNavigation.modules` row the action belongs to, for apps that publish several modules; absent = the app itself. */
+  module?: string;
 };
 
 /**
@@ -40,7 +42,10 @@ export type AppSectionKind = "overview" | "documents" | "registers" | "journals"
 export type AppMenuKind = Exclude<AppSectionKind, "overview" | "settings">;
 
 /** What a management app exposes to the host shell: its launcher actions (topbar menus and ⌘K). */
-export type AppNavigation = { actions: AppAction[] };
+export type AppNavigation = { actions: AppAction[]; modules?: AppActionModule[] };
+
+/** A module of a composed app: the block heading, icon and match context of its actions in the launcher and on the home cards. */
+export type AppActionModule = { id: string; title: string; icon?: { url: string } };
 
 /**
  * Launcher navigation between the Workshop host and a sandboxed gatekeeper app. The frame has no
@@ -121,11 +126,34 @@ const MAX_TEXT = 120;
 const MAX_KEYWORDS = 12;
 const MAX_KEYWORD = 40;
 const MAX_GROUP = 60;
+const MAX_MODULES = 64;
+
+/** Keep well-formed modules: unique ids, a title, an optional icon URL; capped. */
+function sanitizeAppModules(raw: unknown): AppActionModule[] {
+  if (!Array.isArray(raw)) return [];
+  let result: AppActionModule[] = [];
+  let ids: Record<string, true> = {};
+  for (let item of raw) {
+    if (result.length >= MAX_MODULES) break;
+    if (typeof item !== "object" || item === null) continue;
+    let { id, title, icon } = item as Record<string, unknown>;
+    if (typeof id !== "string" || !id || ids[id] || typeof title !== "string" || !title.trim()) continue;
+    ids[id] = true;
+    let url = typeof icon === "object" && icon !== null ? (icon as Record<string, unknown>).url : undefined;
+    result.push({ id, title: title.trim().slice(0, MAX_GROUP), icon: typeof url === "string" ? { url } : undefined });
+  }
+  return result;
+}
 
 /** Keep a well-formed navigation payload from an untrusted app: invalid actions are dropped, the rest capped. */
 export function sanitizeAppNavigation(raw: unknown): AppNavigation {
   if (typeof raw !== "object" || raw === null) return { actions: [] };
-  return { actions: sanitizeAppActions((raw as Record<string, unknown>).actions) };
+  let { actions, modules } = raw as Record<string, unknown>;
+  let result: AppNavigation = { actions: sanitizeAppActions(actions) };
+  let known = sanitizeAppModules(modules);
+  if (known.length > 0) result.modules = known;
+  for (let action of result.actions) if (action.module && !known.some((module) => module.id === action.module)) action.module = undefined;
+  return result;
 }
 
 /** Keep well-formed actions from an untrusted app: unique ids, known kinds and menus, valid routes, capped text. */
@@ -136,7 +164,7 @@ function sanitizeAppActions(raw: unknown): AppAction[] {
   for (let item of raw) {
     if (result.length >= MAX_ACTIONS) break;
     if (typeof item !== "object" || item === null) continue;
-    let { id, title, subtitle, keywords, kind, menu, group, route, featured } = item as Record<string, unknown>;
+    let { id, title, subtitle, keywords, kind, menu, group, module, route, featured } = item as Record<string, unknown>;
     if (typeof id !== "string" || ids[id] || typeof title !== "string" || !title.trim()) continue;
     if (typeof kind !== "string" || !Object.hasOwn(ACTION_KINDS, kind) || !isAppRoute(route)) continue;
     if (menu !== undefined && (typeof menu !== "string" || !Object.hasOwn(MENU_KINDS, menu))) continue;
@@ -151,6 +179,7 @@ function sanitizeAppActions(raw: unknown): AppAction[] {
       kind: kind as AppActionKind,
       menu: menu as AppMenuKind | undefined,
       group: typeof group === "string" && group.trim() ? group.slice(0, MAX_GROUP) : undefined,
+      module: typeof module === "string" && module ? module : undefined,
       route,
       featured: featured === true || undefined,
     });
