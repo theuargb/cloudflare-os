@@ -4,6 +4,7 @@ import { List, X } from '@phosphor-icons/react'
 import TopBarNotice from '../../TopBarNotice'
 import TopNav from '../AppNavigation/TopNav'
 import WorkplaceSwitcher from '../AppNavigation/WorkplaceSwitcher'
+import AppTypeMenus from '../../features/app-type-menus/AppTypeMenus'
 import ReconnectingChip from '../ReconnectingChip'
 import { useConnectionLost } from '../../RpcContext'
 import Sidebar from './Sidebar'
@@ -173,8 +174,9 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
           >
             {mobileOpen ? <X size={16} /> : <List size={16} />}
           </button>
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <WorkplaceSwitcher />
+            <AppTypeMenus />
             <TopNav />
           </div>
           <TopBarNotice inline />
