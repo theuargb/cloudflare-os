@@ -15,6 +15,8 @@ export type SidebarItemDef = {
   search?: { at: string }
   /** Set on the rows of an app that publishes several entries; drives the active highlight. */
   entry?: { id: string; first: boolean }
+  /** Set on rows that open a gatekeeper app: the open app's section tree nests under the active one. */
+  appId?: string
   icon: ReactNode
 }
 
@@ -35,6 +37,7 @@ const HOME: SidebarItemDef = {
 const appLink = (app: GatekeeperAppInfo) => ({
   to: '/gatekeepers/$appId' as LinkProps['to'],
   params: { appId: app.id } as LinkProps['params'],
+  appId: app.id,
 })
 
 /** A row that opens the app at an entry's route; `first` marks the row highlighted while the open route names no entry. */

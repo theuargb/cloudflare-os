@@ -27,9 +27,12 @@ import { SidebarNav } from '../../features/sidebar-customization/SidebarNav'
 export default function Sidebar({
   collapsed,
   onToggleCollapsed,
+  drawer = false,
 }: {
   collapsed: boolean
   onToggleCollapsed: () => void
+  /** The mobile drawer instance rather than the desktop rail. */
+  drawer?: boolean
 }) {
   const siteName = useSiteName()
   // Gatekeeper-served management apps the user can reach now (one per gatekeeper that provides a UI
@@ -118,7 +121,7 @@ export default function Sidebar({
             collapsed ? '[scrollbar-gutter:stable_both-edges]' : '',
           ].join(' ')}
         >
-          <SidebarNav apps={gatekeeperApps} navigation={appNavigation} collapsed={collapsed} />
+          <SidebarNav apps={gatekeeperApps} navigation={appNavigation} collapsed={collapsed} drawer={drawer} />
 
           <div className="mt-1">
             <SidebarWorkspacesLists collapsed={collapsed} />
