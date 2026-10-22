@@ -32,7 +32,8 @@ export type RankedEntry = SpotlightEntry & { indices: number[] }
 /** The launcher list: sections to render and per-type counts for the picker. */
 export type Ranking = { sections: SpotlightSection[]; counts: TypeCounts }
 
-const RECENT_LIMIT = 6
+/** Most recent picks a launcher list shows (Spotlight, topbar type menus). */
+export const RECENT_LIMIT = 6
 const RESULTS_LIMIT = 40
 const CREATE_BOOST = 15
 const FEATURED_BOOST = 3
