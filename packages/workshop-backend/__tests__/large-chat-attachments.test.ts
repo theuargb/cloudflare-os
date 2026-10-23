@@ -133,17 +133,17 @@ describe("large chat attachments", () => {
       let { id, handle } = await upload(client, bytes, "text/csv");
       let chatId = await client.newChat("Data", null, undefined, [handle]);
 
-      let opened = await impl.openLargeChatAttachment(impl.makeLargeChatAttachmentHandle(chatId, id));
+      let opened = await impl.openChatAttachment(impl.mintChatAttachmentHandle(chatId, id));
       expect(opened).toMatchObject({ size: SIZE, mime: "text/csv" });
       expectSameBytes(new Uint8Array(await new Response(opened.stream).arrayBuffer()), bytes);
 
       let forged = JSON.stringify([impl.ctx.id.toString(), chatId + 1, id]);
-      await expect(impl.openLargeChatAttachment(forged)).rejects.toThrow("not found");
-      await expect(impl.openLargeChatAttachment("nonsense")).rejects.toThrow("Invalid chat attachment handle");
+      await expect(impl.openChatAttachment(forged)).rejects.toThrow("not found");
+      await expect(impl.openChatAttachment("nonsense")).rejects.toThrow("Invalid chat attachment handle");
 
-      let live = impl.makeLargeChatAttachmentHandle(chatId, id);
+      let live = impl.mintChatAttachmentHandle(chatId, id);
       await client.deleteChat(chatId);
-      await expect(impl.openLargeChatAttachment(live)).rejects.toThrow("not found");
+      await expect(impl.openChatAttachment(live)).rejects.toThrow("not found");
     }));
 
   it("lists a handle for the agent in place of bytes", () =>
@@ -154,8 +154,28 @@ describe("large chat attachments", () => {
 
       let [listed] = await session.list();
       expect(listed).toMatchObject({ id: big.id, name: "big.bin", mime: "text/csv", size: SIZE });
-      expect(listed.handle).toBe(impl.makeLargeChatAttachmentHandle(chatId, big.id));
+      expect(listed.handle).toBe(impl.mintChatAttachmentHandle(chatId, big.id));
       await expect(session.get(big.id)).rejects.toThrow("stream it with its `handle`");
+    }));
+
+  it("lists a handle for a small attachment and opens it", () =>
+    withWorkspace(async ({ impl, client }) => {
+      let bytes = new TextEncoder().encode("small csv,whatever\n");
+      let oid = await client.uploadBlob(bytes);
+      let chatId = await client.newChat("Data", null, undefined, [{ oid, mimeType: "text/csv", name: "small.csv" }]);
+
+      let session = await impl.startGatekeeperSession({ type: "attachments" }, { from: "agent", chatId });
+      let [listed] = await session.list();
+      expect(listed.name).toBe("small.csv");
+      let opened = await impl.openChatAttachment(listed.handle);
+      expect(opened.size).toBe(bytes.byteLength);
+      expect(opened.mime).toBe("text/csv");
+      expectSameBytes(new Uint8Array(await new Response(opened.stream).arrayBuffer()), bytes);
+
+      // A handle for a chat the attachment is not committed to opens nothing.
+      await expect(impl.openChatAttachment(
+          JSON.stringify([impl.ctx.id.toString(), chatId + 1, listed.id])))
+          .rejects.toThrow("not found");
     }));
 
   it("replays a large attachment to the model as a marker, never its bytes", () =>
@@ -178,7 +198,8 @@ describe("large chat attachments", () => {
       let user = requests[0].find(message => message.role === "user");
       let text = JSON.stringify(user?.content);
       expect(text).toContain(`id ${big.id}`);
-      expect(text).toContain("too large to include");
+      expect(text).toContain("not readable as model input");
+      expect(text).toContain("Read it through a module that reads attachment handles");
       expect(text).not.toContain("currently unavailable");
     }));
 

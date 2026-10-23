@@ -536,7 +536,7 @@ describe("scratch worktree attachment ingress", () => {
       expect(text).toContain(`workspace file env.SCRATCH/${file.name}`);
       expect(text).not.toContain("\ufffd");
       expect(input.content.some(part => part.type === "image")).toBe(file.mimeType === "image/png");
-      if (file.mimeType !== "image/png") expect(text).toContain("binary contents are not inlined");
+      if (file.mimeType !== "image/png") expect(text).toContain("not readable as model input");
     }),
   );
 
@@ -568,7 +568,7 @@ describe("scratch worktree attachment ingress", () => {
       expect(input.content.some(part => part.type === "image")).toBe(false);
       const text = input.content.flatMap(part => part.type === "text" ? [part.text] : []).join("");
       expect(text).toContain(`workspace file env.SCRATCH/${file.name}`);
-      expect(text).toContain("binary contents are not inlined");
+      expect(text).toContain("not readable as model input");
     }
     const message = [...impl.storage.chats.list()].find(message => message.type === "message" && message.attachments?.length);
     if (!message || message.type !== "message") throw new Error("Missing attachment");
@@ -609,7 +609,7 @@ describe("scratch worktree attachment ingress", () => {
         expect(parts).toHaveLength(1);
         expect(parts[0]).toMatchObject({type: "image", mimeType, data: lastBytes.toBase64()});
         expect(JSON.stringify(request)).toContain("workspace file env.SCRATCH/0.png");
-        expect(JSON.stringify(request)).toContain("binary contents are not inlined");
+        expect(JSON.stringify(request)).toContain("not readable as model input");
       }
       const originals = [...impl.storage.chats.list()].flatMap(message =>
         message.type === "message" ? message.attachments ?? [] : []);

@@ -439,6 +439,19 @@ function validateChatAttachmentId(id: string): string {
   return id;
 }
 
+// The `ChatAttachmentRef` for a small attachment `id` committed to a message of `chatId`, or
+// undefined. Scans the chat's messages the same way `ChatAttachmentsSession.list()` does.
+function findChatAttachmentRef(
+    impl: {storage: OverseerStorage}, chatId: number, id: string): ChatAttachmentRef | undefined {
+  for (let message of impl.storage.chats.list({prefix: `${keyString(chatId)}.`})) {
+    if (message.type !== "message") continue;
+    for (let attachment of message.attachments ?? []) {
+      if (attachment.id === id) return attachment;
+    }
+  }
+  return undefined;
+}
+
 // Sentinel gatekeeperId used on ActionRecords that originated from built-in agent tools
 // (e.g. webFetch) rather than from a real gatekeeper. Real gatekeeper IDs are assigned
 // starting at 1, so -1 is a safe out-of-band marker. Only "observation" records ever carry
@@ -5411,21 +5424,37 @@ class OverseerImpl implements AgentHooks {
     return {size: record.size, bytes: new Uint8Array(await object.arrayBuffer())};
   }
 
-  // The handle by which a PEAK module streams a large attachment from the `ChatAttachmentContent`
-  // entrypoint. It names this Overseer, since the entrypoint is stateless; opening it re-checks the
-  // record, so a handle for a deleted attachment opens nothing.
-  makeLargeChatAttachmentHandle(chatId: number, id: string): string {
-    this.#getCommittedLargeChatAttachment(chatId, id);
+  // The handle by which a PEAK module streams a chat attachment (any size) from the
+  // `ChatAttachmentContent` entrypoint. It names this Overseer, since the entrypoint is
+  // stateless; opening it re-checks that the attachment is still committed to the chat, so a
+  // handle for a deleted attachment opens nothing. A caller already holding the attachment's
+  // committed ref (`list()` while iterating the chat's messages) passes it so minting does not
+  // re-scan the messages, which typed-storage forbids inside that iteration.
+  mintChatAttachmentHandle(chatId: number, id: string, verifiedRef?: ChatAttachmentRef): string {
+    if (this.storage.largeChatAttachments.get(validateChatAttachmentId(id))) {
+      this.#getCommittedLargeChatAttachment(chatId, id);
+    } else if (verifiedRef === undefined) {
+      if (findChatAttachmentRef(this, chatId, id) === undefined) {
+        throw new Error("Chat attachment not found.");
+      }
+    }
     return makeChatAttachmentHandle({overseerId: this.ctx.id.toString(), chatId, fileId: id});
   }
 
-  async openLargeChatAttachment(handle: string):
-      Promise<{size: number; mime: string; stream: ReadableStream<Uint8Array>}> {
+  async openChatAttachment(handle: string):
+      Promise<{ size: number; mime: string; stream: ReadableStream<Uint8Array> }> {
     let {chatId, fileId} = parseChatAttachmentHandle(handle);
-    let record = this.#getCommittedLargeChatAttachment(chatId, fileId);
-    let object = await this.#largeChatAttachmentBucket().get(record.key);
-    if (!object) throw new Error("Chat attachment content is missing.");
-    return {size: record.size, mime: record.mimeType, stream: object.body};
+    let record = this.storage.largeChatAttachments.get(validateChatAttachmentId(fileId));
+    if (record) {
+      if (record.chatId !== chatId) throw new Error("Chat attachment not found.");
+      let object = await this.#largeChatAttachmentBucket().get(record.key);
+      if (!object) throw new Error("Chat attachment content is missing.");
+      return {size: record.size, mime: record.mimeType, stream: object.body};
+    }
+    let ref = findChatAttachmentRef(this, chatId, fileId);
+    if (!ref) throw new Error("Chat attachment not found.");
+    let bytes = await this.getChatAttachmentData(chatId, fileId);
+    return {size: bytes.byteLength, mime: ref.mimeType, stream: new Blob([bytes]).stream()};
   }
 
   // Delete the R2 content of a large attachment whose record the caller has deleted, including an
@@ -10544,13 +10573,13 @@ export class OverseerDurableObject extends DurableObject<Cloudflare.Env> {
   }
 
   /**
-   * Stream a large chat attachment, for the `ChatAttachmentContent` entrypoint. The handle is a
+   * Stream a chat attachment, for the `ChatAttachmentContent` entrypoint. The handle is a
    * capability from `env.ATTACHMENTS.list()`, and opens only an attachment still committed to
    * the chat it names.
    */
-  async openLargeChatAttachment(handle: string):
+  async openChatAttachment(handle: string):
       Promise<{ size: number; mime: string; stream: ReadableStream<Uint8Array> }> {
-    return await this.impl.openLargeChatAttachment(handle);
+    return await this.impl.openChatAttachment(handle);
   }
 
   /**
@@ -11043,8 +11072,8 @@ class ChatAttachmentsSession extends NativeRpcTarget {
     super();
   }
 
-  async list(): Promise<Array<{ id: string; name: string | null; mime: string; size: number; handle?: string }>> {
-    let result: Array<{ id: string; name: string | null; mime: string; size: number; handle?: string }> = [];
+  async list(): Promise<Array<{ id: string; name: string | null; mime: string; size: number; handle: string }>> {
+    let result: Array<{ id: string; name: string | null; mime: string; size: number; handle: string }> = [];
     let ids = new Set<string>();
     for (let message of this.overseer.storage.chats.list({prefix: `${keyString(this.chatId)}.`})) {
       if (message.type !== "message") continue;
@@ -11056,9 +11085,8 @@ class ChatAttachmentsSession extends NativeRpcTarget {
           name: attachment.name ?? null,
           mime: attachment.mimeType,
           size: attachment.size,
-          // A large attachment is read by streaming it through its handle, not with `get()`.
-          ...(attachment.large
-              ? {handle: this.overseer.makeLargeChatAttachmentHandle(this.chatId, attachment.id)} : {}),
+          // Every attachment, whatever its size, is read by streaming it through its handle.
+          handle: this.overseer.mintChatAttachmentHandle(this.chatId, attachment.id, attachment),
         });
       }
     }
@@ -11066,13 +11094,14 @@ class ChatAttachmentsSession extends NativeRpcTarget {
   }
 
   async get(id: string): Promise<{ id: string; name: string | null; mime: string; bytes: Uint8Array }> {
-    let attachment = (await this.list()).find(candidate => candidate.id === id);
+    let attachment = findChatAttachmentRef(this.overseer, this.chatId, id);
     if (!attachment) throw new Error("attachment not found in this chat");
-    if (attachment.handle !== undefined) {
+    if (attachment.large) {
       throw new Error("attachment is too large to return as bytes; stream it with its `handle` " +
           "from list() through a module that accepts attachment handles");
     }
-    return {...attachment, bytes: await this.overseer.getChatAttachmentData(this.chatId, id)};
+    let entry = {id, name: attachment.name ?? null, mime: attachment.mimeType};
+    return {...entry, bytes: await this.overseer.getChatAttachmentData(this.chatId, id)};
   }
 }
 

@@ -1,7 +1,7 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 import { validateRpc } from "capnweb-validate";
 
-/** Where a large chat attachment lives: the handle names it, and so the Overseer that holds it. */
+/** Where a chat attachment lives: the handle names it, and so the Overseer that holds it. */
 export type ChatAttachmentHandleParts = {
   overseerId: string;
   chatId: number;
@@ -9,7 +9,7 @@ export type ChatAttachmentHandleParts = {
 };
 
 /**
- * Encode the opaque handle that the agent's `env.ATTACHMENTS.list()` returns for a large
+ * Encode the opaque handle that the agent's `env.ATTACHMENTS.list()` returns for every chat
  * attachment. It carries the Overseer's id because `ChatAttachmentContent` is stateless.
  */
 export function makeChatAttachmentHandle(parts: ChatAttachmentHandleParts): string {
@@ -32,9 +32,10 @@ export function parseChatAttachmentHandle(handle: string): ChatAttachmentHandleP
 }
 
 /**
- * Streams a large chat attachment from the Workshop's `CHAT_ATTACHMENT_CONTENT` bucket, so a
- * 100 MB file never sits whole in an isolate. Modules reach it through the `CHAT_ATTACHMENTS`
- * service binding with a `handle` from the agent's `env.ATTACHMENTS.list()`.
+ * Streams a chat attachment -- a large one from the Workshop's `CHAT_ATTACHMENT_CONTENT`
+ * bucket, a small one from the chat's own storage -- so a 100 MB file never sits whole in an
+ * isolate. Modules reach it through the `CHAT_ATTACHMENTS` service binding with a `handle`
+ * from the agent's `env.ATTACHMENTS.list()`.
  *
  * A handle is a capability, but the Overseer that minted it still checks that the attachment
  * remains committed to that chat, so the handle of a deleted attachment opens nothing.
@@ -46,6 +47,6 @@ export class ChatAttachmentContent extends WorkerEntrypoint<Cloudflare.Env> {
       Promise<{ size: number; mime: string; stream: ReadableStream<Uint8Array> }> {
     let {overseerId} = parseChatAttachmentHandle(request.handle);
     let namespace = this.ctx.exports.OverseerDurableObject;
-    return await namespace.get(namespace.idFromString(overseerId)).openLargeChatAttachment(request.handle);
+    return await namespace.get(namespace.idFromString(overseerId)).openChatAttachment(request.handle);
   }
 }
