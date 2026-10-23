@@ -10,6 +10,7 @@ import { getRecents, recordPick } from './recents'
 import { useRecordSearch } from './useRecordSearch'
 import { TypeTabs } from './TypeTabs'
 import { useSpotlightEntries } from './useSpotlightEntries'
+import { schedulePreload } from '../../features/app-preload/appPreload'
 
 function Key({ children }: { children: string }) {
   return <kbd className="rounded border border-kumo-line px-1 py-0.5 font-sans leading-none">{children}</kbd>
@@ -50,6 +51,9 @@ export default function SpotlightPanel({ onDone }: { onDone: () => void }) {
   useEffect(() => {
     listRef.current?.querySelector<HTMLElement>(`[data-index="${activeIndex}"]`)?.scrollIntoView({ block: 'nearest' })
   }, [activeIndex])
+  // The highlighted action (arrow keys, pointer, best match while typing) is the likely pick.
+  const activePreload = flat[activeIndex]?.preload
+  useEffect(() => (activePreload ? schedulePreload(activePreload) : undefined), [activePreload])
 
   const pick = useCallback((entry: RankedEntry) => {
     setRecents(recordPick(entry.id))
