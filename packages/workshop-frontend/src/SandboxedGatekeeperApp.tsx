@@ -39,6 +39,7 @@ import {
   publishAppSectionNav,
   setAppSectionNavReceiver,
 } from './features/app-section-nav/sectionNavStore'
+import { attachAppPreload, detachAppPreload } from './features/app-preload/appPreload'
 
 // The content-pane rect, in viewport coordinates, that the app pins its page to while the iframe
 // is full-viewport.
@@ -309,6 +310,7 @@ class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
   subscribeRoute(receiver: RpcStub<GatekeeperAppRouteReceiver>): string {
     this.#routeReceiver?.[Symbol.dispose]?.()
     this.#routeReceiver = receiver.dup()
+    attachAppPreload(this.#appId, this, (route) => this.#preloadRoute(route))
     this.#route = this.#routing.current()
     this.#unseen = []
     return this.#route
@@ -351,6 +353,19 @@ class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
     if (this.#routeReceiver !== receiver) return
     receiver[Symbol.dispose]?.()
     this.#routeReceiver = null
+  }
+
+  // Navigation intent on a row that opens `route` (sidebar, launcher): a hint to the app, never
+  // awaited. A stub exposes every method name, so the optional one is called as present; an app
+  // without `preloadRoute` rejects the call, which keeps its route channel intact.
+  #preloadRoute(route: string) {
+    const receiver = this.#routeReceiver as RpcStub<Required<GatekeeperAppRouteReceiver>> | null
+    if (!receiver || !isAppRoute(route) || route === this.#route) return
+    try {
+      Promise.resolve(receiver.preloadRoute(route)).catch(() => {})
+    } catch {
+      // The frame is gone; setRoute drops the receiver on the next navigation.
+    }
   }
 
   // The app changed what the user sees (e.g. its areas): refetch apps and navigation, throttled
@@ -443,6 +458,7 @@ class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
     this.#routeReceiver?.[Symbol.dispose]?.()
     this.#routeReceiver = null
     detachAppSectionNav(this.#appId, this)
+    detachAppPreload(this.#appId, this)
     this.#sectionNavReceiver?.[Symbol.dispose]?.()
     this.#sectionNavReceiver = null
     this.suspendPresentation()

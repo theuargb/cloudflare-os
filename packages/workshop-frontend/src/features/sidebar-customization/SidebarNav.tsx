@@ -4,6 +4,7 @@ import type { GatekeeperAppInfo, GatekeeperAppNavigation } from '@gadgets/worksh
 import SidebarItem from '../../components/AppShell/SidebarItem'
 import AppSectionTree from '../app-section-nav/AppSectionTree'
 import AppSectionFlyout from '../app-section-nav/AppSectionFlyout'
+import { preloadAppRoute } from '../app-preload/appPreload'
 import { useOptionalAuthenticatedApi } from '../../AuthContext'
 import { SidebarLabelEditor } from './SidebarLabelEditor'
 import {
@@ -158,6 +159,7 @@ const SidebarNavContent = ({
         endAction={customizable ? <RenameButton label={label} onClick={() => setEditingKey(def.key)} /> : undefined}
         nested={def.appId && !collapsed ? <AppSectionTree appId={def.appId} entry={def.entry} drawer={drawer} /> : undefined}
         flyout={def.appId && collapsed ? (link) => <AppSectionFlyout appId={def.appId!} entry={def.entry} label={label}>{link}</AppSectionFlyout> : undefined}
+        preload={def.appId ? () => preloadAppRoute(def.appId!, def.search?.at ?? '') : undefined}
       />
     )
     if (!customizable) return <div key={def.key}>{item}</div>

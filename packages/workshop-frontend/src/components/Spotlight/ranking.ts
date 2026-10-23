@@ -24,6 +24,8 @@ export type SpotlightEntry = {
   keywords?: string[]
   featured?: boolean
   run: () => void
+  /** Warms what `run` opens (an app action's route) while the user points at or highlights the entry. */
+  preload?: () => void
 }
 
 /** An entry with the title indices the query matched (empty when unranked). */
