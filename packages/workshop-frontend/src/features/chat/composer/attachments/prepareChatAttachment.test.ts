@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from "vitest";
+import { MAX_LARGE_CHAT_ATTACHMENT_BYTES } from "@gadgets/workshop-shared/api";
 import { MAX_CHAT_ATTACHMENT_BYTES, prepareChatAttachment } from "./prepareChatAttachment";
 
 describe("prepareChatAttachment", () => {
@@ -17,9 +18,15 @@ describe("prepareChatAttachment", () => {
     await expect(prepareChatAttachment(file)).resolves.toEqual({blob: file, mimeType: "application/octet-stream"});
   });
 
-  it.each(["application/octet-stream", "image/png"])("enforces the upload limit for %s", async type => {
-    const file = new File([new Uint8Array(MAX_CHAT_ATTACHMENT_BYTES + 1)], "large", {type});
-    await expect(prepareChatAttachment(file)).rejects.toThrow("Attachments must be 4.0 MB or smaller.");
+  it.each(["application/octet-stream", "image/png"])("enforces the large-upload limit for %s", async type => {
+    const file = new File([Uint8Array.of(0)], "large", {type});
+    Object.defineProperty(file, "size", {value: MAX_LARGE_CHAT_ATTACHMENT_BYTES + 1});
+    await expect(prepareChatAttachment(file)).rejects.toThrow("Attachments must be 100.0 MB or smaller.");
+  });
+
+  it("accepts a file above the blob limit, to be uploaded in parts", async () => {
+    const file = new File([new Uint8Array(MAX_CHAT_ATTACHMENT_BYTES + 1)], "big.bin");
+    await expect(prepareChatAttachment(file)).resolves.toMatchObject({blob: file});
   });
 
   it("accepts an original image exactly at the limit without resizing it", async () => {

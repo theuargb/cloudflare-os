@@ -247,8 +247,10 @@ async function describeBinding(
     if (!entry && name === GIT_BINDING_NAME) return hooks.describeGitBinding(envName);
     if (!entry && name === ATTACHMENTS_BINDING_NAME) {
       return `${envName} lists files the user attached in this chat. ` +
-          `${envName}.list() returns { id, name, mime, size }[]; ` +
-          `${envName}.get(id) returns { id, name, mime, bytes }.`;
+          `${envName}.list() returns { id, name, mime, size, handle? }[]; ` +
+          `${envName}.get(id) returns { id, name, mime, bytes }, but throws for an attachment ` +
+          `that has a \`handle\`. Such a large attachment is not a workspace file: pass its handle ` +
+          `to a module that streams attachment handles (the ChatAttachmentContent service).`;
     }
     if (!entry) throw new Error(`There is no binding named "${name}" in your env.`);
     switch (entry.type) {
@@ -2252,6 +2254,13 @@ async function runAgentPass(
                     ? `; workspace file env.${agentContext.scratch.bindingName}/` +
                       attachment.workspacePath
                     : "";
+                if (attachment.large) {
+                  // Too large to load into the model's input or the workspace; the agent can only
+                  // stream it from its env.ATTACHMENTS handle.
+                  return [{type: "text", text: `\n\n[Attached file${filename} (${attachment.mimeType}, ` +
+                    `${attachment.size} bytes, id ${attachment.id}); too large to include. Its ` +
+                    `handle is in ${ATTACHMENTS_BINDING_NAME}.list() in executeCode.]`}];
+                }
                 let data: Uint8Array;
                 try {
                   data = await hooks.getChatAttachmentData(chatId, attachment.id);

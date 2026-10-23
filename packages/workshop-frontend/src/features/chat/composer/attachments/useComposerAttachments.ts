@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import type { RpcStub } from "capnweb";
+import { MAX_LARGE_CHAT_ATTACHMENT_TOTAL_BYTES } from "@gadgets/workshop-shared/api";
 import type { ChatAttachmentHandle, Overseer } from "@gadgets/workshop-shared/api";
 import { reportIssue } from "../../../../errorReporting";
 import { formatAttachmentSize } from "../../attachmentFormatting";
 import {
+  MAX_CHAT_ATTACHMENT_BYTES,
   MAX_CHAT_ATTACHMENT_TOTAL_BYTES,
   prepareChatAttachment,
 } from "./prepareChatAttachment";
+import { uploadLargeChatAttachment } from "./uploadLargeChatAttachment";
 
 export const MAX_COMPOSER_ATTACHMENTS = 5;
 
@@ -61,26 +64,38 @@ export const useComposerAttachments = ({
     };
   }, []);
 
+  // Best effort: the server also sweeps a large upload that no message claims.
+  const discardLargeUpload = (uploadId: string) => {
+    void Promise.resolve(getOverseerRef.current())
+      .then((overseer) => overseer.discardLargeChatAttachmentUpload(uploadId))
+      .catch(() => {});
+  };
+
   const uploadAttachment = async (
     id: string,
     blob: Blob,
     mimeType: string,
     name: string | undefined,
   ) => {
+    const isGone = () => !mountedRef.current || !attachmentsRef.current.some((item) => item.id === id);
     try {
-      const content = new Uint8Array(await blob.arrayBuffer());
-      if (!mountedRef.current || !attachmentsRef.current.some((item) => item.id === id)) return;
+      const content = blob.size > MAX_CHAT_ATTACHMENT_BYTES
+        ? undefined : new Uint8Array(await blob.arrayBuffer());
+      if (isGone()) return;
       const overseer = await getOverseerRef.current();
-      if (!mountedRef.current || !attachmentsRef.current.some((item) => item.id === id)) return;
-      const oid = await overseer.uploadBlob(content);
-      if (!mountedRef.current || !attachmentsRef.current.some((item) => item.id === id)) {
+      if (isGone()) return;
+      const ref: ChatAttachmentHandle = content
+        ? { oid: await overseer.uploadBlob(content), mimeType, name }
+        : await uploadLargeChatAttachment(overseer, blob, mimeType, name);
+      if (isGone()) {
+        // Removed or abandoned while uploading.
+        if ("id" in ref) discardLargeUpload(ref.id);
         return;
       }
-      const ref: ChatAttachmentHandle = {oid, mimeType, name};
       updateAttachments((current) => current.map((item) =>
         item.id === id ? { ...item, uploadState: "ready", ref } : item));
     } catch (error) {
-      if (!mountedRef.current || !attachmentsRef.current.some((item) => item.id === id)) return;
+      if (isGone()) return;
       console.error("Failed to upload chat attachment:", error);
       reportIssue("chat.attachment-upload", error);
       const message = errorMessage(error, "Upload failed");
@@ -122,13 +137,17 @@ export const useComposerAttachments = ({
         onErrorRef.current(`You can attach up to ${MAX_COMPOSER_ATTACHMENTS} attachments`);
         continue;
       }
+      // Small and large attachments have separate totals: only small ones go into model input.
+      const isLarge = blob.size > MAX_CHAT_ATTACHMENT_BYTES;
       const totalBytes = attachmentsRef.current.reduce(
-        (sum, attachment) => sum + attachment.blob.size,
+        (sum, attachment) =>
+          (attachment.blob.size > MAX_CHAT_ATTACHMENT_BYTES) === isLarge ? sum + attachment.blob.size : sum,
         0,
       );
-      if (totalBytes + blob.size > MAX_CHAT_ATTACHMENT_TOTAL_BYTES) {
+      const totalLimit = isLarge ? MAX_LARGE_CHAT_ATTACHMENT_TOTAL_BYTES : MAX_CHAT_ATTACHMENT_TOTAL_BYTES;
+      if (totalBytes + blob.size > totalLimit) {
         onErrorRef.current(
-          `Attached files must total ${formatAttachmentSize(MAX_CHAT_ATTACHMENT_TOTAL_BYTES)} or less`,
+          `Attached ${isLarge ? "large " : ""}files must total ${formatAttachmentSize(totalLimit)} or less`,
         );
         continue;
       }
@@ -151,6 +170,7 @@ export const useComposerAttachments = ({
   const removeAttachment = (id: string) => {
     const attachment = attachmentsRef.current.find((item) => item.id === id);
     if (attachment?.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+    if (attachment?.ref && "id" in attachment.ref) discardLargeUpload(attachment.ref.id);
     updateAttachments((current) => current.filter((item) => item.id !== id));
   };
 
