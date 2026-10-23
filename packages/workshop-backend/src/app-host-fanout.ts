@@ -26,7 +26,7 @@ const APP_INBOX_TIMEOUT_MS = 1500;
  * `providesInbox`), which is why they can be viewed as required.
  */
 export type AppHostStub =
-    Required<Pick<GatekeeperUser, "getAppNavigation" | "searchApp" | "getInbox" | "markInboxRead">>;
+    Required<Pick<GatekeeperUser, "getAppNavigation" | "searchApp" | "selectAppWorkplace" | "getInbox" | "markInboxRead">>;
 
 /** One provided account as the fan-out sees it. `appId` is the vendor id, which names the app. */
 export type AppHostAccount = { appId: string, description: AccountDescription, stub: AppHostStub };
@@ -77,6 +77,31 @@ export async function searchApp(accounts: AppHostAccount[], context: ActorContex
       event: "gatekeeper.app.search.failed", vendorId: account.appId, error: err,
     });
     return [];
+  }
+}
+
+/**
+ * Workplace switch of one management app (AuthenticatedApi.selectAppWorkplace). The account is
+ * selected by vendor id, constrained to UI providers; the app's refusal is logged and rethrown so
+ * the caller sees the switch failed.
+ */
+export async function selectAppWorkplace(
+  accounts: AppHostAccount[],
+  context: ActorContext,
+  appId: string,
+  workplaceId: string,
+): Promise<void> {
+  let account = accounts.find((candidate) => candidate.appId === appId && candidate.description.providesUi);
+  if (!account) throw new Error("Unknown app.");
+  try {
+    await withDeadline(account.stub.selectAppWorkplace(context, workplaceId), APP_NAVIGATION_TIMEOUT_MS);
+  } catch (err) {
+    logger.warn("app workplace switch failed", {
+      event: "gatekeeper.app.workplace.failed",
+      vendorId: account.appId,
+      error: err,
+    });
+    throw err;
   }
 }
 

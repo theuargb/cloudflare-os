@@ -942,6 +942,13 @@ export interface AuthenticatedApi extends RpcTarget {
   searchApp(appId: string, query: string): Promise<AppSearchHit[]>;
 
   /**
+   * Switch the workplace of one UI-providing gatekeeper (the topbar switcher published in
+   * `AppNavigation.workplaces`). Rejects an unknown app, an invalid id or an id the app refuses;
+   * on success the caller refetches `listAppNavigation()`.
+   */
+  selectAppWorkplace(appId: string, workplaceId: string): Promise<void>;
+
+  /**
    * The topbar inbox from the deployment's inbox provider (the first account whose description sets
    * `providesInbox`), validated and truncated; null when there is no provider.
    */
