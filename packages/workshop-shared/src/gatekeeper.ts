@@ -1002,6 +1002,12 @@ export interface GatekeeperUser extends WorkerEntrypoint {
   getAppNavigation?(context: ActorContext): Promise<AppNavigation>;
 
   /**
+   * Switch the actor's workplace (AppNavigation.workplaces); the next getAppNavigation reflects it.
+   * Throws on an unknown or unavailable id. Called only on accounts whose description sets `providesUi`.
+   */
+  selectAppWorkplace?(context: ActorContext, workplaceId: string): Promise<void>;
+
+  /**
    * The actor's inbox for the topbar bell: the unread total and at most `limit` latest entries.
    * Called only on accounts whose description sets `providesInbox`.
    */

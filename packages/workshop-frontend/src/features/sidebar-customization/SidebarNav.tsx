@@ -142,6 +142,7 @@ const SidebarNavContent = ({
     const item = (
       <SidebarItem
         to={def.to}
+        href={def.href}
         params={def.params}
         search={def.search}
         entry={def.entry}

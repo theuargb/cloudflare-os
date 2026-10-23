@@ -18,6 +18,8 @@ vi.mock('../../KeptGatekeeperApp', () => ({
   KeptGatekeeperApp: () => null,
   KeptGatekeeperAppProvider: ({ children }: { children: React.ReactNode }) => children,
 }))
+
+vi.mock('../AppNavigation/WorkplaceSwitcher', () => ({ default: () => null }))
 vi.mock('./Sidebar', () => ({
   default: () => <aside data-testid="sidebar" />,
 }))
