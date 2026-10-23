@@ -20,6 +20,7 @@ vi.mock('../../KeptGatekeeperApp', () => ({
 }))
 
 vi.mock('../AppNavigation/WorkplaceSwitcher', () => ({ default: () => null }))
+vi.mock('../../features/app-type-menus/AppTypeMenus', () => ({ default: () => null }))
 vi.mock('./Sidebar', () => ({
   default: () => <aside data-testid="sidebar" />,
 }))
