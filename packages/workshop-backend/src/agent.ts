@@ -230,6 +230,9 @@ export type AgentGadgetInfo = {
  */
 export const GIT_BINDING_NAME = "GIT";
 
+/** The chat-attachment binding available only in the agent's executeCode env. */
+export const ATTACHMENTS_BINDING_NAME = "ATTACHMENTS";
+
 // Describes the binding named by a `describeBinding` tool call: a name in the chat's env or,
 // given `gadget`, in that gadget's own env.
 async function describeBinding(
@@ -242,6 +245,11 @@ async function describeBinding(
     let envName = `env.${name}`;
     let entry = chatBindings.get(name);
     if (!entry && name === GIT_BINDING_NAME) return hooks.describeGitBinding(envName);
+    if (!entry && name === ATTACHMENTS_BINDING_NAME) {
+      return `${envName} lists files the user attached in this chat. ` +
+          `${envName}.list() returns { id, name, mime, size }[]; ` +
+          `${envName}.get(id) returns { id, name, mime, bytes }.`;
+    }
     if (!entry) throw new Error(`There is no binding named "${name}" in your env.`);
     switch (entry.type) {
       case "workpiece":
@@ -264,6 +272,10 @@ async function describeBinding(
   let edge = info.bindings.find(binding => binding.name === name);
   if (edge) return hooks.describeBinding(envName, edge.target, chatId);
   if (name === GIT_BINDING_NAME) return hooks.describeGitBinding(envName);
+  if (name === ATTACHMENTS_BINDING_NAME) {
+    return `${envName} is unavailable: chat attachments are available only to the agent's ` +
+        `executeCode env, not to Gadget code.`;
+  }
   if (name === "GADGET") {
     // Unlike the gadget bindings in the agent's env, a gadget's env.GADGET is
     // the bare RPC stub.
@@ -716,7 +728,7 @@ Make Gadget UIs responsive and usable on both desktop and phones by default.
 
 Both the client and server run inside a strictly isolated sandbox. They cannot make requests to the Internet, e.g. by calling \`fetch()\`. Instead, a Gadget communicates with the outside world strictly through its "bindings", that is, the Cloudflare Workers \`env\` API, which code in the Durable Object class can access as \`this.env\`.
 
-Every Gadget's \`env\`, as well as your own \`executeCode\` env, always contains \`env.GIT\`, which provides programmatic access to git commits known to the workspace: read a commit's metadata and files, edit them in memory, and write new commits. Use \`describeBinding\` to learn its API if you need it.
+Every Gadget's \`env\`, as well as your own \`executeCode\` env, always contains \`env.GIT\`, which provides programmatic access to git commits known to the workspace: read a commit's metadata and files, edit them in memory, and write new commits. Use \`describeBinding\` to learn its API if you need it. \`env.ATTACHMENTS.list()\` lists files the user attached in this chat; \`env.ATTACHMENTS.get(id)\` returns \`{ id, name, mime, bytes }\`.
 
 Note that the iframe sandbox on the client side prohibits modal popup boxes like alert() and confirm(), so do not use those.
 
@@ -896,7 +908,7 @@ You were started programmatically by the Gadget to perform a task, described bel
 
 Typically (but not always), you will need to use the \`executeCode\` tool to complete the task, invoking the available bindings (members of the env object) and other APIs available to you.
 
-Your \`env\` always contains \`env.GIT\`, which provides programmatic access to git commits known to the workspace (read a commit's metadata and files, edit them, and write new commits). Use \`describeBinding\` to learn its API if you need it.
+Your \`env\` always contains \`env.GIT\`, which provides programmatic access to git commits known to the workspace (read a commit's metadata and files, edit them, and write new commits). Use \`describeBinding\` to learn its API if you need it. \`env.ATTACHMENTS.list()\` lists files the user attached in this chat; \`env.ATTACHMENTS.get(id)\` returns \`{ id, name, mime, bytes }\`.
 
 # Persistent Stubs and \`ctx.restore()\`
 
@@ -1279,6 +1291,7 @@ let EXECUTE_CODE_TOOL_DESCRIPTION = `
 ${EXECUTE_CODE_INTRO}
 
 The 'env' object contains this chat's named bindings:
+* \`env.ATTACHMENTS\` lists files the user attached in this chat. Call \`env.ATTACHMENTS.get(id)\` to read a file's \`{ id, name, mime, bytes }\`.
 * An entry for each Gadget in the workspace, under the name given in the system prompt's gadget list (or the name you passed to \`createGadget\`). Its \`rpc\` property is an RPC stub pointing at the Gadget's server-side Durable Object: if the user asks you to interact with a Gadget directly, or asks if you can "see" it, use this stub (read the Gadget's server code to learn what RPC methods it exposes). Its \`exports\` property exports the Gadget as a file in any format it offers, the same files a user gets from the Workshop's Export menu; use \`describeBinding\` to learn its API if you need it.
 * An entry for each external resource available to this chat: those listed in the system prompt, those the user grants in messages (shown as \`[Resource Title](env.SOME_NAME)\`), and those you obtain with \`requestConnection\`.
 
@@ -1295,6 +1308,7 @@ let SPAWNED_EXECUTE_CODE_TOOL_DESCRIPTION = `
 ${EXECUTE_CODE_INTRO}
 
 The 'env' object contains this chat's named bindings:
+* \`env.ATTACHMENTS\` lists files the user attached in this chat. Call \`env.ATTACHMENTS.get(id)\` to read a file's \`{ id, name, mime, bytes }\`.
 * Each binding listed in the system prompt. A Gadget's binding has an \`rpc\` property, an RPC stub pointing at the Gadget's server-side Durable Object (read the Gadget's server code to learn what RPC methods it exposes), and an \`exports\` property that exports the Gadget as a file (use \`describeBinding\` to learn its API).
 * Each resource a user grants in a message, shown as \`[Resource Title](env.SOME_NAME)\`.
 * Each worktree you create with \`createWorktree\`, under the name you chose.
@@ -1750,11 +1764,13 @@ async function runAgentPass(
   // to anything yet. A denied request releases its name (log-derived, so replay agrees).
   let claimedNames = new Set<string>();
 
-  // Whether a name is unavailable for a new chat binding. GIT_BINDING_NAME counts as in scope
-  // because the automatic env.GIT occupies it; only new bindings are refused -- a chat binding
-  // that already took the name (from before env.GIT existed) keeps resolving as it did.
+  // Whether a name is unavailable for a new chat binding. GIT_BINDING_NAME and
+  // ATTACHMENTS_BINDING_NAME count as in scope because the automatic env.GIT / env.ATTACHMENTS
+  // occupy them; only new bindings are refused -- a chat binding that already took the name
+  // (from before the automatic binding existed) keeps resolving as it did.
   let isNameInScope = (name: string) =>
-      name === GIT_BINDING_NAME || chatBindings.has(name) || claimedNames.has(name);
+      name === GIT_BINDING_NAME || name === ATTACHMENTS_BINDING_NAME
+          || chatBindings.has(name) || claimedNames.has(name);
 
   // Reverse lookup: the chat env name for a workpiece, if the agent holds one.
   let chatNameFor = (id: WorkpieceId): string | undefined => {
@@ -3040,7 +3056,7 @@ async function runAgentPass(
     let systemPromptBindings: string;
     if (namedSeeds.length == 0) {
       systemPromptBindings =
-          "Aside from `env.GIT` and any resources described below, the `env` object is empty.";
+          "Aside from `env.GIT`, `env.ATTACHMENTS` and any resources described below, the `env` object is empty.";
     } else {
       let lines = namedSeeds.map(seed =>
           `* env.${seed.name} — ` +
