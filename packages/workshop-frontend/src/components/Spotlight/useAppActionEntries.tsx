@@ -3,6 +3,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { useGatekeeperApps } from '../../useGatekeeperApps'
 import { useAppNavigation } from '../AppNavigation/useAppNavigation'
 import { GatekeeperAppIcon } from '../GatekeeperAppIcon'
+import { preloadAppRoute } from '../../features/app-preload/appPreload'
 import type { SpotlightEntry } from './ranking'
 
 /**
@@ -40,6 +41,7 @@ export function useAppActionEntries(): SpotlightEntry[] {
           keywords: action.keywords,
           featured: action.featured,
           run: () => navigate({ to: '/gatekeepers/$appId', params: { appId }, search: { at: action.route } }),
+          preload: () => preloadAppRoute(appId, action.route),
         })
       }
     }

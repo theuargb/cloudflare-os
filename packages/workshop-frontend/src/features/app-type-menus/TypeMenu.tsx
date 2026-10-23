@@ -10,6 +10,7 @@ import type { SpotlightEntry } from '../../components/Spotlight/ranking'
 import { getRecents, recordPick, type RecentEntry } from '../../components/Spotlight/recents'
 import { KIND_ICONS } from '../app-section-nav/kindIcons'
 import { typeMenuSections } from './typeMenuSections'
+import { preloadIntent } from '../app-preload/appPreload'
 
 const HEADING = 'flex items-center gap-1.5 px-2.5 pb-1 pt-2 text-[11px] font-medium uppercase tracking-[0.06em] text-kumo-inactive'
 
@@ -76,6 +77,7 @@ export default function TypeMenu({ type, entries, openModule }: {
                     <DropdownMenu.Item
                       key={`${section.id}:${entry.id}`}
                       title={entry.section}
+                      {...(entry.preload ? preloadIntent(entry.preload) : {})}
                       onClick={() => {
                         recordPick(entry.id)
                         entry.run()

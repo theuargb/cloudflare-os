@@ -90,6 +90,12 @@ export type AppActionModule = { id: string; title: string; icon?: { url: string 
 export interface GatekeeperAppRouteReceiver extends RpcTarget {
   /** Navigate the open app to a route the app did not report itself. */
   setRoute(route: string): void;
+  /**
+   * The user is about to open `route` (pointer resting on, or focus on, a sidebar row or launcher
+   * item): load what it needs in the background without navigating. Optional; a hint the host never
+   * waits for, and a failure is ignored.
+   */
+  preloadRoute?(route: string): void;
 }
 
 /**
