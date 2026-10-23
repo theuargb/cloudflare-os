@@ -11803,8 +11803,12 @@ class OverseerClientInterface extends RpcTarget implements Overseer {
       actionKind,
       enabledBy: profile,
     });
-    // Apply the currently-visible pending action(s) with this tag right away.
-    this.impl.ctx.waitUntil(this.#drainAutoApprovalsAndResume(gatekeeperId));
+    // Apply the currently-visible pending action(s) with this tag right away. Resolves once they
+    // are decided, so the client can show them as being applied until then; waitUntil keeps the
+    // drain alive should the caller go away.
+    let drained = this.#drainAutoApprovalsAndResume(gatekeeperId);
+    this.impl.ctx.waitUntil(drained);
+    await drained;
   }
 
   // Remove the auto-approval rule for `tag` on the given gatekeeper, so future matching actions

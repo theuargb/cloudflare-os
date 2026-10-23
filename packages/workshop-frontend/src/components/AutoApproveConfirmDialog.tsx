@@ -8,7 +8,6 @@ interface AutoApproveConfirmDialogProps {
   actionLabel: string
   // Title of the connection (gatekeeper) the rule applies to, e.g. "My Google Doc".
   resourceTitle: string
-  isProcessing?: boolean
   onOpenChange: (open: boolean) => void
   onConfirm: () => void
 }
@@ -21,17 +20,11 @@ export default function AutoApproveConfirmDialog({
   open,
   actionLabel,
   resourceTitle,
-  isProcessing = false,
   onOpenChange,
   onConfirm,
 }: AutoApproveConfirmDialogProps) {
   return (
-    <Dialog.Root
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (!isProcessing) onOpenChange(nextOpen)
-      }}
-    >
+    <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog
         className="responsive-dialog !z-[1000] !w-[min(440px,calc(100vw-32px))] overflow-hidden bg-kumo-base p-0 !top-[20%] !-translate-y-0"
         size="sm"
@@ -49,12 +42,7 @@ export default function AutoApproveConfirmDialog({
           </div>
           <Dialog.Close
             render={(props) => (
-              <WorkshopIconButton
-                {...props}
-                className="!h-7 !w-7"
-                disabled={isProcessing}
-                aria-label="Close"
-              >
+              <WorkshopIconButton {...props} className="!h-7 !w-7" aria-label="Close">
                 <X size={16} />
               </WorkshopIconButton>
             )}
@@ -64,18 +52,13 @@ export default function AutoApproveConfirmDialog({
         <div className="flex items-center justify-end gap-2 border-t border-kumo-line bg-kumo-base px-5 py-3">
           <Dialog.Close
             render={(props) => (
-              <WorkshopButton {...props} className="!h-9" disabled={isProcessing}>
+              <WorkshopButton {...props} className="!h-9">
                 Cancel
               </WorkshopButton>
             )}
           />
-          <WorkshopButton
-            tone="primary"
-            onClick={onConfirm}
-            disabled={isProcessing}
-            className="!h-9 min-w-[64px]"
-          >
-            {isProcessing ? 'Enabling...' : 'Always approve'}
+          <WorkshopButton tone="primary" onClick={onConfirm} className="!h-9 min-w-[64px]">
+            Always approve
           </WorkshopButton>
         </div>
       </Dialog>

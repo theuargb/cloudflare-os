@@ -2895,7 +2895,9 @@ export interface Overseer extends RpcTarget {
    * Enable auto-approval of actions carrying the given `actionKind` (the
    * ActionDescription.actionKind) on the gatekeeper identified by `gatekeeperId`. Future actions
    * with that kind's tag whose author marked them `autoApprovable` are then applied automatically
-   * without manual approval, and any matching action(s) already pending are applied immediately.
+   * without manual approval, and any matching action(s) already pending are applied immediately:
+   * the call resolves once they are decided (applied, failed, or left pending behind a manual gate
+   * or a retryable failure).
    *
    * Auto-approval rules are workspace-wide per gatekeeper: approving an action kind approves it
    * no matter which gadget invokes it.
