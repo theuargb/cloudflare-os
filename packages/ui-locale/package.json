@@ -1,0 +1,28 @@
+{
+  "name": "@gadgets/ui-locale",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    "./vite": {
+      "types": "./src/vite.ts",
+      "import": "./src/vite.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "rm -rf dist",
+    "report": "node src/report.ts",
+    "test:run": "vitest run"
+  },
+  "dependencies": {
+    "magic-string": "^0.30.21",
+    "typescript6": "catalog:"
+  },
+  "devDependencies": {
+    "@gadgets/scripts": "workspace:*",
+    "@types/node": "^26.1.0",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  }
+}
