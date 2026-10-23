@@ -1250,7 +1250,7 @@ class OverseerImpl implements AgentHooks {
     this.#autoApprovalDrainer = new AutoApprovalDrainer(
         this.storage,
         (record, resolvedBy, autoApproved) =>
-            this.applyPendingAction(record, resolvedBy, autoApproved));
+            this.decidePendingAction(record, resolvedBy, autoApproved));
     this.cacheWarmer = new ChatCacheWarmer(ctx.id.toString(), (chatId, resent) =>
         this.#addRequestCost(
             chatId, resent.usage, resent.aiGatewayLogId, resent.aiGatewayLogRoute, false));
@@ -5050,6 +5050,37 @@ class OverseerImpl implements AgentHooks {
       this.resumeAgentAfterDecision(record.caller.chatId, record.id);
     }
     this.traceAgentActionApproval(record, "approved");
+  }
+
+  // Applies a pending action, as approval or an auto-approval rule decides it. A failed apply of an
+  // agent's awaited action goes back to the agent: the action closes with the error and the turn
+  // resumes, so it can explain the failure or submit a corrected change. Anything else
+  // (preconditions, non-agent actions, creations) throws and stays pending for a retry.
+  async decidePendingAction(record: ActionRecord & {type: "action"},
+                            resolvedBy: AiChatAuthorInfo, autoApproved: boolean,
+                            creation?: {creator: Fetcher<GatekeeperUserVerifier>,
+                                        configuration: string | null})
+      : Promise<"approved" | "failed"> {
+    try {
+      await this.applyPendingAction(record, resolvedBy, autoApproved, creation);
+      return "approved";
+    } catch (error) {
+      if (!(record.caller.from === "agent" && record.description.awaitDecision) ||
+          record.action === "create" || !(error instanceof GatekeeperApplyError)) {
+        throw error;
+      }
+      try {
+        await this.failPendingAction(record, resolvedBy, error.message);
+      } catch (closeError) {
+        this.logger.error("failed to close an action whose apply failed", {
+          event: "action.fail.close.failed",
+          actionId: record.id,
+          error: closeError,
+        });
+        throw error;
+      }
+      return "failed";
+    }
   }
 
   // Traces an approval step for an action an agent turn submitted.
@@ -11723,30 +11754,8 @@ class OverseerClientInterface extends RpcTarget implements Overseer {
     let vendorId = gatekeeperVendorId(this.impl.storage.gatekeepers.get(action.gatekeeperId));
     let creator = action.action === "create" && creation && vendorId
         ? await this.#clientUser.getVerifier(creation.accountId, vendorId) : null;
-    let outcome: "approved" | "failed" = "approved";
-    try {
-      await this.impl.applyPendingAction(action, profile, false,
-          creator ? {creator, configuration: creation?.configuration ?? null} : undefined);
-    } catch (error) {
-      // A failed apply of an agent's awaited action goes back to the agent: close the action with
-      // the error and resume the turn so it can explain the failure or submit a corrected change.
-      // Anything else (preconditions, non-agent actions, creations) stays pending for a retry.
-      if (!(action.caller.from === "agent" && action.description.awaitDecision) ||
-          action.action === "create" || !(error instanceof GatekeeperApplyError)) {
-        throw error;
-      }
-      try {
-        await this.impl.failPendingAction(action, profile, error.message);
-      } catch (closeError) {
-        this.impl.logger.error("failed to close an action whose apply failed", {
-          event: "action.fail.close.failed",
-          actionId: action.id,
-          error: closeError,
-        });
-        throw error;
-      }
-      outcome = "failed";
-    }
+    let outcome = await this.impl.decidePendingAction(action, profile, false,
+        creator ? {creator, configuration: creation?.configuration ?? null} : undefined);
 
     // Clearing this manual gate may unblock later auto-eligible pending actions on the same
     // gatekeeper, so cascade a drain (in-order) once this one is applied.
@@ -11777,7 +11786,8 @@ class OverseerClientInterface extends RpcTarget implements Overseer {
     await this.impl.drainAutoApprovals(gatekeeperId);
     // The shared apply path claims new turns; this also covers legacy rows adopted above.
     for (let [id, chatId] of awaited) {
-      if (this.impl.storage.actions.get(id)?.state !== "approved") continue;
+      let state = this.impl.storage.actions.get(id)?.state;
+      if (state !== "approved" && state !== "failed") continue;
       this.impl.resumeAgentAfterDecision(chatId, id);
     }
   }
