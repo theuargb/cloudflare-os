@@ -1,7 +1,7 @@
 import { type CSSProperties, useCallback, useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { type RpcPromise, RpcStub, RpcTarget, newMessagePortRpcSession } from 'capnweb'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useRouter } from '@tanstack/react-router'
 import type {
   GatekeeperUiFrame,
   GatekeeperUserSelectionReceiver,
@@ -11,6 +11,12 @@ import type {
   GatekeeperAppTheme,
   GatekeeperAppThemeReceiver,
 } from '@gadgets/workshop-shared/theme'
+import { isAppId, isAppRoute, type AppRouteMode, type GatekeeperAppRouteReceiver } from '@gadgets/workshop-shared/app-host'
+import type { GatekeeperAppHost, GatekeeperAppTourLocator } from '@gadgets/workshop-shared/app-host'
+import { sanitizeTour, type Tour } from "@gadgets/workshop-shared/tour";
+import { locateInFrame } from "./features/tour/frameTarget";
+import { dropAppTours, requestTour } from "./features/tour/tourStore";
+import { openCommandPalette } from './components/AppShell/commandPaletteBus'
 import { createRateLimitedCapability } from './rateLimitedCapability'
 import { useTheme } from './ThemeContext'
 import { useServerConfig } from './ServerConfigContext'
@@ -22,6 +28,9 @@ import {
   type GatekeeperAppWorkspaceTarget,
 } from './gatekeeperAppNavigation'
 import GatekeeperUserPickerDialog from './features/gatekeeper-sharing/GatekeeperUserPickerDialog'
+import { readGatekeeperAppPreference, writeGatekeeperAppPreference } from './gatekeeperAppPreferences'
+import { refreshGatekeeperApps } from './useGatekeeperApps'
+import { revalidateAppNavigation } from './components/AppNavigation/useAppNavigation'
 
 // The content-pane rect, in viewport coordinates, that the app pins its page to while the iframe
 // is full-viewport.
@@ -52,10 +61,28 @@ type UserPicker = {
 
 const USER_PICKER_CANCELLED = 'Person selection cancelled. A delivery may already have been accepted.'
 
+// Queue a validated tour of this app; the locator answers its frame anchor lookups.
+type StartTour = (tour: Tour, locator: RpcStub<GatekeeperAppTourLocator>, replay: boolean) => void;
+// The app's route as mirrored in the Workshop URL ('' = the app's start screen), navigation to
+// another app's route (an inbox card, a cross-module link), here or in a new browser tab, and a
+// refetch of the user's apps and navigation.
+type AppRouting = {
+  current: () => string,
+  report: (route: string, mode: AppRouteMode) => void,
+  openApp: (appId: string, route: string, newTab: boolean) => void,
+  refreshNavigation: () => void,
+}
+
 type OverlayState = 'full' | null
 
 // Upper bound on one workspace-title lookup, matching the app's page size.
 const MAX_RESOLVED_WORKSPACES = 100
+
+// Reported routes the Workshop URL has not shown yet; bounded while the app reports but is hidden.
+const MAX_UNSEEN_ROUTES = 32
+
+// Apps may ask for a navigation refetch at most this often (each one fans out to every app).
+const REFRESH_NAVIGATION_INTERVAL_MS = 2000
 
 // How long one gadget listing is reused across title lookups. The untrusted frame calls this once
 // per page of rows (and could call it in a loop), so the listing is shared rather than repeated.
@@ -63,6 +90,20 @@ const WORKSPACE_TITLES_TTL_MS = 10_000
 
 // Near the max int, so the full-viewport iframe sits above all Workshop chrome.
 const overlayZIndex = 2147483000
+
+// Each acquired frame gets its own iframe document: an already-loaded app handshakes once, so a
+// fresh `ui` capability (e.g. after the Workshop socket reconnected) is reachable only through a
+// reloaded document. Identity-keyed, so re-renders with the same frame never reload the app.
+const frameKeys = new WeakMap<GatekeeperUiFrame, number>();
+let nextFrameKey = 0;
+function frameKey(frame: GatekeeperUiFrame): number {
+  let key = frameKeys.get(frame);
+  if (key === undefined) {
+    key = ++nextFrameKey;
+    frameKeys.set(frame, key);
+  }
+  return key;
+}
 
 const baseIframeStyle: CSSProperties = {
   border: 0,
@@ -94,7 +135,7 @@ function iframeStyleForOverlay(overlay: OverlayState): CSSProperties {
 // The host capability exposed to the sandboxed app (the gatekeeper's iframe UI) over the MessagePort
 // RPC session. The app uses `ui` to reach the gatekeeper's own capability, which Workshop relays and
 // rate-limits. `setPresenting` stays in Workshop and only grows/restores the iframe's layout.
-class GatekeeperAppHostImpl extends RpcTarget {
+class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
   readonly #ui: RpcStub<RpcTarget>
   readonly #disposeRateLimiter: () => void
   readonly #present: PresentController
@@ -103,9 +144,19 @@ class GatekeeperAppHostImpl extends RpcTarget {
   readonly #resolveWorkspaceTitles: ResolveWorkspaceTitles
   readonly #openUserPicker: OpenUserPicker
   readonly #cancelUserPicker: CancelUserPicker
+  readonly #routing: AppRouting
+  readonly #startTour: StartTour;
+  #tourLocator: RpcStub<GatekeeperAppTourLocator> | null = null;
   #presenting = false
   #theme: GatekeeperAppTheme
   #themeReceiver: RpcStub<GatekeeperAppThemeReceiver> | null = null
+  #routeReceiver: RpcStub<GatekeeperAppRouteReceiver> | null = null
+  // The app's current route as far as the host knows (reported by the app or pushed to it).
+  #route = ''
+  // Routes the app reported that the Workshop URL has not shown yet, oldest first. Replace
+  // navigations coalesce, so the URL may skip some; an echo is never pushed back (see pushRoute).
+  #unseen: string[] = []
+  #lastRefresh = 0
   // Presentation changes are coalesced to a single apply per animation frame (see #applyPending).
   #pendingActive: boolean | null = null
   #pendingResolvers: ((ack: PresentAck) => void)[] = []
@@ -120,6 +171,8 @@ class GatekeeperAppHostImpl extends RpcTarget {
     resolveWorkspaceTitles: ResolveWorkspaceTitles,
     openUserPicker: OpenUserPicker,
     cancelUserPicker: CancelUserPicker,
+    routing: AppRouting,
+    startTour: StartTour,
   ) {
     super()
     this.#theme = theme
@@ -138,6 +191,8 @@ class GatekeeperAppHostImpl extends RpcTarget {
     this.#resolveWorkspaceTitles = resolveWorkspaceTitles
     this.#openUserPicker = openUserPicker
     this.#cancelUserPicker = cancelUserPicker
+    this.#routing = routing
+    this.#startTour = startTour;
   }
 
   get ui(): RpcStub<RpcTarget> {
@@ -188,6 +243,26 @@ class GatekeeperAppHostImpl extends RpcTarget {
     }
   }
 
+  // UI preferences shared across gatekeeper apps, persisted by Workshop (see gatekeeperAppPreferences).
+  getAppPreference(key: string): string | null {
+    return readGatekeeperAppPreference(key)
+  }
+
+  setAppPreference(key: string, value: string): void {
+    writeGatekeeperAppPreference(key, value)
+  }
+
+  // Validated here: the tour comes from the untrusted app. The host decides whether it runs (once
+  // per user and version, only while the app is on screen); the frame only answers anchor lookups.
+  startTour(tour: unknown, locator: RpcStub<GatekeeperAppTourLocator>, replay?: unknown): void {
+    const clean = sanitizeTour(tour);
+    if (!clean || (replay !== undefined && typeof replay !== "boolean")) throw new TypeError("Invalid tour.");
+    this.#tourLocator?.[Symbol.dispose]?.();
+    // The argument stub is disposed when this call returns, so keep our own dup (released in dispose).
+    this.#tourLocator = locator.dup();
+    this.#startTour(clean, this.#tourLocator, replay === true);
+  }
+
   // The app calls this once to learn the current theme and register a receiver for later changes.
   // Apps that don't theme themselves never call it.
   subscribeTheme(receiver: RpcStub<GatekeeperAppThemeReceiver>): GatekeeperAppTheme {
@@ -216,6 +291,81 @@ class GatekeeperAppHostImpl extends RpcTarget {
     }
   }
 
+  // The app calls this once on start: registers for Workshop-side navigation and learns the route
+  // to open (from the Workshop URL, so reloads and shared links restore the screen).
+  subscribeRoute(receiver: RpcStub<GatekeeperAppRouteReceiver>): string {
+    this.#routeReceiver?.[Symbol.dispose]?.()
+    this.#routeReceiver = receiver.dup()
+    this.#route = this.#routing.current()
+    this.#unseen = []
+    return this.#route
+  }
+
+  // The app reports each in-app navigation; the Workshop mirrors it into its URL, adding a history
+  // entry for `push` (a new screen) and replacing the current one otherwise.
+  reportRoute(route: string, mode?: unknown): void {
+    if (!isAppRoute(route) || (mode !== undefined && mode !== 'push' && mode !== 'replace')) {
+      throw new TypeError('Invalid app route.')
+    }
+    if (route === this.#route) return
+    this.#route = route
+    this.#unseen = [...this.#unseen.slice(1 - MAX_UNSEEN_ROUTES), route]
+    this.#routing.report(route, mode ?? 'replace')
+  }
+
+  // The Workshop URL shows `route` (every change while the app is on screen, and once more when it
+  // comes back on screen). A route the app reported is its own echo: consume the queue up to it.
+  // Anything else (sidebar row, launcher pick, Back/Forward, app link) is pushed into the open app.
+  pushRoute(route: string) {
+    const index = this.#unseen.indexOf(route)
+    if (index >= 0) {
+      this.#unseen = this.#unseen.slice(index + 1)
+      return
+    }
+    this.#unseen = []
+    const receiver = this.#routeReceiver
+    if (!receiver || route === this.#route) return
+    this.#route = route
+    try {
+      Promise.resolve(receiver.setRoute(route)).catch(() => this.#dropRouteReceiver(receiver))
+    } catch {
+      this.#dropRouteReceiver(receiver)
+    }
+  }
+
+  #dropRouteReceiver(receiver: RpcStub<GatekeeperAppRouteReceiver>) {
+    if (this.#routeReceiver !== receiver) return
+    receiver[Symbol.dispose]?.()
+    this.#routeReceiver = null
+  }
+
+  // The app changed what the user sees (e.g. its areas): refetch apps and navigation, throttled
+  // because the untrusted frame could call this in a loop.
+  refreshNavigation(): void {
+    const now = Date.now()
+    if (now - this.#lastRefresh < REFRESH_NAVIGATION_INTERVAL_MS) return
+    this.#lastRefresh = now
+    this.#routing.refreshNavigation()
+  }
+
+  // Keystrokes inside the iframe never reach the Workshop, so the app forwards ⌘K here.
+  openSearch(): void {
+    openCommandPalette()
+  }
+
+  // Open another gatekeeper app at a route, optionally in a new browser tab (the sandboxed frame
+  // cannot open windows). All parts are validated: the app is untrusted.
+  openApp(appId: string, route: string, newTab?: unknown): void {
+    if (!isAppId(appId) || !isAppRoute(route) || (newTab !== undefined && typeof newTab !== 'boolean')) throw new TypeError('Invalid app link.')
+    this.#routing.openApp(appId, route, newTab === true)
+  }
+
+  // A module whose definitions changed under the open page asks for a fresh Workshop load; the frame
+  // cannot reload itself (a second handshake invalidates the session).
+  reloadPage(): void {
+    window.location.reload()
+  }
+
   // Queue a presentation change; the latest requested state is applied on the next frame.
   setPresenting(active: boolean): Promise<PresentAck> {
     return new Promise((resolve) => {
@@ -239,12 +389,9 @@ class GatekeeperAppHostImpl extends RpcTarget {
     for (const resolve of resolvers) resolve(ack)
   }
 
-  // Cancel the rate limiter's pending resume timer once this host is no longer in use.
-  dispose() {
-    this.#disposeRateLimiter()
-    this.#cancelUserPicker()
-    this.#themeReceiver?.[Symbol.dispose]?.()
-    this.#themeReceiver = null
+  // Restore the iframe from a full-viewport overlay and settle queued presentation calls: on dispose,
+  // and when the app leaves the screen (kept mounted but hidden) so its overlay never covers others.
+  suspendPresentation() {
     if (this.#frameId !== null) {
       cancelAnimationFrame(this.#frameId)
       this.#frameId = null
@@ -257,18 +404,38 @@ class GatekeeperAppHostImpl extends RpcTarget {
       this.#present(false)
     }
   }
+
+  // Cancel the rate limiter's pending resume timer once this host is no longer in use.
+  dispose() {
+    this.#disposeRateLimiter()
+    this.#cancelUserPicker()
+    this.#themeReceiver?.[Symbol.dispose]?.()
+    this.#themeReceiver = null
+    this.#tourLocator?.[Symbol.dispose]?.();
+    this.#tourLocator = null;
+    this.#routeReceiver?.[Symbol.dispose]?.()
+    this.#routeReceiver = null
+    this.suspendPresentation()
+  }
 }
 
 /**
  * Hosts a gatekeeper's full-page management SPA in a sandboxed, network-isolated iframe. The app
  * talks to the gatekeeper only through the `ui` capability carried over the MessagePort RPC session.
- * The iframe fills its parent container.
+ * The iframe fills its parent container; a hidden app stays loaded (kept mounted by the shell).
  */
-export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId }: {
+export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, route = '', visible = true, onRouteChange }: {
   frame: GatekeeperUiFrame,
   gatekeeperVendorId: string,
+  /** The app route held in the Workshop URL; changes the app did not report are pushed into it. */
+  route?: string,
+  /** Whether the app is on screen. A hidden app keeps running but drops any full-viewport overlay. */
+  visible?: boolean,
+  /** Called with each route the app navigates to, to mirror it into the Workshop URL. */
+  onRouteChange?: (route: string, mode: AppRouteMode) => void,
 }) {
   const navigate = useNavigate()
+  const router = useRouter()
   const { authenticatedApi } = useAuthenticatedApi()
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const sessionRef = useRef<{ [Symbol.dispose]?(): void } | null>(null)
@@ -294,6 +461,16 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId }: {
   useEffect(() => {
     hostRef.current?.updateTheme({ mode: resolvedThemeMode, accentColor })
   }, [resolvedThemeMode, accentColor])
+  // The URL route is read when the app subscribes; later changes reach the open app through
+  // pushRoute, which filters out the app's own reports. Coming back on screen re-syncs once.
+  const routeRef = useRef(route)
+  routeRef.current = route
+  const onRouteChangeRef = useRef(onRouteChange)
+  onRouteChangeRef.current = onRouteChange
+  useEffect(() => {
+    if (visible) hostRef.current?.pushRoute(route)
+    else hostRef.current?.suspendPresentation()
+  }, [route, visible])
 
   const setOverlayPhase = useCallback((next: OverlayState) => {
     if (overlayRef.current === next) return
@@ -348,6 +525,10 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId }: {
   const openPrompt = useCallback<OpenPrompt>((prompt) => {
     navigate({ to: '/', search: { prompt } })
   }, [navigate])
+  const refreshNavigation = useCallback(() => {
+    refreshGatekeeperApps(authenticatedApi)
+    revalidateAppNavigation(authenticatedApi, true)
+  }, [authenticatedApi])
   const openUserPicker = useCallback<OpenUserPicker>((receiver) => {
     if (openPickerRef.current) {
       throw new Error('A person picker is already open.')
@@ -377,9 +558,10 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId }: {
     const open = openPickerRef.current
     if (open) finishUserPicker(open)
   }, [finishUserPicker])
-  // The gatekeeper-defined capability remains opaque; this host only relays it through `ui`.
-  const capabilityRef = useRef<unknown>(null)
-  capabilityRef.current = frame.ui
+  // The live session reads these at call time, so a changed handler (new stub after a reconnect)
+  // never tears the session down.
+  const handlersRef = useRef({ openTarget, openPrompt, resolveWorkspaceTitles, refreshNavigation, navigate, router });
+  handlersRef.current = { openTarget, openPrompt, resolveWorkspaceTitles, refreshNavigation, navigate, router };
 
   useEffect(() => {
     connectedRef.current = false
@@ -394,22 +576,42 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId }: {
         sessionRef.current = null
         hostRef.current?.dispose()
         hostRef.current = null
+        dropAppTours(gatekeeperVendorId);
         setOverlayPhase(null)
         return
       }
-      if (invalidatedRef.current || !capabilityRef.current) {
+      if (invalidatedRef.current || !frame.ui) {
         port.close()
         return
       }
       const host = new GatekeeperAppHostImpl(
-        capabilityRef.current,
+        frame.ui,
         present,
         themeRef.current,
-        openTarget,
-        openPrompt,
-        resolveWorkspaceTitles,
+        (target) => handlersRef.current.openTarget(target),
+        (prompt) => handlersRef.current.openPrompt(prompt),
+        (ids) => handlersRef.current.resolveWorkspaceTitles(ids),
         openUserPicker,
         cancelUserPicker,
+        {
+          current: () => routeRef.current,
+          report: (next, mode) => onRouteChangeRef.current?.(next, mode),
+          openApp: (appId, at, newTab) => {
+            const { navigate, router } = handlersRef.current;
+            const target = { to: '/gatekeepers/$appId', params: { appId }, search: at ? { at } : {} } as const
+            if (newTab) window.open(router.buildLocation(target).href, '_blank', 'noopener')
+            else void navigate(target)
+          },
+          refreshNavigation: () => handlersRef.current.refreshNavigation(),
+        },
+        (tour, locator, replay) =>
+          requestTour({
+            key: `app:${gatekeeperVendorId}:${tour.id}`,
+            tour,
+            route: { kind: "app", appId: gatekeeperVendorId },
+            replay,
+            locateFrame: (anchor, reveal) => locateInFrame(locator, iframeRef.current, anchor, reveal),
+          }),
       )
       hostRef.current = host
       sessionRef.current = newMessagePortRpcSession(port, host)
@@ -438,21 +640,25 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId }: {
       sessionRef.current = null
       hostRef.current?.dispose()
       hostRef.current = null
+      dropAppTours(gatekeeperVendorId);
       setOverlayPhase(null)
     }
-    // Re-establish the session if either the HTML or the `ui` capability changes, so a new frame
-    // carrying a fresh stub (even with identical HTML) never keeps talking through the stale one.
-  }, [frame.iframeHtml, frame.ui, gatekeeperVendorId, cancelUserPicker, openPrompt, openTarget,
-      openUserPicker, present, resolveWorkspaceTitles, setOverlayPhase])
+    // One session per acquired frame (the iframe is keyed by it, so a new frame always handshakes
+    // again); handler changes reach the live session through handlersRef instead of tearing it down.
+  }, [frame, gatekeeperVendorId, present, setOverlayPhase, openUserPicker, cancelUserPicker])
 
   return (
     <>
       <iframe
+        key={frameKey(frame)}
         ref={iframeRef}
-        srcDoc={frame.iframeHtml}
-        // allow-scripts: run the app's JS. allow-modals: its beforeunload unsaved-changes guard. Not
+        // A frame URL is validated by the page (isAppFrameUrl); it loads inside the same sandbox.
+        {...(frame.iframeUrl !== undefined ? { src: frame.iframeUrl } : { srcDoc: frame.iframeHtml })}
+        // allow-scripts: run the app's JS. allow-modals: its beforeunload unsaved-changes guard.
+        // allow-downloads: save files the app already holds (exports, print forms) — browsers block every
+        // download from a sandboxed frame without it, even from a user-clicked <a download>. Not
         // allow-same-origin (the frame stays an opaque origin), and the app's CSP keeps connect-src 'none'.
-        sandbox="allow-scripts allow-modals"
+        sandbox="allow-scripts allow-modals allow-downloads"
         allow="clipboard-write"
         title="Gatekeeper app"
         style={iframeStyleForOverlay(overlay)}

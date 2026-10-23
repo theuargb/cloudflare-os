@@ -15,6 +15,9 @@ import { deploymentOutputForBlueprint, listFormatOffers, readAdminConfig } from 
 // Re-export the optional-feature Durable Objects + entrypoints so they can be bound in wrangler.
 export { PendingLogin, LoginConnectCallbackImpl };
 import { GatekeeperUiFrame, GatekeeperUserSelection } from "@gadgets/workshop-shared/gatekeeper";
+import type { ActorContext } from "@gadgets/workshop-shared/gatekeeper";
+import type { AppSearchHit } from "@gadgets/workshop-shared/app-host";
+import type { GatekeeperAppNavigation, GatekeeperInbox } from "@gadgets/workshop-shared/api";
 import { DecisionModelGatekeeper, LanguageModelGatekeeper } from "./ai-models";
 import { getGatewayModels } from "./ai-gateway.js";
 import { AdminSettings, AdminApiImpl } from "./admin-settings.js";
@@ -34,6 +37,7 @@ import { createWorkshopLogger } from "./observability";
 import { deployServiceInstall, routerVersionTag } from "./deployment-updates.js";
 import { retryOnDoReset, wrapDoStubForTelemetry } from "./do-retry";
 import { deviceSessionCallback } from "./auth/device-session-callback.js";
+import { isDeploymentAdmin } from "./admin-authorization";
 
 const logger = createWorkshopLogger("workshop.server");
 
@@ -131,22 +135,7 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
   }
 
   #isAdmin(): boolean {
-    let name = this.#userId.name;
-    let admins = this.env.ADMINS;
-
-    if (!name || !admins) return false;
-
-    if (typeof admins === "string") {
-      // Admins should be a JSON binding of array type, but `.env` doesn't actually let you
-      // specify JSON bindings, so we also support a string that parses as JSON array.
-      admins = JSON.parse(admins);
-    }
-
-    if (!Array.isArray(admins)) {
-      throw new TypeError("ADMINS must be configured as an array of usernames.");
-    }
-
-    return admins.includes(name);
+    return isDeploymentAdmin(this.env.ADMINS, this.#userId.name);
   }
 
   whoami(): Promise<AiChatAuthorInfo> {
@@ -636,16 +625,29 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
   // vendor id, e.g. "context"), so each app is hosted at /gatekeepers/<vendorId>. UI-providing
   // accounts are auto-provisioned singletons (one per vendor), so the vendor id identifies them.
   async listGatekeeperApps(): Promise<GatekeeperAppInfo[]> {
-    // listProvidedAccounts provisions auto-provisioned accounts first (idempotent), so their apps
-    // appear in the nav even before the user opens a gadget — in a single round trip.
-    let accounts = await this.#user.listProvidedAccounts();
-    return accounts
-        .filter((account: (typeof accounts)[number]) => account.description.providesUi)
-        .map((account: (typeof accounts)[number]) => ({
-          id: account.vendorId,
-          title: account.description.providesUi!.title,
-          icon: account.description.providesUi!.icon,
-        }));
+    // The user DO provisions auto-provisioned accounts first (idempotent), so their apps appear in
+    // the nav even before the user opens a gadget — in a single round trip — and sorts them by
+    // their vendor's group and order.
+    return this.#user.listGatekeeperApps();
+  }
+
+  async listAppNavigation(): Promise<GatekeeperAppNavigation[]> {
+    return this.#user.listAppNavigation(await this.#appUiContext());
+  }
+
+  async searchApp(appId: string, query: string): Promise<AppSearchHit[]> {
+    return this.#user.searchApp(await this.#appUiContext(), appId, query);
+  }
+
+  async getInbox(): Promise<GatekeeperInbox | null> {
+    return this.#user.getInbox(await this.#appUiContext());
+  }
+
+  async markInboxRead(ids: string[]): Promise<void> {
+    if (!Array.isArray(ids) || ids.length > 100 || !ids.every((id) => typeof id === "string")) {
+      throw new TypeError("Invalid inbox ids.");
+    }
+    await this.#user.markInboxRead(await this.#appUiContext(), ids);
   }
 
   async getGatekeeperApp(vendorId: string): Promise<GatekeeperUiFrame | null> {
@@ -655,8 +657,20 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
     let accounts = await user.listProvidedAccounts();
     let app = accounts.find(account => account.vendorId === vendorId && account.description.providesUi);
     if (!app) return null;
-    // isAdmin is supplied fresh per open so admin-gated features reflect the user's current status.
-    return user.startAccountAppUi(app.accountId, { isAdmin: this.#isAdmin() });
+    return user.startAccountAppUi(app.accountId, await this.#appUiContext());
+  }
+
+  // The actor and current authority are supplied fresh on every open. The actor id is the canonical
+  // login identity (username or Access email), the same id agent sessions carry.
+  async #appUiContext(): Promise<ActorContext> {
+    let actorId = this.#userId.name;
+    if (!actorId) throw new Error("The authenticated user has no canonical identity.");
+    let profile = await retryOnDoReset(() => this.#user.whoamiIfExists());
+    return {
+      actorId,
+      actor: {displayName: profile?.name || actorId},
+      isAdmin: this.#isAdmin(),
+    };
   }
 
   async createGatekeeperUserSelection(
