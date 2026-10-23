@@ -31,6 +31,10 @@
       "types": "./src/code-change.ts",
       "import": "./src/code-change.ts"
     },
+    "./app-host": {
+      "types": "./src/app-host.ts",
+      "import": "./src/app-host.ts"
+    },
     "./theme": {
       "types": "./src/theme.ts",
       "import": "./src/theme.ts"
