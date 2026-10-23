@@ -14,7 +14,9 @@ vi.mock('@cloudflare/kumo', async (importOriginal) => {
   return { ...actual, useKumoToastManager: () => toasts }
 })
 vi.mock('./useAlwaysApproveTag', () => ({
-  useAlwaysApproveTag: () => ({ alwaysApproveTag: vi.fn<() => Promise<void>>(), isTagAutoApproved: () => false }),
+  useAlwaysApproveTag: () => ({
+    alwaysApproveTag: vi.fn<() => Promise<void>>(), isTagAutoApproved: () => false, isTagApplying: () => false,
+  }),
 }))
 const auth = vi.hoisted(() => ({ authenticatedApi: {} as Record<string, unknown> }))
 vi.mock('./AuthContext', () => ({ useAuthenticatedApi: () => auth }))

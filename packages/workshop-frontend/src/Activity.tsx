@@ -6,7 +6,7 @@ import { ActionLogEntry, Overseer, actionChangeTime } from '@gadgets/workshop-sh
 import { ActionKind } from '@gadgets/workshop-shared/gatekeeper'
 import { GatekeeperIcon } from './components/GatekeeperIcon'
 import { HookToggle, hookToggleFailureToast } from './components/HookToggle'
-import { AlwaysApproveButton, ResolveButton } from './components/ResolveButton'
+import { AlwaysApproveButton, AutoApplyingStatus, ResolveButton } from './components/ResolveButton'
 import { WorkshopButton } from './components/WorkshopControls'
 import { useActions } from './useActions'
 import { useActionHistory } from './useActionHistory'
@@ -171,7 +171,6 @@ export default function Activity({
   const [togglingHooks, setTogglingHooks] = useState<Set<number>>(new Set())
   const [expandedActionId, setExpandedActionId] = useState<number | null>(null)
   const [confirmAutoApprove, setConfirmAutoApprove] = useState<{
-    actionId: number
     gatekeeperId: number
     resourceTitle: string
     actionKind: ActionKind
@@ -214,8 +213,8 @@ export default function Activity({
     }
   }
 
-  const { alwaysApproveTag, isTagAutoApproved } =
-    useAlwaysApproveTag(overseer, setProcessingActions, onAutoApproveChange)
+  const { alwaysApproveTag, isTagAutoApproved, isTagApplying } =
+    useAlwaysApproveTag(overseer, onAutoApproveChange)
 
   const toggleExpanded = (id: number) => {
     setExpandedActionId(previous => (previous === id ? null : id))
@@ -240,7 +239,6 @@ export default function Activity({
                 record.description.actionKind !== undefined &&
                 record.description.autoApprovable === true
                   ? {
-                      actionId: record.id,
                       gatekeeperId: record.gatekeeperId,
                       resourceTitle: record.resourceTitle,
                       actionKind: record.description.actionKind,
@@ -254,6 +252,8 @@ export default function Activity({
                   restricted={restricted}
                   expanded={expandedActionId === record.id}
                   processing={processingActions.has(record.id)}
+                  autoApplying={autoApproveTarget !== undefined &&
+                    isTagApplying(autoApproveTarget.gatekeeperId, autoApproveTarget.actionKind.tag)}
                   onToggle={() => toggleExpanded(record.id)}
                   onApprove={() => void resolveAction(record, 'approve')}
                   onReject={() => void resolveAction(record, 'deny')}
@@ -455,13 +455,11 @@ export default function Activity({
           open
           actionLabel={confirmAutoApprove.actionLabel}
           resourceTitle={confirmAutoApprove.resourceTitle}
-          isProcessing={processingActions.has(confirmAutoApprove.actionId)}
           onOpenChange={open => { if (!open) setConfirmAutoApprove(null) }}
-          onConfirm={async () => {
-            const { actionId, gatekeeperId, actionKind } = confirmAutoApprove
-            if (await alwaysApproveTag(actionId, gatekeeperId, actionKind)) {
-              setConfirmAutoApprove(null)
-            }
+          onConfirm={() => {
+            const { gatekeeperId, actionKind } = confirmAutoApprove
+            setConfirmAutoApprove(null)
+            void alwaysApproveTag(gatekeeperId, actionKind)
           }}
         />
       )}
@@ -625,6 +623,7 @@ function ReviewRequest({
   restricted,
   expanded,
   processing,
+  autoApplying,
   onToggle,
   onApprove,
   onReject,
@@ -636,6 +635,8 @@ function ReviewRequest({
   restricted?: boolean
   expanded: boolean
   processing: boolean
+  // An always-approve rule is applying this request now.
+  autoApplying: boolean
   onToggle: () => void
   onApprove: () => void
   onReject: () => void
@@ -697,11 +698,15 @@ function ReviewRequest({
           </p>
         </div>
         <div className="ml-auto flex flex-shrink-0 items-center gap-0.5">
-          {onAlwaysApprove && (
-            <AlwaysApproveButton onClick={onAlwaysApprove} disabled={processing} />
+          {autoApplying ? <AutoApplyingStatus /> : (
+            <>
+              {onAlwaysApprove && (
+                <AlwaysApproveButton onClick={onAlwaysApprove} disabled={processing} />
+              )}
+              <ResolveButton tone="deny" onClick={onReject} disabled={processing} describedBy={describedBy} />
+              <ResolveButton tone="approve" onClick={onApprove} disabled={processing} describedBy={describedBy} />
+            </>
           )}
-          <ResolveButton tone="deny" onClick={onReject} disabled={processing} describedBy={describedBy} />
-          <ResolveButton tone="approve" onClick={onApprove} disabled={processing} describedBy={describedBy} />
         </div>
       </div>
 

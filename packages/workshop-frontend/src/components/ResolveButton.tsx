@@ -54,3 +54,13 @@ export function AlwaysApproveButton({
     </button>
   )
 }
+
+/** Stands in for a pending action's controls while an always-approve rule is applying it. */
+export function AutoApplyingStatus() {
+  return (
+    <span role="status" className="flex h-6 items-center gap-1.5 px-2 text-[12px] font-medium tracking-[-0.15px] text-kumo-inactive">
+      <span className="h-3 w-3 animate-spin rounded-full border-2 border-current border-t-transparent" aria-hidden="true" />
+      Approving…
+    </span>
+  )
+}
