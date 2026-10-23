@@ -1,4 +1,4 @@
-import { Fragment, useState } from 'react'
+import { Fragment, useMemo, useState } from 'react'
 import { DropdownMenu } from '@cloudflare/kumo'
 import { CaretDownIcon } from '@phosphor-icons/react'
 import type { AppMenuKind } from '@gadgets/workshop-shared/app-host'
@@ -7,7 +7,7 @@ import { useCloseOnFrameFocus } from '../../components/useCloseOnFrameFocus'
 import { SPOTLIGHT_TYPES } from '../../components/Spotlight/catalog'
 import { KindTile } from '../../components/Spotlight/kinds'
 import type { SpotlightEntry } from '../../components/Spotlight/ranking'
-import { getRecents, recordPick } from '../../components/Spotlight/recents'
+import { getRecents, recordPick, type RecentEntry } from '../../components/Spotlight/recents'
 import { KIND_ICONS } from '../app-section-nav/kindIcons'
 import { typeMenuSections } from './typeMenuSections'
 
@@ -25,13 +25,23 @@ export default function TypeMenu({ type, entries, openModule }: {
 }) {
   const [open, setOpen] = useState(false)
   useCloseOnFrameFocus(open, setOpen)
-  // Built only while open: recents change with every pick, here or in Spotlight.
-  const sections = open ? typeMenuSections(entries, type, openModule, getRecents()) : []
+  // Recents and the open module are read on each open (recents change with every pick, here or in
+  // Spotlight) and kept through the close: the popup stays on screen for its exit transition, and a
+  // pick that opens another module must neither empty nor reorder it meanwhile.
+  const [snapshot, setSnapshot] = useState<{ recents: RecentEntry[], openModule: string | null } | null>(null)
+  const onOpenChange = (next: boolean) => {
+    if (next) setSnapshot({ recents: getRecents(), openModule })
+    setOpen(next)
+  }
+  const sections = useMemo(
+    () => (snapshot ? typeMenuSections(entries, type, snapshot.openModule, snapshot.recents) : []),
+    [entries, type, snapshot],
+  )
   const label = SPOTLIGHT_TYPES.find((candidate) => candidate.type === type)!.label
   const Icon = KIND_ICONS[type]
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
+    <DropdownMenu open={open} onOpenChange={onOpenChange}>
       <DropdownMenu.Trigger
         render={
           <button
