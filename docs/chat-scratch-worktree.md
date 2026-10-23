@@ -73,3 +73,24 @@ collision suffixes, so recorded Git paths round-trip and materialize on Linux.
 Projection commits with the validated user message; failed sends leave blobs available and
 do not consume names. Later uploads receive collision-free suffixes. The worktree remains
 available when a chat has already been seeded.
+
+## Large attachments
+
+A file over 4 MiB (up to 100 MiB, at most 300 MiB per message) cannot be a Git blob, which is
+bounded by the SQLite row limit. When the deployment binds the optional `CHAT_ATTACHMENT_CONTENT`
+R2 bucket, such a file is uploaded in parts (`beginLargeChatAttachmentUpload`,
+`uploadLargeChatAttachmentPart`, `completeLargeChatAttachmentUpload`) and attached by the returned
+`{id}` handle. Without the bucket, `beginLargeChatAttachmentUpload` fails.
+
+A large attachment is still a `ChatAttachmentRef` on its message, marked `large`, but it is not a
+workspace file: it has no `oid` or `workspacePath`, never creates the scratch worktree, and its
+bytes never enter model input. Replay shows the model a marker naming its id and size. The agent
+finds it in `env.ATTACHMENTS.list()`, which gives it an opaque `handle`; `get()` refuses a large
+attachment. A module passes the handle to the `ChatAttachmentContent` service entrypoint
+(`open({handle})`), which streams the object from R2. The handle names the Overseer and chat, and
+the Overseer re-checks that the attachment is still committed to that chat, so a handle for a
+deleted attachment opens nothing. Clients download it with `getChatAttachmentContentPart`.
+
+The record (`largeChatAttachments`) is staged until a sent message commits it. Uploads that no
+message claims are deleted a day after they started, when the next large upload begins, and the
+R2 object goes with its chat.

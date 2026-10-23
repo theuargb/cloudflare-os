@@ -89,7 +89,7 @@ export default defineConfig({
         // The overseer loads gadget code through this, so a test can run a real gadget facet.
         workerLoaders: { LOADER: {} },
         // Where a blueprint's content is published to and read back from.
-        r2Buckets: ['BLUEPRINT_CONTENT'],
+        r2Buckets: ['BLUEPRINT_CONTENT', 'CHAT_ATTACHMENT_CONTENT'],
         durableObjects: {
           TEST_OVERSEER: { className: 'OverseerDurableObject', useSQLite: true },
           TEST_USER: { className: 'UserDurableObject', useSQLite: true },
