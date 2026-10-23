@@ -1,6 +1,6 @@
 import { logRpcFailure } from '../rpcErrors'
 import { useState, useEffect } from 'react'
-import { createRootRoute, Outlet, useRouterState } from '@tanstack/react-router'
+import { createRootRoute, Outlet, useMatches } from '@tanstack/react-router'
 import { TooltipProvider, Toasty } from '@cloudflare/kumo'
 import { RpcStub } from 'capnweb'
 import { AuthenticatedApi } from '@gadgets/workshop-shared/api'
@@ -30,7 +30,11 @@ function RootComponent() {
   const rpcStub = useRpcStub()
   const connectionLost = useConnectionLost()
   const { isAuthenticated, authenticatedApi, isLoading, error, logout, login } = useAuth(rpcStub)
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  // The chrome follows the rendered leaf match, not `location`: the router moves `location` to the
+  // next URL while the previous route is still rendered (lazy chunk, loaders), so switching the
+  // chrome on `location` would re-parent that route outside its shell (e.g. the gatekeeper app
+  // route outside the AppShell's KeptGatekeeperAppProvider when leaving for the workspace editor).
+  const pathname = useMatches({ select: (matches) => matches[matches.length - 1]?.pathname ?? "/" })
 
   // Routes that don't require auth (public routes)
   const isSignup = pathname === '/signup'

@@ -590,13 +590,12 @@ export interface ResourceConfiguratorHost extends RpcTarget {
 }
 
 /**
- * A self-contained sandboxed UI served by a gatekeeper: complete HTML hosted in a
+ * A self-contained sandboxed UI served by a gatekeeper as complete HTML, hosted in a
  * sandbox="allow-scripts" iframe, plus an arbitrary gatekeeper-defined capability exposed to the
- * iframe over a MessagePort RPC session. Used both for the small resource-configurator form
- * (startResourceConfigurator, hosted in the connect modal) and for full-page gatekeeper management
- * apps (startAppUi, e.g. the Context Library file manager, hosted on its own Workshop page).
+ * iframe over a MessagePort RPC session. The return type of startResourceConfigurator (the small
+ * form hosted in the connect modal).
  */
-export type GatekeeperUiFrame = {
+export type ResourceConfiguratorFrame = {
   /** Complete HTML for the UI. Workshop hosts it in a sandboxed iframe. */
   iframeHtml: string;
 
@@ -605,10 +604,18 @@ export type GatekeeperUiFrame = {
 }
 
 /**
- * Legacy alias for GatekeeperUiFrame: the established return type of startResourceConfigurator,
- * referenced by every gatekeeper implementation. Kept to avoid a repo-wide rename.
+ * A full-page gatekeeper management app (startAppUi, e.g. the Context Library file manager, hosted
+ * on its own Workshop page): the capability plus either complete HTML (`srcdoc`) or a URL the
+ * gatekeeper serves itself.
  */
-export type ResourceConfiguratorFrame = GatekeeperUiFrame;
+export type GatekeeperUiFrame = { ui: RpcStub<RpcTarget> } & (
+  | { iframeHtml: string; iframeUrl?: never }
+  /**
+   * Same-origin path under `/gatekeeper/<vendor>/` (see isAppFrameUrl), served by the gatekeeper's
+   * own Worker. The frame stays opaque-origin (no allow-same-origin), so the document's scripts and
+   * chunks must be served with `Access-Control-Allow-Origin: *`; hashed assets cache like any page.
+   */
+  | { iframeUrl: string; iframeHtml?: never });
 
 /**
  * The root interface of an Adapter, as provided to the Gadget Workshop.
@@ -886,7 +893,7 @@ export interface GatekeeperUser extends WorkerEntrypoint {
    * Gatekeeper.applyCreation(). The choice must not change the simulated resource's interface.
    * Present when the type sets SupportedResource.creationConfigurator.
    */
-  startCreationConfigurator?(resourceUrlPattern: string): Promise<GatekeeperUiFrame>;
+  startCreationConfigurator?(resourceUrlPattern: string): Promise<ResourceConfiguratorFrame>;
 
   /**
    * Revoke this account connection. The GatekeeperUser, and all Gatekeepers created through it,

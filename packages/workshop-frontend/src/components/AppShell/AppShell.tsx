@@ -9,6 +9,7 @@ import Sidebar from './Sidebar'
 import CommandPalette from '../Spotlight/Spotlight'
 import ShellTopbarActions from './ShellTopbarActions'
 import { OPEN_COMMAND_PALETTE_EVENT } from './commandPaletteBus'
+import { KeptGatekeeperApp, KeptGatekeeperAppProvider } from '../../KeptGatekeeperApp'
 
 const STORAGE_KEY_COLLAPSED = 'gadgets:sidebar-collapsed'
 
@@ -31,6 +32,14 @@ function readCollapsed(): boolean {
  * is simpler and matches how the rest of the app handles small screens.
  */
 export default function AppShell({ children }: { children: React.ReactNode }) {
+  return (
+    <KeptGatekeeperAppProvider>
+      <ShellFrame>{children}</ShellFrame>
+    </KeptGatekeeperAppProvider>
+  )
+}
+
+function ShellFrame({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -166,8 +175,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        {/* Routed content. Flat enterprise canvas — no texture. */}
-        <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
+        {/* Routed content. Flat enterprise canvas — no texture. The last gatekeeper app stays
+            mounted above it (hidden off its route), so returning to it is instant. */}
+        <main className="relative min-h-0 flex-1 overflow-y-auto">
+          {children}
+          <KeptGatekeeperApp />
+        </main>
       </div>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
