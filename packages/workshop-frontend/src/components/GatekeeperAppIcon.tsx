@@ -7,9 +7,10 @@ export function GatekeeperAppIcon({ app }: { app: GatekeeperAppInfo }) {
   // Escape the icon URL for safe interpolation into a CSS url("…") string.
   const maskUrl = `url("${app.icon.url.replace(/[\\"]/g, '\\$&')}")`
   return (
+    // 15px: app outlines keep a ~3-unit inset in their 24-unit box, so this matches a 14px Phosphor glyph optically.
     <span
       aria-hidden
-      className="h-3.5 w-3.5 bg-current"
+      className="h-[15px] w-[15px] shrink-0 bg-current"
       style={{
         maskImage: maskUrl,
         WebkitMaskImage: maskUrl,
