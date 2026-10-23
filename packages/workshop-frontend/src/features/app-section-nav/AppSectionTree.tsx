@@ -23,6 +23,7 @@ export default function AppSectionTree({ appId, entry, drawer }: {
     <div
       role="navigation"
       aria-label="Sections"
+      data-tour="section-nav"
       className="mb-1 ml-[19px] mt-0.5 border-l border-kumo-line pl-2"
     >
       <ul className="flex flex-col gap-0.5">
