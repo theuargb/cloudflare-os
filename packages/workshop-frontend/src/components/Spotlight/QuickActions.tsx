@@ -34,7 +34,7 @@ export default function QuickActions({ query = '' }: { query?: string }) {
   }
 
   return (
-    <section aria-label="Quick actions" className="flex flex-col gap-2.5">
+    <section aria-label="Quick actions" data-tour="home-quick-actions" className="flex flex-col gap-2.5">
       <div className="flex items-center justify-between px-1">
         <h2 className="text-[12px] font-medium uppercase tracking-[0.4px] text-kumo-inactive">{needle ? 'Matching actions' : 'Quick actions'}</h2>
         <button

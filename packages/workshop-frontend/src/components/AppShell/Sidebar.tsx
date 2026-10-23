@@ -80,6 +80,7 @@ export default function Sidebar({
             </button>
             <button
               type="button"
+              data-tour="sidebar-toggle"
               onClick={onToggleCollapsed}
               aria-label="Collapse sidebar"
               title="Collapse sidebar"
@@ -95,6 +96,7 @@ export default function Sidebar({
       {collapsed && (
         <button
           type="button"
+          data-tour="sidebar-toggle"
           onClick={onToggleCollapsed}
           aria-label="Expand sidebar"
           title="Expand sidebar"
@@ -120,7 +122,7 @@ export default function Sidebar({
         >
           <SidebarNav apps={gatekeeperApps} navigation={appNavigation} collapsed={collapsed} />
 
-          <div className="mt-1">
+          <div className="mt-1" data-tour="sidebar-workspaces">
             <SidebarWorkspacesLists collapsed={collapsed} />
           </div>
         </div>

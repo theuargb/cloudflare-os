@@ -7,6 +7,7 @@ export default function TopNav() {
   return (
     <button
       type="button"
+      data-tour="menu"
       aria-haspopup="dialog"
       onClick={openCommandPalette}
       title={`Menu (${shortcut})`}
