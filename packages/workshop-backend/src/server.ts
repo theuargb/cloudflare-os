@@ -82,6 +82,7 @@ export { OverseerDurableObject, GatekeeperLoopback, GatekeeperHookLoopback,
 
 // Re-export service-binding entrypoint for external channel integrations.
 export { ExternalMessageGateway };
+export { ModelRunner } from "./model-runner.js";
 
 // Re-export the service-binding entrypoint that streams large chat attachments to modules.
 export { ChatAttachmentContent } from "./chat-attachment-content";
