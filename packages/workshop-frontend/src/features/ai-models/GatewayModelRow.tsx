@@ -99,8 +99,10 @@ export const GatewayModelRow = ({
   const budgetAlert = useFieldErrorAlert()
 
   const stated = statedFacts(model.capabilities)
-  // A decision model runs no chat, so the chat-request test and the chat settings don't apply to it.
-  const isDecision = modelKind(model.provider, model.id) === 'decision'
+  // Structured models run no chat, so chat tests and settings don't apply to them.
+  const kind = modelKind(model.provider, model.id)
+  const isDecision = kind === 'decision'
+  const isLanguage = kind === 'language'
   const ownLevel = model.settings?.reasoning
   const levelInEffect = ownLevel ?? defaultReasoning
   const takesLevels = model.reasoningLevels.length > 0
@@ -163,6 +165,7 @@ export const GatewayModelRow = ({
         <p className="flex flex-wrap items-center gap-2">
           <span className="min-w-0 break-words text-sm font-medium text-kumo-default">{model.name}</span>
           {isDecision && <Badge variant="secondary">Decision</Badge>}
+          {kind === 'extraction' && <Badge variant="secondary">Extraction</Badge>}
           {(model.mode !== model.defaultMode || model.settings !== undefined) && (
             <Badge variant="outline">Changed</Badge>
           )}
@@ -213,7 +216,7 @@ export const GatewayModelRow = ({
         ))}
       </Radio.Group>
 
-      {!isDecision && (
+      {isLanguage && (
         <GatewayTestButton name={model.name} testing={test?.state === 'testing'} onTest={onTest} />
       )}
 
@@ -231,7 +234,7 @@ export const GatewayModelRow = ({
 
       {/* The test's result brings its own space above it, so this line takes margins in place of
           the row's gap: an empty status then takes no room above the Settings. */}
-      {!isDecision && <div className="-mt-2 min-w-0 basis-full">
+      {isLanguage && <div className="-mt-2 min-w-0 basis-full">
         <GatewayTestStatus test={test} subject="model" />
         <Collapsible.Root className="mt-2">
           <Collapsible.DefaultTrigger className="w-fit text-sm">
