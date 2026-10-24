@@ -86,6 +86,23 @@ export function isAppId(appId: unknown): appId is string {
   return typeof appId === "string" && /^[a-z0-9_]{1,64}$/.test(appId);
 }
 
+/** Longest frame URL the host loads. */
+const MAX_APP_FRAME_URL_LENGTH = 512;
+
+/**
+ * A frame URL (GatekeeperUiFrame.iframeUrl) is a same-origin path under the vendor's own
+ * `/gatekeeper/<vendor>/` prefix (underscores in the id become dashes), without `//`, `\` or `..`
+ * segments, so an app can never point its frame at another vendor's or the Workshop's routes.
+ */
+export function isAppFrameUrl(url: unknown, vendorId: string): url is string {
+  return typeof url === "string"
+    && url.length <= MAX_APP_FRAME_URL_LENGTH
+    && url.startsWith(`/gatekeeper/${vendorId.replaceAll("_", "-")}/`)
+    && !url.includes("//")
+    && !url.includes("\\")
+    && !url.split(/[?#]/)[0]!.split("/").includes("..");
+}
+
 /**
  * The host capability the Workshop hands a sandboxed gatekeeper app's frame over its message port,
  * as the frame sees it (the frame holds an `RpcStub<GatekeeperAppHost>`). The host methods that
