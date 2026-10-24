@@ -1,4 +1,5 @@
-import { isTextLikeAttachmentMimeType } from "@gadgets/workshop-shared/api";
+import { isTextLikeAttachmentMimeType, MAX_LARGE_CHAT_ATTACHMENT_BYTES } from "@gadgets/workshop-shared/api";
+import type { LargeChatAttachmentUploadBegin } from "@gadgets/workshop-shared/api";
 import { PDF_MIME_TYPE } from "./chat-attachment-pdf";
 
 // A conservative per-file size that model APIs generally accept; providers' own limits vary by
@@ -41,6 +42,17 @@ export function assertChatAttachmentSize(byteLength: number): void {
   }
 }
 
+// Stops a mislabeled upload at the door; `bytes` need only be the start of the content.
+function assertContentMatchesMimeType(mimeType: string, bytes: Uint8Array): void {
+  let signature = CONTENT_SIGNATURES.get(mimeType);
+  if (!signature) return;
+  for (let [index, expected] of signature.entries()) {
+    if (expected !== null && bytes[index] !== expected) {
+      throw new Error("Chat attachment content does not match its MIME type.");
+    }
+  }
+}
+
 /** Normalize and validate an upload's metadata and bytes before attaching it to a message. */
 export function validateChatAttachmentUpload<T extends {
   mimeType: string; content: Uint8Array; name?: string;
@@ -48,17 +60,49 @@ export function validateChatAttachmentUpload<T extends {
   attachment.name = sanitizeChatAttachmentName(attachment.name);
   attachment.mimeType = sanitizeChatAttachmentMimeType(attachment.mimeType);
   assertChatAttachmentSize(attachment.content.byteLength);
-
-  let signature = CONTENT_SIGNATURES.get(attachment.mimeType);
-  if (signature) {
-    for (let [index, expected] of signature.entries()) {
-      if (expected !== null && attachment.content[index] !== expected) {
-        throw new Error("Chat attachment content does not match its MIME type.");
-      }
-    }
-  }
-
+  assertContentMatchesMimeType(attachment.mimeType, attachment.content);
   return attachment;
+}
+
+/** Byte length of each part of a large attachment upload but the last. */
+export const LARGE_CHAT_ATTACHMENT_PART_BYTES = 8 * 1024 * 1024;
+
+/**
+ * Normalize the metadata of a large attachment upload and bound its size. Unlike a small
+ * attachment, its type need not be one a model accepts: large files are never sent to the model.
+ */
+export function validateLargeChatAttachmentBegin(
+  request: LargeChatAttachmentUploadBegin,
+): LargeChatAttachmentUploadBegin {
+  if (!Number.isSafeInteger(request.size) || request.size <= MAX_CHAT_ATTACHMENT_BYTES ||
+      request.size > MAX_LARGE_CHAT_ATTACHMENT_BYTES) {
+    throw new Error("Large chat attachments must be over " + MAX_CHAT_ATTACHMENT_BYTES +
+        " and at most " + MAX_LARGE_CHAT_ATTACHMENT_BYTES + " bytes.");
+  }
+  return {
+    mimeType: sanitizeChatAttachmentMimeType(request.mimeType),
+    name: sanitizeChatAttachmentName(request.name),
+    size: request.size,
+  };
+}
+
+/**
+ * Check one part of a large attachment of `size` bytes: its number, its length (the full part
+ * length except for the last part) and, for part 1, that the content matches `mimeType`.
+ */
+export function validateLargeChatAttachmentPart(
+  size: number, mimeType: string, partNo: number, bytes: Uint8Array,
+): void {
+  let partCount = Math.ceil(size / LARGE_CHAT_ATTACHMENT_PART_BYTES);
+  if (!Number.isSafeInteger(partNo) || partNo < 1 || partNo > partCount) {
+    throw new Error("Chat attachment part number is out of range.");
+  }
+  let expected = partNo < partCount
+      ? LARGE_CHAT_ATTACHMENT_PART_BYTES : size - (partCount - 1) * LARGE_CHAT_ATTACHMENT_PART_BYTES;
+  if (bytes.byteLength !== expected) {
+    throw new Error("Chat attachment part has the wrong length.");
+  }
+  if (partNo === 1) assertContentMatchesMimeType(mimeType, bytes);
 }
 
 /** Decode only genuine UTF-8 text; all other attachments retain opaque byte semantics. */

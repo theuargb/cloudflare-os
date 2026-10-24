@@ -3180,17 +3180,29 @@ function ChatInterface({
   }, [lastMessage]);
 
   // Download a committed chat attachment. Image bytes are already inlined on the message; other
-  // attachments are fetched on demand over the authenticated RPC connection.
+  // attachments are fetched on demand over the authenticated RPC connection, a large one part by
+  // part since it exceeds a single RPC message.
   const downloadChatAttachment = useCallback(async (chatId: number, attachment: ChatAttachmentRef) => {
     try {
-      let bytes = attachment.content;
       const mimeType = attachment.mimeType;
       const name = attachment.name;
-      if (!bytes) {
-        bytes = await overseer.getChatAttachmentContent(chatId, attachment.id);
+      const blobParts: BlobPart[] = [];
+      if (attachment.large) {
+        for (let offset = 0, size = 1; offset < size;) {
+          const part = await overseer.getChatAttachmentContentPart(chatId, attachment.id, offset);
+          if (part.bytes.byteLength === 0 && offset < part.size) {
+            throw new Error("Attachment download ended early.");
+          }
+          blobParts.push(part.bytes as BlobPart);
+          offset += part.bytes.byteLength;
+          size = part.size;
+        }
+      } else {
+        blobParts.push((attachment.content
+            ?? await overseer.getChatAttachmentContent(chatId, attachment.id)) as BlobPart);
       }
       const url = URL.createObjectURL(
-        new Blob([bytes as BlobPart], {type: mimeType || "application/octet-stream"}));
+        new Blob(blobParts, {type: mimeType || "application/octet-stream"}));
       try {
         const a = document.createElement("a");
         a.href = url;

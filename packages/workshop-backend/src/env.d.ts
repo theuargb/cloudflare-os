@@ -28,6 +28,10 @@ declare global {
       BLUEPRINTS: KVNamespace;             // Workers KV for blueprint metadata lookup
       BLUEPRINT_CONTENT: R2Bucket;         // R2 bucket for blueprint code snapshots
 
+      // Optional R2 bucket for large chat attachments (see `Overseer.beginLargeChatAttachmentUpload`).
+      // Without it, attachments over the Git-blob limit are refused.
+      CHAT_ATTACHMENT_CONTENT?: R2Bucket;
+
       // User avatar storage.
       AVATARS: KVNamespace;                // Workers KV for user avatar images
 
