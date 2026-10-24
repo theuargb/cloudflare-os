@@ -36,8 +36,8 @@ export default function SignupPage({ rpcStub }: SignupPageProps) {
   };
 
   const usernameError =
-    username && !/^[a-z0-9_-]+$/i.test(username)
-      ? "Letters, numbers, underscores, and hyphens only"
+    username && !/^[a-z][a-z0-9_]*$/i.test(username)
+      ? "Letters, numbers, and underscores; must start with a letter"
       : undefined;
 
   const passwordError =
