@@ -111,6 +111,7 @@ describe('AddModelModal', () => {
     // Auto Router runs only through a gateway, so it is never offered here.
     expect(options).not.toContain('Auto')
     expect(options).not.toContain('Other AI Gateway Auto Router...')
+    expect(options.includes('Clairic (Workers AI)')).toBe(!chatModelsOnly)
   })
 
   it.each([false, true])('adds a decision model typed as a custom model only without chatModelsOnly (chatModelsOnly: %s)', async (chatModelsOnly) => {

@@ -17,12 +17,23 @@ export type JevDecisionResult = {
  */
 export function decodeJevResponse(
     raw: unknown, questions: Record<string, DecisionQuestion>): JevDecisionResult {
-  const record = objectRecord(raw);
-  if (record && Object.hasOwn(record, "state")) {
-    if (record.state !== "Completed") reject(`state ${String(record.state)}`, raw);
-    return decodeBareResult(record.result, questions, raw);
+  return decodeBareResult(unwrapWorkersAiResult(raw), questions, raw);
+}
+
+/** Unwrap successful Workers AI REST and completed-job envelopes for either decoder. */
+export function unwrapWorkersAiResult(raw: unknown): unknown {
+  let result = raw;
+  let record = objectRecord(result);
+  if (record && Object.hasOwn(record, "success")) {
+    if (record.success !== true || !Object.hasOwn(record, "result")) return undefined;
+    result = record.result;
+    record = objectRecord(result);
   }
-  return decodeBareResult(record, questions, raw);
+  if (record && Object.hasOwn(record, "state")) {
+    if (record.state !== "Completed") return undefined;
+    return record.result;
+  }
+  return result;
 }
 
 function decodeBareResult(
