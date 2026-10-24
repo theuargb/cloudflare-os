@@ -112,7 +112,7 @@ describe('Activity creation approval', () => {
       },
     }
     const server = makeOverseer()
-    const approveAction = vi.fn<Overseer['approveAction']>(async () => {})
+    const approveAction = vi.fn<Overseer['approveAction']>(async () => 'approved')
     Object.assign(server.overseer, {
       approveAction,
       getGatekeeperById: async () => ({

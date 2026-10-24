@@ -451,10 +451,11 @@ export type ActionRecord = {
    */
   action: number | "create";
   description: ActionDescription;
-  resolvedBy?: AiChatAuthorInfo;  // set when resolved (approved/rejected); absent while pending (or legacy)
+  resolvedBy?: AiChatAuthorInfo;  // set when resolved (approved/rejected/failed); absent while pending (or legacy)
   requestedBy?: AiChatAuthorInfo; // authenticated agent initiator; separate from the approver
   requestedActorUserId?: string; // Workshop user-DO id used to re-resolve authority at apply time
   autoApproved?: boolean;         // set when applied by an auto-approval rule rather than a human
+  error?: string;                 // the gatekeeper's apply error; set only with state "failed"
 } | {
   type: "observation";
   description: ObservationDescription;
