@@ -46,7 +46,8 @@
     "./tour": {
       "types": "./src/tour.ts",
       "import": "./src/tour.ts"
-    }
+    },
+    "./fonts.css": "./fonts/fonts.css"
   },
   "scripts": {
     "build": "tsc",
