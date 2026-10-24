@@ -6,6 +6,7 @@ import { highlightIndices } from './matcher'
 import { getRecents, recordPick } from './recents'
 import { openCommandPalette } from '../AppShell/commandPaletteBus'
 import { useSpotlightEntries } from './useSpotlightEntries'
+import { preloadIntent } from '../../features/app-preload/appPreload'
 
 const LIMIT = 8
 
@@ -55,6 +56,7 @@ export default function QuickActions({ query = '' }: { query?: string }) {
             key={entry.id}
             type="button"
             onClick={() => run(entry)}
+            {...(entry.preload ? preloadIntent(entry.preload) : {})}
             className="group press flex cursor-pointer items-center gap-3 rounded-xl border border-kumo-line bg-kumo-base px-3 py-2.5 text-left transition-colors hover:border-kumo-interact hover:bg-kumo-elevated"
           >
             <KindTile kind={entry.kind} size={32} />

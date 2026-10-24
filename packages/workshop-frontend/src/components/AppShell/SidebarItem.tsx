@@ -2,6 +2,7 @@ import { Link, useRouterState, type LinkProps } from '@tanstack/react-router'
 import { ArrowSquareOut } from '@phosphor-icons/react'
 import { appRouteEntry } from '@gadgets/workshop-shared/app-host'
 import type { ReactElement, ReactNode } from 'react'
+import { preloadIntent } from '../../features/app-preload/appPreload'
 
 /**
  * A single nav row in the sidebar. Renders as a TanStack <Link>. Active state is computed from the
@@ -31,6 +32,8 @@ export type SidebarItemProps = {
   nested?: ReactNode
   /** Wraps the row's link while it is active (the collapsed rail's section flyout). */
   flyout?: (link: ReactElement<{ title?: string }>) => ReactNode
+  /** Warms the row's target while the pointer rests on it or it has focus (a row that opens an app route). */
+  preload?: () => void
 }
 
 /** The app entry named by an open `/gatekeepers/<app>?at=<route>` location (null when the route names none). */
@@ -53,6 +56,7 @@ export default function SidebarItem({
   endAction,
   nested,
   flyout,
+  preload,
 }: SidebarItemProps) {
   // Resolve the active path manually so we can style the icon as well as the row. For parameterized
   // routes (e.g. "/gatekeepers/$appId"), substitute the params so the resolved path can match.
@@ -110,7 +114,7 @@ export default function SidebarItem({
       {content}
     </a>
   ) : (
-    <Link {...linkProps} title={collapsed ? label : undefined} className={rowClass}>
+    <Link {...linkProps} {...(preload ? preloadIntent(preload) : {})} title={collapsed ? label : undefined} className={rowClass}>
       {content}
     </Link>
   )
