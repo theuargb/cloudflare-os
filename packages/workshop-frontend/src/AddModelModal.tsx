@@ -89,7 +89,7 @@ function buildOptions(gatewayMode: boolean, enabledProviders: Set<string> | null
     // In gateway mode, suggested models are already built-in, so don't list them.
     if (!gatewayMode) {
       for (const [modelId, model] of Object.entries(SUGGESTED_MODELS[provider])) {
-        if (model.hidden || (chatModelsOnly && model.kind === 'decision')) continue
+        if (model.hidden || (chatModelsOnly && model.kind !== undefined && model.kind !== 'language')) continue
         options.push({
           value: encodeSelection(provider, modelId),
           label: model.name,
@@ -202,6 +202,8 @@ export default function AddModelModal({ visible, onCancel, onSuccess, authentica
       // The caller lists only language models, so a decision model saved here would never show up there.
       else if (chatModelsOnly && modelKind(selection.provider, modelId.trim()) === 'decision') {
         newErrors.modelId = "This is a decision model, which can't chat. Add it from AI Providers instead."
+      } else if (chatModelsOnly && modelKind(selection.provider, modelId.trim()) === 'extraction') {
+        newErrors.modelId = "This is an extraction model, which can't chat. Add it from AI Providers instead."
       }
       if (!displayName.trim()) newErrors.displayName = 'Please enter a display name'
     }
