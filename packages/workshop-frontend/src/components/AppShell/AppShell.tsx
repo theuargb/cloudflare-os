@@ -3,6 +3,7 @@ import { useRouterState } from '@tanstack/react-router'
 import { List, X } from '@phosphor-icons/react'
 import TopBarNotice from '../../TopBarNotice'
 import TopNav from '../AppNavigation/TopNav'
+import WorkplaceSwitcher from '../AppNavigation/WorkplaceSwitcher'
 import ReconnectingChip from '../ReconnectingChip'
 import { useConnectionLost } from '../../RpcContext'
 import Sidebar from './Sidebar'
@@ -164,7 +165,10 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
           >
             {mobileOpen ? <X size={16} /> : <List size={16} />}
           </button>
-          <TopNav />
+          <div className="flex items-center gap-2">
+            <WorkplaceSwitcher />
+            <TopNav />
+          </div>
           <TopBarNotice inline />
           {/* `ml-auto` rather than the container's `justify-between`: on desktop the hamburger is
               hidden, leaving this the only in-flow child, which `justify-between` would park on the

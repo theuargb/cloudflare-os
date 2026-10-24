@@ -1675,6 +1675,11 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
     return appHost.searchApp(await this.#appHostAccounts(), context, appId, query);
   }
 
+  /** Workplace switch of one management app (AuthenticatedApi.selectAppWorkplace). */
+  async selectAppWorkplace(context: ActorContext, appId: string, workplaceId: string) {
+    await appHost.selectAppWorkplace(await this.#appHostAccounts(), context, appId, workplaceId);
+  }
+
   /** Topbar inbox (AuthenticatedApi.getInbox). */
   async getInbox(context: ActorContext) {
     return appHost.getInbox(await this.#appHostAccounts(), context);
