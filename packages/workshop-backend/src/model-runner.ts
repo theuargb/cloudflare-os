@@ -2,14 +2,16 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import { validateRpc } from "capnweb-validate";
 import type { Message } from "@earendil-works/pi-ai";
 import {
-  DECISION_MODELS, type DecideRequest, type DecideResult, type DecisionQuestion,
-  type DecisionState, type ModelRunRequest, type ModelRunResult, type RunnerModel,
+  DECISION_MODELS, EXTRACTION_MODELS, type DecideRequest, type DecideResult,
+  type ExtractRequest, type ExtractResult, type ModelRunRequest, type ModelRunResult, type RunnerModel,
   type ToMarkdownRequest, type ToMarkdownResult,
 } from "@gadgets/workshop-shared/model-runner";
 import type { AiChatAuthorInfo } from "@gadgets/workshop-shared/api";
+import { modelKind } from "@gadgets/workshop-shared/api";
 import { getAiGatewayConfig, getGatewayModels, type AiGatewayConfig, type GatewayModels } from "./ai-gateway.js";
 import { getModel } from "./ai-models.js";
 import { decodeJevResponse } from "./jev-response.js";
+import { decodeExtractionResponse } from "./extraction-response.js";
 import { createWorkshopLogger } from "./observability";
 
 const logger = createWorkshopLogger("workshop.model-runner");
@@ -59,6 +61,7 @@ export class ModelRunner extends WorkerEntrypoint<Cloudflare.Env> {
     let result: RunnerModel[] = [];
     for (let { id, name, mode } of models.all) {
       if (mode !== "enabled" && mode !== "hidden") continue;
+      if (modelKind(models.get(id)!.provider, id) !== "language") continue;
       try {
         let { model } = getModel(this.env, models.runConfig(id)!, LIST_INITIATOR);
         result.push({
@@ -74,6 +77,12 @@ export class ModelRunner extends WorkerEntrypoint<Cloudflare.Env> {
       if (!models.providers.has(provider)) continue;
       for (let [id, { name, input }] of Object.entries(catalog)) {
         result.push({ id, label: name, kind: "decision", input });
+      }
+    }
+    for (let [provider, catalog] of Object.entries(EXTRACTION_MODELS)) {
+      if (!models.providers.has(provider)) continue;
+      for (let [id, { name, input }] of Object.entries(catalog)) {
+        result.push({ id, label: name, kind: "extraction", input });
       }
     }
     return result;
@@ -106,12 +115,51 @@ export class ModelRunner extends WorkerEntrypoint<Cloudflare.Env> {
     try {
       raw = binding
           ? await binding.run(req.modelId, input, { gateway: { id: models.gateway.gateway, metadata } })
-          : await runDecisionModelOverHttps(models.gateway, req.modelId, input, metadata);
+          : await runWorkersAiOverHttps(models.gateway, req.modelId, input, metadata);
     } catch (error) {
       if (error instanceof Error && "code" in error) throw error;
       throw aiError("AI_UNAVAILABLE", "The AI decision request failed.");
     }
     return decodeJevResponse(raw, req.questions);
+  }
+
+  /** Extract typed fields from text and optional images through Workers AI. */
+  async extract(req: ExtractRequest): Promise<ExtractResult> {
+    const names = req?.fields ? Object.keys(req.fields) : [];
+    if (!req?.modelId?.trim() || !req.initiator?.actorId?.trim() || !names.length ||
+        names.some(name => !/^[A-Za-z_][A-Za-z0-9_.-]{0,63}$/.test(name)) ||
+        (req.images?.length ?? 0) > 4 || (!req.state?.trim() && !req.images?.length)) {
+      throw aiError("AI_INPUT_REJECTED", "Invalid AI extraction request.");
+    }
+    const models = await this.#models();
+    const configured = Object.entries(EXTRACTION_MODELS).some(([provider, catalog]) =>
+      models.providers.has(provider) && Object.hasOwn(catalog, req.modelId));
+    if (!configured) {
+      throw aiError("AI_UNAVAILABLE", "The requested extraction model is unavailable.");
+    }
+    const fields = Object.fromEntries(Object.entries(req.fields).map(([name, spec]) => {
+      const { nullThreshold, ...field } = spec;
+      return [name, { ...field, ...(nullThreshold !== undefined && { null_threshold: nullThreshold }) }];
+    }));
+    const input = {
+      model: "clairic", state: req.state, fields,
+      ...(req.images && { images: req.images.map(image => ({
+        content_type: image.contentType, base64: image.base64,
+      })) }),
+      ...(req.referenceDate !== undefined && { reference_date: req.referenceDate }),
+    };
+    const metadata = { tool: "extract", automated: true, actor: req.initiator.actorId };
+    const binding = models.gateway.bindingFor("cloudflare");
+    let raw: unknown;
+    try {
+      raw = binding
+          ? await binding.run(req.modelId, input, { gateway: { id: models.gateway.gateway, metadata } })
+          : await runWorkersAiOverHttps(models.gateway, req.modelId, input, metadata);
+    } catch (error) {
+      if (error instanceof Error && "code" in error) throw error;
+      throw aiError("AI_UNAVAILABLE", "The AI extraction request failed.");
+    }
+    return decodeExtractionResponse(raw, req.fields);
   }
 
   /**
@@ -235,19 +283,13 @@ export class ModelRunner extends WorkerEntrypoint<Cloudflare.Env> {
 }
 
 /**
- * Run a decision model over JEV's documented HTTPS request shape:
- * https://developers.cloudflare.com/ai/models/typesafe/jev/. The endpoint returns Cloudflare's
- * `{ success, result }` REST envelope, documented at
- * https://developers.cloudflare.com/workers-ai/get-started/rest-api/; unwrap its outer envelope
- * before passing the result to the shared decoder, which accepts both bare and completed JEV
- * response shapes. The `cf-aig-gateway-id` header routes through the configured gateway and
- * `cf-aig-metadata` carries attribution. The token is guaranteed by the AiGatewayConfig
- * constructor whenever the binding transport is unavailable.
+ * Run a Workers AI request over HTTPS using the configured gateway and human attribution.
+ * Both model decoders also accept REST and completed-job envelopes.
  */
-async function runDecisionModelOverHttps(
+async function runWorkersAiOverHttps(
     gateway: AiGatewayConfig,
     modelId: string,
-    input: { state: DecisionState; questions: Record<string, DecisionQuestion> },
+    input: Record<string, unknown>,
     metadata: { tool: string; automated: boolean; actor: string },
 ): Promise<unknown> {
   let response: Response;

@@ -3,8 +3,8 @@
 // deployment's AI models for a human initiator. The Workshop admin decides which models exist; this
 // file holds only the request and response shapes and the decision-model catalog.
 
-/** The kind of an AI model: generative (chat/text) or decision (structured evaluation). */
-export type AiModelKind = "generative" | "decision";
+/** The kind of an AI model: generative, decision, or structured extraction. */
+export type AiModelKind = "generative" | "decision" | "extraction";
 
 /** Input a model accepts: `multimodal` takes images and PDF files next to text. */
 export type ModelInput = "text" | "multimodal";
@@ -26,6 +26,36 @@ export const DECISION_MODELS: Record<string, Record<string, { name: string; inpu
     "@cf/cloudflare/clef-flash": { name: "Cloudflare Clef Flash", input: "text" },
   },
 };
+
+/** Workers AI structured-extraction models by provider; enabled with the provider. */
+export const EXTRACTION_MODELS: Record<string, Record<string, { name: string; input: ModelInput }>> = {
+  "cloudflare": {
+    // https://developers.cloudflare.com/workers-ai/models/clairic/ — text state plus ≤4 images.
+    "@cf/cloudflare/clairic": { name: "Cloudflare Clairic", input: "multimodal" },
+  },
+};
+
+/** The typed value an extraction field requests. */
+export type ExtractionFieldType = "text" | "number" | "date" | "time" | "datetime" | "duration" | "list" | "estimate" | "forecast";
+/** One typed extraction field and its constraints. */
+export type ExtractionField = {
+  type: ExtractionFieldType; instructions?: string; unit?: string; integer?: boolean; decimals?: number;
+  items?: "text" | "number" | "date"; min?: number | string; max?: number | string; step?: number | "month" | "year";
+  scale?: "linear" | "log"; nullThreshold?: number; horizon?: number;
+  interval?: "step" | "minute" | "hour" | "day" | "week" | "month" | "quarter" | "year";
+};
+/** An extracted value with optional evidence and calibration. */
+export type ExtractionAnswer = {
+  type: string; value: unknown; guess?: unknown; pNull?: number; confidence?: number;
+  span?: [number, number]; spans?: Array<[number, number]>; median?: unknown; p10?: unknown; p90?: unknown;
+};
+/** A request to ModelRunner.extract. */
+export type ExtractRequest = {
+  modelId: string; state: string; fields: Record<string, ExtractionField>;
+  images?: Array<{ contentType: string; base64: string }>; referenceDate?: string; initiator: ModelInitiator;
+};
+/** The normalized result of ModelRunner.extract. */
+export type ExtractResult = { model: string; answers: Record<string, ExtractionAnswer>; truncated: boolean; usage: ModelUsage };
 
 /**
  * One typed question a decision model answers against a `DecisionState`. `noul` is a yes/no

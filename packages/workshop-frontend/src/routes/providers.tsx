@@ -159,6 +159,7 @@ function ProvidersPage() {
   const quickModelChoosable = !useCloudflareLimitsEnabled()
   const [chatModels, setChatModels] = useState<AiChatAuthorInfo[]>([])
   const [decisionModels, setDecisionModels] = useState<AiChatAuthorInfo[]>([])
+  const [extractionModels, setExtractionModels] = useState<AiChatAuthorInfo[]>([])
   const [quickModel, setQuickModel] = useState<string | null>(null)
   const [aiConfig, setAiConfig] = useState<AiGatewayInfo | null>(null)
   const [search, setSearch] = useState('')
@@ -172,14 +173,16 @@ function ProvidersPage() {
   const fetchAll = async () => {
     setLoadError(false)
     try {
-      const [chatList, decisionList, qm, cfg] = await Promise.all([
+      const [chatList, decisionList, extractionList, qm, cfg] = await Promise.all([
         authenticatedApi.listModels(),
         authenticatedApi.listModels('decision'),
+        authenticatedApi.listModels('extraction'),
         authenticatedApi.getQuickModel(),
         authenticatedApi.getAiConfig(),
       ])
       setChatModels(chatList)
       setDecisionModels(decisionList)
+      setExtractionModels(extractionList)
       setQuickModel(qm)
       setAiConfig(cfg)
       // Each dialog saves a model of the user's own, so none stays open, or opens late, once the
@@ -202,7 +205,7 @@ function ProvidersPage() {
   const gatewayMode = aiConfig?.enabled === true
   // False only on an AI Gateway deployment whose administrator turned adding models off.
   const canAddModels = aiConfig?.enabled !== true || aiConfig.userModelsEnabled
-  const models = [...chatModels, ...decisionModels]
+  const models = [...chatModels, ...decisionModels, ...extractionModels]
   // Only a chat model can be the quick model, so the quick-model notice needs one.
   const hasChatModel = chatModels.length > 0
 
@@ -393,7 +396,7 @@ function ProvidersPage() {
                 onEdit={() => openWithSource('edit', model)}
                 onClone={() => openWithSource('clone', model)}
                 onDelete={() => handleDelete(model)}
-                onSetQuick={!quickModelChoosable || decisionModels.includes(model)
+                onSetQuick={!quickModelChoosable || !chatModels.includes(model)
                   ? undefined
                   : () => handleSetQuick(model.id)}
               />
