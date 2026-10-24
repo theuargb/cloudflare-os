@@ -16,6 +16,7 @@ import type { GatekeeperAppHost, GatekeeperAppTourLocator } from '@gadgets/works
 import { sanitizeTour, type Tour } from "@gadgets/workshop-shared/tour";
 import { locateInFrame } from "./features/tour/frameTarget";
 import { dropAppTours, requestTour } from "./features/tour/tourStore";
+import { sanitizeAppSectionNav, type GatekeeperAppSectionNavReceiver } from '@gadgets/workshop-shared/app-host'
 import { openCommandPalette } from './components/AppShell/commandPaletteBus'
 import { createRateLimitedCapability } from './rateLimitedCapability'
 import { useTheme } from './ThemeContext'
@@ -31,6 +32,13 @@ import GatekeeperUserPickerDialog from './features/gatekeeper-sharing/Gatekeeper
 import { readGatekeeperAppPreference, writeGatekeeperAppPreference } from './gatekeeperAppPreferences'
 import { refreshGatekeeperApps } from './useGatekeeperApps'
 import { revalidateAppNavigation } from './components/AppNavigation/useAppNavigation'
+import {
+  attachAppSectionNav,
+  detachAppSectionNav,
+  followAppSectionNav,
+  publishAppSectionNav,
+  setAppSectionNavReceiver,
+} from './features/app-section-nav/sectionNavStore'
 
 // The content-pane rect, in viewport coordinates, that the app pins its page to while the iframe
 // is full-viewport.
@@ -147,6 +155,8 @@ class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
   readonly #routing: AppRouting
   readonly #startTour: StartTour;
   #tourLocator: RpcStub<GatekeeperAppTourLocator> | null = null;
+  readonly #appId: string
+  #sectionNavReceiver: RpcStub<GatekeeperAppSectionNavReceiver> | null = null
   #presenting = false
   #theme: GatekeeperAppTheme
   #themeReceiver: RpcStub<GatekeeperAppThemeReceiver> | null = null
@@ -173,6 +183,7 @@ class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
     cancelUserPicker: CancelUserPicker,
     routing: AppRouting,
     startTour: StartTour,
+    appId: string,
   ) {
     super()
     this.#theme = theme
@@ -193,6 +204,8 @@ class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
     this.#cancelUserPicker = cancelUserPicker
     this.#routing = routing
     this.#startTour = startTour;
+    this.#appId = appId
+    attachAppSectionNav(appId, this)
   }
 
   get ui(): RpcStub<RpcTarget> {
@@ -309,6 +322,7 @@ class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
     }
     if (route === this.#route) return
     this.#route = route
+    followAppSectionNav(this.#appId, this, route)
     this.#unseen = [...this.#unseen.slice(1 - MAX_UNSEEN_ROUTES), route]
     this.#routing.report(route, mode ?? 'replace')
   }
@@ -346,6 +360,19 @@ class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
     if (now - this.#lastRefresh < REFRESH_NAVIGATION_INTERVAL_MS) return
     this.#lastRefresh = now
     this.#routing.refreshNavigation()
+  }
+
+  // The app registers for picks made in the Workshop's section navigation (sidebar tree).
+  subscribeSectionNav(receiver: RpcStub<GatekeeperAppSectionNavReceiver>): void {
+    this.#sectionNavReceiver?.[Symbol.dispose]?.()
+    // The argument stub is disposed when this call returns, so keep our own dup (released in dispose).
+    this.#sectionNavReceiver = receiver.dup()
+    setAppSectionNavReceiver(this.#appId, this, this.#sectionNavReceiver)
+  }
+
+  // The open screen's navigation, validated here (the app is untrusted), kept with the route it is on.
+  setSectionNav(nav: unknown): void {
+    publishAppSectionNav(this.#appId, this, sanitizeAppSectionNav(nav), this.#route)
   }
 
   // Keystrokes inside the iframe never reach the Workshop, so the app forwards ⌘K here.
@@ -415,6 +442,9 @@ class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
     this.#tourLocator = null;
     this.#routeReceiver?.[Symbol.dispose]?.()
     this.#routeReceiver = null
+    detachAppSectionNav(this.#appId, this)
+    this.#sectionNavReceiver?.[Symbol.dispose]?.()
+    this.#sectionNavReceiver = null
     this.suspendPresentation()
   }
 }
@@ -612,6 +642,7 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, rout
             replay,
             locateFrame: (anchor, reveal) => locateInFrame(locator, iframeRef.current, anchor, reveal),
           }),
+        gatekeeperVendorId,
       )
       hostRef.current = host
       sessionRef.current = newMessagePortRpcSession(port, host)
