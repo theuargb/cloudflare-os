@@ -340,6 +340,9 @@ export function normalizeAdminConfig(p: Partial<AdminConfig>): AdminConfig {
     userSearchEnabled: typeof p.userSearchEnabled === "boolean"
       ? p.userSearchEnabled
       : !signupsEnabled,
+    voiceModeEnabled: typeof p.voiceModeEnabled === "boolean"
+      ? p.voiceModeEnabled
+      : DEFAULT_ADMIN_CONFIG.voiceModeEnabled,
     siteName: typeof p.siteName === "string" ? p.siteName : "",
     siteLogoConfigured: typeof p.siteLogoConfigured === "boolean" ? p.siteLogoConfigured : false,
     instanceInstructions: typeof p.instanceInstructions === "string" ? p.instanceInstructions : "",

@@ -21,6 +21,7 @@ import {
 } from '../features/native-app/DeviceSessionHandoff'
 import { NativeAppBridge } from '../features/native-app/NativeAppBridge'
 import { PageUpdateNotice } from '../features/stale-session/PageUpdateNotice'
+import { VoiceCallProvider } from '../features/voice/VoiceCallProvider'
 
 export const Route = createRootRoute({
   component: RootComponent,
@@ -130,10 +131,12 @@ function RootComponent() {
             <NotificationBridge authenticatedApi={authenticatedApi} />
             <NativeAppBridge />
             <PageUpdateNotice />
-            <AuthenticatedShell
-              authenticatedApi={authenticatedApi}
-              isWorkspaceEditor={isWorkspaceEditor}
-            />
+            <VoiceCallProvider>
+              <AuthenticatedShell
+                authenticatedApi={authenticatedApi}
+                isWorkspaceEditor={isWorkspaceEditor}
+              />
+            </VoiceCallProvider>
           </Toasty>
         </TooltipProvider>
       </FeatureFlagsProvider>

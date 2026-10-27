@@ -53,6 +53,7 @@ import {
   ArrowUpRight,
   Blueprint,
   GitBranch,
+  HeadsetIcon,
 } from "@phosphor-icons/react";
 import { RpcStub, RpcTarget } from "capnweb";
 import ReactMarkdown, { type Components } from "react-markdown";
@@ -109,6 +110,9 @@ import { useAlwaysApproveTag } from "./useAlwaysApproveTag";
 import { useResolveAction } from "./useResolveAction";
 import { safeExternalUrl } from "./utils/safeExternalUrl";
 import { useAuthenticatedApi } from "./AuthContext";
+import { useVoiceCall } from "./features/voice/useVoiceCall";
+import { readChatMessages } from "./features/voice/chat-history";
+import type { VoiceCallController } from "./features/voice/voice-call";
 import { useVendorBranding } from "./useVendorBranding";
 import OutOfCreditsModal from "./components/billing/OutOfCreditsModal";
 import { formatFullTimestamp } from "./utils/formatTimestamp";
@@ -3119,6 +3123,11 @@ function ChatInterface({
     ),
     [currentMessages],
   );
+  const composerBlockedReason = hasPendingConnectionRequest
+    ? "Set up or deny the connection request above to continue."
+    : hasPendingAwaitedAction
+      ? "Approve or reject the pending action above to continue."
+      : undefined;
   // A gadget's stamped format, looked up by the id a finished createGadget call reports, so the
   // transcript can say "Created Doc" with the Doc icon.
   const resolveToolOutput = useCallback(
@@ -3481,6 +3490,9 @@ function ChatInterface({
     emitEditPreviewEvent(chatId, { kind: "reset" });
   };
 
+  // The voice-mode call watches every chat's messages for the end of its agent's turn.
+  const voiceTapRef = useRef<VoiceCallController | null>(null);
+
   // Proper class implementation of AiChatSubscriber
   // This is necessary so the server receives a single stub for the object,
   // not separate stubs for each method
@@ -3599,6 +3611,7 @@ function ChatInterface({
     }
 
     message(msg: AiChatMessage) {
+      voiceTapRef.current?.message(msg);
       // Use sequence number as index to make this idempotent
       // This handles both duplicate subscriptions (React strict mode) and race conditions
 
@@ -4080,6 +4093,41 @@ function ChatInterface({
       throw err;
     }
   };
+
+  // Posts the voice assistant's request in a voice-mode call: to the call's chat, or to a new chat
+  // that this page then opens.
+  const sendSpoken = async (text: string, chatId: number | null): Promise<number> => {
+    try {
+      if (chatId === null) {
+        const newChatId = await overseer.newChat(
+            text, selectedModel, undefined, undefined, undefined, true);
+        onNavigateToChatRef.current(newChatId);
+        return newChatId;
+      }
+      await overseer.sendChatMessage(
+          chatId, text, selectedModel, undefined, undefined, undefined, true);
+      return chatId;
+    } catch (err) {
+      logRpcFailure("Failed to send spoken message:", err, { reportSite: "chat.send" });
+      throw new Error(rpcFailureDescription(err), { cause: err });
+    }
+  };
+
+  const voiceCall = useVoiceCall({
+    chatId: selectedChatId,
+    isAgentActive,
+    hasQueuedSteers: !!queuedSteers?.length,
+    blockedReason: composerBlockedReason,
+    send: sendSpoken,
+    readChat: (chatId, afterSequence) => readChatMessages(
+      (beforeSequence) => overseer.getChatHistory(chatId, beforeSequence), afterSequence),
+  });
+  useEffect(() => {
+    voiceTapRef.current = voiceCall.controller;
+  }, [voiceCall.controller]);
+  const voice = voiceCall.controller
+    ? { controller: voiceCall.controller, snapshot: voiceCall.snapshot }
+    : undefined;
 
   // Handle creating a new chat from the sidebar (always creates, never sends to existing)
   const handleNewChatSend = async (
@@ -5531,6 +5579,7 @@ function ChatInterface({
             }
             getOverseer={getOverseer}
             onSend={handleNewChatSend}
+            voice={voice && { ...voice, chatId: null }}
             isAgentActive={false}
             models={availableModels}
             selectedModel={selectedModel === null ? null : { id: selectedModel }}
@@ -6036,6 +6085,13 @@ function ChatInterface({
                                   {/* hideOwnUserName implies currentUser is non-null (see memo). */}
                                   {!(hideOwnUserName && msg.author.id === currentUser?.id) && (
                                     <span className="font-medium">{msg.author.name}</span>
+                                  )}
+                                  {msg.spoken && (
+                                    <Tooltip content="Sent by the voice assistant" asChild>
+                                      <span aria-label="Sent by the voice assistant" className="inline-flex">
+                                        <HeadsetIcon size={12} />
+                                      </span>
+                                    </Tooltip>
                                   )}
                                   <Tooltip content={formatFullTimestamp(msg.timestamp)} asChild>
                                     <span className="font-mono">
@@ -6568,6 +6624,7 @@ function ChatInterface({
                     onConsumeConsoleLogs={onConsumeConsoleLogs}
                     onDiscardConsoleLogs={onDiscardConsoleLogs}
                     onStop={handleStop}
+                    voice={voice && { ...voice, chatId: selectedChatId }}
                     queuedSteers={queuedSteers?.map((steer) => steer.text)}
                     showThinkingTraces={showThinkingTraces}
                     onToggleThinkingTraces={toggleShowThinkingTraces}
@@ -6577,13 +6634,7 @@ function ChatInterface({
                           `workspace:${workspaceId}:chat:${selectedChatId}`,
                         )
                       : undefined}
-                    blockedReason={
-                      hasPendingConnectionRequest
-                        ? "Set up or deny the connection request above to continue."
-                        : hasPendingAwaitedAction
-                          ? "Approve or reject the pending action above to continue."
-                          : undefined
-                    }
+                    blockedReason={composerBlockedReason}
                     draftUpdateBanner={(() => {
                       if (!currentChatMetadata ||
                           !(chatHasProposedChanges(currentChatMetadata) ||

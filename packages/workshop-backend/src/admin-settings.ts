@@ -19,6 +19,7 @@ import { UserDurableObject } from './user.js';
 import { bundledBlueprintsManifestVersion, installBundledBlueprints } from './bundled-blueprints.js';
 import { BUNDLED_BLUEPRINTS } from './generated/bundled-blueprints.js';
 import { type DeployServiceInstall, NO_ANSWER, type VersionAnswer, deployServiceInstall, deploymentUpdateStatus, fetchLatestRelease, updateCheckDue } from './deployment-updates.js';
+import { voiceModeReady } from './voice-mode.js';
 
 const logger = createWorkshopLogger("workshop.admin.settings");
 
@@ -491,6 +492,8 @@ export class AdminSettings extends DurableObject<Cloudflare.Env> {
     return {
       signupsEnabled: config.signupsEnabled,
       userSearchEnabled: config.userSearchEnabled,
+      voiceModeEnabled: config.voiceModeEnabled,
+      voiceModeReady: voiceModeReady(this.env, config),
       siteName: config.siteName,
       siteLogo: siteLogoImage(config.siteLogoConfigured),
       instanceInstructions: config.instanceInstructions,
@@ -1059,6 +1062,10 @@ export class AdminApiImpl extends RpcTarget implements AdminApi {
 
   async setUserSearchEnabled(enabled: boolean): Promise<void> {
     await this.admin.updateAdminConfig({ userSearchEnabled: enabled });
+  }
+
+  async setVoiceModeEnabled(enabled: boolean): Promise<void> {
+    await this.admin.updateAdminConfig({ voiceModeEnabled: enabled });
   }
 
   async setSiteName(name: string): Promise<void> {
