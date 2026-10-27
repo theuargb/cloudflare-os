@@ -9,7 +9,7 @@ import {
   type SetStateAction,
 } from "react";
 import { DropdownMenu, useKumoToastManager } from "@cloudflare/kumo";
-import { Brain, DotsThree, File as FileIcon } from "@phosphor-icons/react";
+import { Brain, DotsThree, File as FileIcon, HeadsetIcon } from "@phosphor-icons/react";
 import { RpcStub } from "capnweb";
 import type {
   AiChatAuthorInfo,
@@ -51,6 +51,8 @@ import { CapturedConsoleLogsPrompt } from "./CapturedConsoleLogsPrompt";
 import ComposerAddMenu from "./ComposerAddMenu";
 import { ComposerModelSelector, type SelectedModel } from "./ComposerModelSelector";
 import { useComposerDraft } from "./draft/useComposerDraft";
+import { VoiceCallBar } from "../../voice/VoiceCallBar";
+import type { VoiceCallController, VoiceCallSnapshot } from "../../voice/voice-call";
 import { buildComposerSubmission } from "./composerSubmission";
 import {
   applyComposerTextEdit,
@@ -101,6 +103,7 @@ export const ChatComposer = ({
   blockedReason,
   chatKey,
   onStop,
+  voice,
   queuedSteers,
   showThinkingTraces = true,
   onToggleThinkingTraces,
@@ -156,6 +159,9 @@ export const ChatComposer = ({
   chatKey?: number | null;
   /** Stops the agent; rejects, once the failure is reported, if it could not. */
   onStop?: () => Promise<void>;
+  /** The tab's voice-mode call, and the chat this composer posts to (null: a new chat). Offers the
+   * Headset button, and replaces the editor while the call talks in this chat. */
+  voice?: { controller: VoiceCallController; snapshot: VoiceCallSnapshot; chatId: number | null };
   /** Texts of the steers queued for the agent, which Stop moves into the draft. */
   queuedSteers?: readonly string[];
   showThinkingTraces?: boolean;
@@ -166,6 +172,7 @@ export const ChatComposer = ({
    * pre-approval catalog and proactively offer to pre-approve its actions. */
 }) => {
   const toasts = useKumoToastManager();
+  const inCall = !!voice && voice.snapshot.phase !== "idle" && voice.snapshot.chatId === voice.chatId;
   const {
     attachments: pendingAttachments,
     addFiles,
@@ -763,7 +770,14 @@ export const ChatComposer = ({
           disabled={isSending}
           onRemove={removeAttachment}
         />
-        {/* Textarea */}
+        {inCall ? (
+          <VoiceCallBar
+            controller={voice.controller}
+            snapshot={voice.snapshot}
+            isAgentActive={isAgentActive}
+            onStop={onStop}
+          />
+        ) : (
         <div className="relative px-4 pb-2.5 pt-3">
           {slashCommandPicker.popup}
           {/* The resolved command is marked by color alone, so announce it for screen readers. */}
@@ -948,6 +962,7 @@ export const ChatComposer = ({
             />
           </div>
         </div>
+        )}
 
         {/* Footer row: connection/options left, model + send right */}
         <div className="flex items-center justify-between gap-1.5 px-3 pb-1.5">
@@ -955,7 +970,7 @@ export const ChatComposer = ({
             <ComposerAddMenu
               anchorRef={promptCardRef}
               catalogVersion={catalogVersion}
-              disabled={isBlocked}
+              disabled={isBlocked || inCall}
               getOverseer={getOverseer}
               chatExists={!newChat}
               skillSelected={selectedSlashCommand !== null}
@@ -1009,7 +1024,17 @@ export const ChatComposer = ({
                 selectedModel={selectedModel}
                 onModelChange={onModelChange}
               />
-              {isAgentActive && onStop && (
+              {voice && voice.snapshot.phase === "idle" && (
+                <WorkshopIconButton
+                  onClick={() => void voice.controller.start(voice.chatId)}
+                  disabled={isBlocked}
+                  className="!h-10 !w-10 sm:!h-8 sm:!w-8"
+                  aria-label="Start voice mode"
+                >
+                  <HeadsetIcon size={16} />
+                </WorkshopIconButton>
+              )}
+              {!inCall && isAgentActive && onStop && (
                 // A steer still being sent can't be handed back to the draft yet.
                 <WorkshopIconButton
                   onClick={handleStop}
@@ -1028,7 +1053,7 @@ export const ChatComposer = ({
                   </svg>
                 </WorkshopIconButton>
               )}
-              {(!isAgentActive || !onStop || canSteer) && (
+              {!inCall && (!isAgentActive || !onStop || canSteer) && (
                 <WorkshopIconButton
                   onClick={submitMessage}
                   disabled={!canSend && !canSteer}
