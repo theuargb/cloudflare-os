@@ -38,6 +38,13 @@ export type AdminConfig = {
    * snapshot; the view grants already made are kept, and open again once it is true.
    */
   snapshotSharingEnabled: boolean;
+
+  /**
+   * Whether users may talk with the agent in voice mode (default false: its speech recognition and
+   * synthesis bill the deployment, outside every user's usage limits). Enforced in voice-mode.ts on
+   * every call.
+   */
+  voiceModeEnabled: boolean;
   /**
    * Site name shown next to the top-bar logo, or "" to use DEFAULT_SITE_NAME. Resolve it for
    * display with `resolveSiteName()`.
@@ -192,6 +199,7 @@ export const DEFAULT_ADMIN_CONFIG: AdminConfig = {
   signupsEnabled: true,
   userSearchEnabled: false,
   snapshotSharingEnabled: true,
+  voiceModeEnabled: false,
   siteName: "",
   siteLogoConfigured: false,
   instanceInstructions: "",
