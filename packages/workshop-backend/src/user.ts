@@ -1,6 +1,7 @@
 import { RpcStub } from "capnweb";
 import { GadgetMetadataWithTimestamps, AiChatAuthorInfo, AiModelConfig, RedactedAiModelConfig, ModelKind, modelKind, CollaboratorRole, ConnectedAccountsSubscriber, ConnectedAccountsFilter, GatekeeperVendorFilter, GadgetMetadata, BlueprintMetadata, BlueprintLibrarySummary, BlueprintSource, BlueprintUserSummary, BLUEPRINT_SCREENSHOT_R2_PREFIX, GatekeeperVendorInfo, OutputSummary, ListOutputsResult, AUTH_ERROR_CODES, createAuthError, ConnectFlowStart, validateCommitEmail, NotificationSubscriber, NotificationMute, UserNotification, type DeviceSessionHandoffStart } from '@gadgets/workshop-shared/api';
-import { ActionDescription, Gatekeeper, GatekeeperUser, GatekeeperUserVerifier, GatekeeperVendor, AccountDescription, VendorDescription, GatekeeperConnectCallback, ConnectHandoff, SupportedResource, ResourceConfiguratorFrame, AppUiContext, GatekeeperUiFrame, GatekeeperUserSelection, GatekeeperUserSelectionExchange, RedeemedGatekeeperUserSelection } from "@gadgets/workshop-shared/gatekeeper";
+import { ActionDescription, Gatekeeper, GatekeeperUser, GatekeeperUserVerifier, GatekeeperVendor, AccountDescription, VendorDescription, GatekeeperConnectCallback, ConnectHandoff, SupportedResource, ResourceConfiguratorFrame, ActorContext, GatekeeperUiFrame, GatekeeperUserSelection, GatekeeperUserSelectionExchange, RedeemedGatekeeperUserSelection } from "@gadgets/workshop-shared/gatekeeper";
+import * as appHost from "./app-host-fanout.js";
 import { shouldAutoProvisionAccount, ambientGatekeeperMode } from "./provisioning-policy.js";
 import { CloudflareGatekeeperUser } from "@gadgets/workshop-shared/cloudflare-gatekeeper";
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
@@ -1532,11 +1533,11 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
   }
 
   /**
-   * Open the full-page management UI for an account that declares one. `context.isAdmin` is supplied
-   * fresh by the caller so admin-gated features reflect the user's current status.
+   * Open the full-page management UI for an account that declares one. The actor is supplied fresh
+   * by the caller so the UI reflects the user's current admin status and display data.
    */
   async startAccountAppUi(
-      accountId: number, options: Pick<AppUiContext, "isAdmin">,
+      accountId: number, actor: ActorContext,
   ): Promise<GatekeeperUiFrame> {
     let record = this.storage.connectedAccounts.get(accountId);
     if (!record?.description.providesUi) throw new Error("No such app.");
@@ -1544,7 +1545,7 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
       props: { selectorUserId: this.ctx.id.toString(), appAccountId: accountId },
     });
     return (record.account as unknown as SingletonAccountStub)
-        .startAppUi({ isAdmin: options.isAdmin, userSelectionExchange });
+        .startAppUi({ ...actor, userSelectionExchange });
   }
 
   // The account record behind one of this user's gatekeeper apps, or undefined
@@ -1615,6 +1616,34 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
     if (!app || app.vendorId !== record.vendorId) throw new Error("No such app.");
     return this.ctx.exports.UserDurableObject.getByName(record.selectedUserId)
         .selectableGatekeeperUsers(record.vendorId);
+  }
+
+  // The provided accounts as the app-host fan-out (./app-host-fanout.ts) sees them.
+  async #appHostAccounts(): Promise<appHost.AppHostAccount[]> {
+    return (await this.listProvidedAccounts()).map(({vendorId, accountId, description}) => ({
+      appId: vendorId,
+      description,
+      stub: this.storage.connectedAccounts.get(accountId)!.account as unknown as appHost.AppHostStub,
+    }));
+  }
+
+  /** Navigation (launcher actions) of every management app (AuthenticatedApi.listAppNavigation). */
+  async listAppNavigation(context: ActorContext) {
+    return appHost.listAppNavigation(await this.#appHostAccounts(), context);
+  }
+
+  /** Record search of one management app (AuthenticatedApi.searchApp). */
+  async searchApp(context: ActorContext, appId: string, query: string) {
+    return appHost.searchApp(await this.#appHostAccounts(), context, appId, query);
+  }
+
+  /** Topbar inbox (AuthenticatedApi.getInbox). */
+  async getInbox(context: ActorContext) {
+    return appHost.getInbox(await this.#appHostAccounts(), context);
+  }
+
+  async markInboxRead(context: ActorContext, ids: string[]) {
+    await appHost.markInboxRead(await this.#appHostAccounts(), context, ids);
   }
 
   /**
