@@ -56,11 +56,14 @@ Migration retries a file up to three times per visit; persistent failures are lo
 retryable without blocking other files or future messages. Replay shows an explicit unavailable
 content marker if an original payload cannot be read, rather than failing the whole chat.
 Model requests inline only compatible image/document inputs and valid text; other files are
-identified by workspace path, never lossy UTF-8 replacement characters or an unsupported
-provider content part. Images with an edge above 8000 pixels or unrecognized dimension headers
-stay workspace-only on every model replay; no resize/transcode changes their original bytes.
-When the replay contains more than 20 candidate images/documents, image edges are conservatively
-limited to 2000 pixels, including images attached in earlier turns. Originals remain unchanged.
+identified by name, never lossy UTF-8 replacement characters or an unsupported provider content
+part. Images are inlined only on a model whose input capabilities include images; on a
+text-only model an image gets the same generic note as any other unreadable file, naming its
+id, size and MIME type, and pointing the agent at `env.ATTACHMENTS.list()` for its handle.
+Images with an edge above 8000 pixels or unrecognized dimension headers stay workspace-only on
+every model replay; no resize/transcode changes their original bytes. When the replay contains
+more than 20 candidate images/documents, image edges are conservatively limited to 2000 pixels,
+including images attached in earlier turns. Originals remain unchanged.
 New images are read from the same immutable blob for previews; there
 is no separate payload copy in attachment records. Existing limits remain: 4 MiB per file,
 5 MiB and five files per message.
@@ -73,3 +76,26 @@ collision suffixes, so recorded Git paths round-trip and materialize on Linux.
 Projection commits with the validated user message; failed sends leave blobs available and
 do not consume names. Later uploads receive collision-free suffixes. The worktree remains
 available when a chat has already been seeded.
+
+## Large attachments
+
+A file over 4 MiB (up to 100 MiB, at most 300 MiB per message) cannot be a Git blob, which is
+bounded by the SQLite row limit. When the deployment binds the optional `CHAT_ATTACHMENT_CONTENT`
+R2 bucket, such a file is uploaded in parts (`beginLargeChatAttachmentUpload`,
+`uploadLargeChatAttachmentPart`, `completeLargeChatAttachmentUpload`) and attached by the returned
+`{id}` handle. Without the bucket, `beginLargeChatAttachmentUpload` fails.
+
+A large attachment is still a `ChatAttachmentRef` on its message, marked `large`, but it is not a
+workspace file: it has no `oid` or `workspacePath`, never creates the scratch worktree, and its
+bytes never enter model input. Replay shows the model a marker naming its id, MIME type and size.
+Every attachment, whatever its size, gets an opaque `handle` from `env.ATTACHMENTS.list()`;
+`get()` still returns bytes only for attachments up to 4 MiB and refuses a large one. A module
+passes the handle to the `ChatAttachmentContent` service entrypoint (`open({handle})`), which
+streams a large object from R2 and a small one from the chat's own storage. The handle names
+the Overseer and chat, and the Overseer re-checks that the attachment is still committed to
+that chat, so a handle for a deleted attachment opens nothing. Clients download a large
+attachment with `getChatAttachmentContentPart`.
+
+The record (`largeChatAttachments`) is staged until a sent message commits it. Uploads that no
+message claims are deleted a day after they started, when the next large upload begins, and the
+R2 object goes with its chat.

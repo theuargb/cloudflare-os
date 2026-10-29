@@ -3108,6 +3108,42 @@ export interface Overseer extends RpcTarget {
   uploadBlob(content: Uint8Array): Promise<GitOid>;
 
   /**
+   * Start uploading a chat attachment too large for `uploadBlob()` (over the 4 MiB attachment
+   * limit, up to `MAX_LARGE_CHAT_ATTACHMENT_BYTES`). Large attachments are stored in object
+   * storage rather than as Git blobs, so they never become workspace files: they appear on the
+   * message as a `ChatAttachmentRef` with `large` set, and the agent reads them through
+   * `env.ATTACHMENTS`. Throws if the deployment has no bucket for them.
+   *
+   * Send the parts with `uploadLargeChatAttachmentPart()`, in any order, then call
+   * `completeLargeChatAttachmentUpload()` for the handle to attach to a message.
+   */
+  beginLargeChatAttachmentUpload(request: LargeChatAttachmentUploadBegin):
+      Promise<LargeChatAttachmentUploadTicket>;
+
+  /** Upload one part of a large attachment. Re-sending a part replaces it. */
+  uploadLargeChatAttachmentPart(part: LargeChatAttachmentUploadPart): Promise<void>;
+
+  /**
+   * Assemble the uploaded parts and return the handle to pass to `newChat()` or
+   * `sendChatMessage()`. Fails, discarding the upload, if a part is missing.
+   */
+  completeLargeChatAttachmentUpload(id: string): Promise<ChatAttachmentHandle>;
+
+  /**
+   * Discard a large attachment's upload before it is attached to a message. Does nothing if the
+   * upload is already attached or gone.
+   */
+  discardLargeChatAttachmentUpload(id: string): Promise<void>;
+
+  /**
+   * Fetch one part (at most `LargeChatAttachmentUploadTicket.partBytes`) of a committed `large`
+   * attachment, starting at `offset`, with the attachment's total size. It is how a client
+   * downloads one, since `getChatAttachmentContent()` refuses it.
+   */
+  getChatAttachmentContentPart(chatId: number, id: string, offset: number):
+      Promise<{ size: number; bytes: Uint8Array }>;
+
+  /**
    * Fetch the bytes of a committed chat attachment over RPC. The canonical metadata is already
    * present in the message's ChatAttachmentRef. Images are inlined there, so this is normally used
    * only to download non-image attachments on demand.
@@ -4224,7 +4260,8 @@ export type AlwaysAvailableResource = {
 /**
  * A previously uploaded blob to attach to a chat message, with display/model-input metadata.
  * The blob must be present in this workspace's Git store. Attachment limits and MIME signatures
- * are checked when sending. The ID-only variant accepts legacy staged uploads.
+ * are checked when sending. The ID-only variant is for a large attachment (see
+ * `Overseer.completeLargeChatAttachmentUpload()`) and for legacy staged uploads.
  */
 export type ChatAttachmentHandle = {
   /** Immutable Git blob returned by `uploadBlob()`. */
@@ -4234,8 +4271,40 @@ export type ChatAttachmentHandle = {
   /** Original display filename, sanitized when sending. */
   name?: string;
 } | {
-  /** Legacy staged-upload ID; new clients use a blob OID instead. */
+  /** Upload ID of a large attachment, or of a legacy staged upload. */
   id: string;
+};
+
+/** The largest chat attachment, in bytes, that `Overseer.beginLargeChatAttachmentUpload()` accepts. */
+export const MAX_LARGE_CHAT_ATTACHMENT_BYTES = 100 * 1024 * 1024;
+
+/** The most bytes that the large attachments of one chat message may total. */
+export const MAX_LARGE_CHAT_ATTACHMENT_TOTAL_BYTES = 300 * 1024 * 1024;
+
+/** Describes a large attachment about to be uploaded in parts. */
+export type LargeChatAttachmentUploadBegin = {
+  /** MIME type of the file; it is not matched against the model's supported types. */
+  mimeType: string;
+  /** Exact size of the file in bytes. */
+  size: number;
+  /** Original display filename, sanitized when stored. */
+  name?: string;
+};
+
+/** A started large attachment upload. */
+export type LargeChatAttachmentUploadTicket = {
+  /** Names this upload in the other large-attachment calls. */
+  id: string;
+  /** Length of every part but the last, which holds the remainder. */
+  partBytes: number;
+};
+
+/** One part of a large attachment. Parts are numbered from 1. */
+export type LargeChatAttachmentUploadPart = {
+  /** The upload's `LargeChatAttachmentUploadTicket.id`. */
+  id: string;
+  partNo: number;
+  bytes: Uint8Array;
 };
 
 /**
@@ -4256,9 +4325,17 @@ export type ChatAttachmentRef = {
 
   /**
    * Path in the chat's scratch worktree, preserving uploaded bytes for every file format.
-   * Absent only on legacy attachments committed before workspace ingress was introduced.
+   * Absent on legacy attachments committed before workspace ingress was introduced, and on
+   * `large` attachments, which are never workspace files.
    */
   workspacePath?: string;
+
+  /**
+   * Set for an attachment over the 4 MiB limit, stored in object storage instead of the Git
+   * store. Its bytes reach the agent through `env.ATTACHMENTS` and clients through
+   * `Overseer.getChatAttachmentContentPart()`.
+   */
+  large?: true;
 
   /** Inlined bytes for small image attachments. Present only for images. */
   content?: Uint8Array;
