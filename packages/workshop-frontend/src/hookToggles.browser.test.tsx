@@ -16,7 +16,9 @@ vi.mock('./AuthContext', () => {
   return { useAuthenticatedApi: () => context, useOptionalAuthenticatedApi: () => context }
 })
 vi.mock('./useAlwaysApproveTag', () => ({
-  useAlwaysApproveTag: () => ({ alwaysApproveTag: async () => {}, isTagAutoApproved: () => false }),
+  useAlwaysApproveTag: () => ({
+    alwaysApproveTag: async () => {}, isTagAutoApproved: () => false, isTagApplying: () => false,
+  }),
 }))
 
 import { deferred, entry, makeOverseer } from './action-test-harness'
