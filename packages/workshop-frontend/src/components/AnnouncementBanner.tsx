@@ -35,8 +35,9 @@ const INLINE_MARKDOWN_COMPONENTS: Components = {
 }
 
 /**
- * Deployment-wide full-width banner across the top of the app (logged in or not), configured by an
- * admin. Dismissible per-message: a changed banner re-appears after dismissal.
+ * Deployment-wide announcement (logged in or not), configured by an admin. Dismissible per-message: a
+ * changed banner re-appears after dismissal. It floats over the bottom of the app instead of taking a
+ * row above it, so the config arriving or a dismissal never moves the app.
  */
 export default function AnnouncementBanner() {
   const config = useServerConfig()
@@ -65,7 +66,8 @@ export default function AnnouncementBanner() {
 
   return (
     <div
-      className="flex shrink-0 items-start gap-3 border-b border-kumo-line px-4 py-2.5"
+      role="status"
+      className="fixed bottom-4 left-1/2 z-50 flex w-[min(40rem,calc(100vw-2rem))] -translate-x-1/2 items-start gap-3 rounded-xl border border-kumo-line px-4 py-2.5 shadow-lg"
       style={COLOR_STYLES[color] ?? COLOR_STYLES.info}
     >
       <div className="flex-1 text-sm leading-snug text-center [&_a]:font-medium">
