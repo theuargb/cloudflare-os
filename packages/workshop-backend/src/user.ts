@@ -26,6 +26,7 @@ import {
   DEVICE_HANDOFF_LIFETIME_MS, isDeviceHandoffState, sealDeviceSessionHandoff,
   type DeviceSessionCredential, type DeviceSessionHandoff,
 } from "./auth/device-session-handoff.js";
+import { withUiPreference } from "./ui-preferences.js";
 
 const logger = createWorkshopLogger("workshop.user");
 
@@ -763,6 +764,14 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
 
   async completeOnboarding(): Promise<void> {
     this.storage.onboardingCompleted.put(true);
+  }
+
+  async getUiPreferences(): Promise<Record<string, string>> {
+    return this.storage.uiPreferences.get();
+  }
+
+  async setUiPreference(key: string, value: string | null): Promise<void> {
+    this.storage.uiPreferences.put(withUiPreference(this.storage.uiPreferences.get(), key, value));
   }
 
   // ---------------------------------------------------------------------------------------------

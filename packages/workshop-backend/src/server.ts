@@ -216,6 +216,12 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
   completeOnboarding(): Promise<void> {
     return this.#user.completeOnboarding();
   }
+  getUiPreferences(): Promise<Record<string, string>> {
+    return retryOnDoReset(() => this.#user.getUiPreferences());
+  }
+  setUiPreference(key: string, value: string | null): Promise<void> {
+    return this.#user.setUiPreference(key, value);
+  }
 
   getCloudflareUsage(): Promise<CloudflareUsageInfo> {
     return getUsageInfo(this.env, this.#user);

@@ -21,6 +21,7 @@ import {
 } from '../features/native-app/DeviceSessionHandoff'
 import { NativeAppBridge } from '../features/native-app/NativeAppBridge'
 import { PageUpdateNotice } from '../features/stale-session/PageUpdateNotice'
+import { hydrateUserPreferences } from '../features/user-preferences/userPreferences'
 
 export const Route = createRootRoute({
   component: RootComponent,
@@ -158,12 +159,17 @@ function AuthenticatedShell({
 
   useEffect(() => {
     let cancelled = false
-    authenticatedApi.isOnboardingCompleted().then((completed) => {
-      if (!cancelled) setOnboardingNeeded(!completed)
-    }).catch((err) => {
-      logRpcFailure('Failed to check onboarding status:', err)
-      // If the check fails, skip onboarding to avoid blocking the user
-      if (!cancelled) setOnboardingNeeded(false)
+    const onboarding = authenticatedApi.isOnboardingCompleted().then(
+      (completed) => !completed,
+      (err: unknown) => {
+        logRpcFailure('Failed to check onboarding status:', err)
+        // If the check fails, skip onboarding to avoid blocking the user
+        return false
+      },
+    )
+    // The user's UI preferences load with it, so the shell's first paint already shows them.
+    void Promise.all([onboarding, hydrateUserPreferences(authenticatedApi)]).then(([needed]) => {
+      if (!cancelled) setOnboardingNeeded(needed)
     })
     return () => { cancelled = true }
   }, [authenticatedApi])
