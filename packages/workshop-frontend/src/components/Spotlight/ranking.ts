@@ -9,8 +9,8 @@ export type SpotlightEntry = {
   /** Stable id; also the key of the user's pick history. */
   id: string
   kind: AppActionKind
-  /** Owning management app; absent for core actions. */
-  appId?: string
+  /** Grouping key of the owning module (the composed module's id, else the management app's); absent for core actions. */
+  moduleKey?: string
   /** Module title ("Trade", "Workspaces"): the block heading when browsing, and match context. */
   module: string
   moduleIcon: ReactNode
@@ -40,7 +40,7 @@ const FEATURED_BOOST = 3
 /** Featured actions interleaved across modules (first of each, then second of each…), so no module crowds the rest out. */
 export function featuredEntries(entries: SpotlightEntry[]): SpotlightEntry[] {
   const byModule: Record<string, SpotlightEntry[]> = {}
-  for (const entry of entries) if (entry.featured) (byModule[entry.appId ?? ''] ??= []).push(entry)
+  for (const entry of entries) if (entry.featured) (byModule[entry.moduleKey ?? ''] ??= []).push(entry)
   const queues = Object.values(byModule)
   const result: SpotlightEntry[] = []
   for (let round = 0; queues.some((queue) => queue.length > round); round++) {
