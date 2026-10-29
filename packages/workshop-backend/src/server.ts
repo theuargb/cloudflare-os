@@ -39,6 +39,8 @@ import { deployServiceInstall, routerVersionTag } from "./deployment-updates.js"
 import { retryOnDoReset, wrapDoStubForTelemetry } from "./do-retry";
 import { deviceSessionCallback } from "./auth/device-session-callback.js";
 import { isDeploymentAdmin } from "./admin-authorization";
+import type { VoiceSessionGrant } from "@gadgets/workshop-shared/api";
+import { startVoiceSession } from "./voice-session.js";
 
 const logger = createWorkshopLogger("workshop.server");
 
@@ -265,6 +267,10 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
     let result = await this.env.AVATARS.get(userId, "arrayBuffer");
     if (!result) return null;
     return new Uint8Array(result);
+  }
+
+  startVoiceSession(language: string): Promise<VoiceSessionGrant> {
+    return startVoiceSession(this.env, this.#userId, language);
   }
 
   async getAiConfig(): Promise<AiGatewayInfo> {

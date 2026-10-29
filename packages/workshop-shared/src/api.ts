@@ -474,6 +474,25 @@ export type DeviceSessionHandoffStart = {
   ticket: string;
 };
 
+/** The longest a voice-mode call runs, in ms. */
+export const MAX_VOICE_CALL_MS = 30 * 60_000;
+
+/**
+ * The one function a voice-mode session's realtime model calls: `{ request: string }` asks the
+ * chat agent, whose answer the client returns as the call's output (see `startVoiceSession`).
+ */
+export const VOICE_AGENT_TOOL = "ask_agent";
+
+/** What `AuthenticatedApi.startVoiceSession()` returns. */
+export type VoiceSessionGrant = {
+  /**
+   * Ephemeral OpenAI key for one realtime session: post the WebRTC SDP offer to
+   * `https://api.openai.com/v1/realtime/calls` with it as the bearer token. It expires in a minute
+   * and works for nothing else.
+   */
+  clientSecret: string;
+};
+
 /** Top-level API exposed to the user after they have authenticated. */
 export interface AuthenticatedApi extends RpcTarget {
   /** Get profile info for the user who is logged in. */
@@ -664,6 +683,15 @@ export interface AuthenticatedApi extends RpcTarget {
    * Accepts any user ID so that other users' avatars can be displayed (e.g. in chat).
    */
   getAvatar(userId: string): Promise<Uint8Array | null>;
+
+  /**
+   * Start a voice-mode session: mints an ephemeral key for an OpenAI realtime session through the
+   * deployment's AI Gateway. The session is configured here (model, voice, instructions, captions
+   * in `language`, a BCP-47 tag such as "uk") with the single function `VOICE_AGENT_TOOL`, which
+   * the client fulfils by asking the chat agent. Audio flows between the browser and OpenAI; nothing
+   * is stored. Throws unless `ServerConfig.voiceModeEnabled`.
+   */
+  startVoiceSession(language: string): Promise<VoiceSessionGrant>;
 
   /**
    * Open an existing gadget.
@@ -1202,6 +1230,10 @@ export type AdminSettingsView = {
   signupsEnabled: boolean;
   /** Whether users may search the user directory to find collaborators. */
   userSearchEnabled: boolean;
+  /** Whether users may talk with the agent in voice mode (see AdminApi.setVoiceModeEnabled). */
+  voiceModeEnabled: boolean;
+  /** Whether the deployment's AI Gateway serves OpenAI, whose realtime model voice mode talks with. */
+  voiceModeReady: boolean;
   /** Site name shown next to the top-bar logo ("" falls back to DEFAULT_SITE_NAME). */
   siteName: string;
   /** Custom deployment logo, or undefined to use the default Cloudflare OS mark. */
@@ -1374,6 +1406,12 @@ export interface AdminApi {
    * either way, and this switch just controls user access.
    */
   setUserSearchEnabled(enabled: boolean): Promise<void>;
+
+  /**
+   * Turn voice mode on or off (off by default). It takes effect only while the deployment's AI
+   * Gateway serves OpenAI (`AdminSettingsView.voiceModeReady`).
+   */
+  setVoiceModeEnabled(enabled: boolean): Promise<void>;
 
   /**
    * Set the site name shown next to the top-bar logo. Pass "" to reset to DEFAULT_SITE_NAME.
@@ -1708,6 +1746,12 @@ export type ServerConfig = {
    * only an exact username/email field.
    */
   userSearchEnabled: boolean;
+
+  /**
+   * Whether users may talk with the agent in voice mode: an admin turned it on and the
+   * deployment's AI Gateway serves OpenAI. The chat composer offers it only when true.
+   */
+  voiceModeEnabled: boolean;
 
   /**
    * Site name shown next to the top-bar logo (admin-configurable). Empty falls back to
@@ -3136,10 +3180,12 @@ export interface Overseer extends RpcTarget {
    * `formats` records where the message names one of the deployment's standard output formats, so
    * the transcript can draw it as a chip. Display only -- what the agent reads is the noun, which
    * is already in the text.
+   *
+   * `spoken` marks the message as sent by the voice-mode assistant (see `AiChatMessageBody.spoken`).
    */
   newChat(initialMessage: string | SlashCommandRequest, modelId: string | null,
           capsules?: CapsuleSpecifier[], attachments?: ChatAttachmentHandle[],
-          formats?: MessageFormatRef[]): Promise<number>;
+          formats?: MessageFormatRef[], spoken?: boolean): Promise<number>;
 
   /**
    * Send a message to the chat from this client. Sending a message causes the LLM to start
@@ -3154,11 +3200,12 @@ export interface Overseer extends RpcTarget {
    *
    * `modelId` is one of the IDs in the result of `listModels()`, or null to inhibit AI response
    * (useful when using chat to talk between humans).
-   *
+   * `spoken` marks the message as sent by the voice-mode assistant (see
+   * `AiChatMessageBody.spoken`); a steer keeps it.
    */
   sendChatMessage(chatId: number, message: string | SlashCommandRequest, modelId: string | null,
                   capsules?: CapsuleSpecifier[], attachments?: ChatAttachmentHandle[],
-                  formats?: MessageFormatRef[]): Promise<void>;
+                  formats?: MessageFormatRef[], spoken?: boolean): Promise<void>;
 
   /**
    * Store raw bytes as an immutable Git blob and return its OID after durable storage.
@@ -3524,7 +3571,7 @@ export type AiChatMetadata = {
    * it then prompts the next turn as an ordinary message. Stopping the agent drops them all (see
    * `Overseer.stopAgent`). Absent when none.
    */
-  queuedSteers?: {text: string, author: AiChatAuthorInfo}[];
+  queuedSteers?: {text: string, author: AiChatAuthorInfo, spoken?: true}[];
 
   /** If this was started from an agent spawner, the spawner's display name. */
   spawnerName?: string;
@@ -3937,6 +3984,12 @@ export type AiChatMessageBody = {
    * other (it failed, or stopped to wait on the user's decision), when the agent next runs.
    */
   steered?: true;
+
+  /**
+   * Sent by the voice-mode assistant on the user's behalf; the agent is told its reply is retold
+   * aloud.
+   */
+  spoken?: true;
 } | {
   /**
    * A slash command exactly as requested by the client, retained for display and never included in

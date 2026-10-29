@@ -340,7 +340,7 @@ export interface AgentHooks {
    * Takes the messages sent to the chat since the agent last asked, recording each in the chat
    * log as a steered message. The agent reads them before its next model request.
    */
-  takeSteers(chatId: number): string[];
+  takeSteers(chatId: number): {text: string, spoken: boolean}[];
 
   /**
    * The step's persistence barrier: in one storage transaction, persist the step's chat
@@ -682,7 +682,13 @@ Be helpful, direct, and friendly. Use plain language. Lead with the answer or ou
 Assume the user is not an engineer. Write code and use tools as needed without narrating APIs, bindings, or implementation steps. Explain technical details when asked or needed to understand a limitation or make a decision, matching the user's level of detail.
 
 Be accurate about results, unfinished work, and required access. Keep progress updates and access requests brief and focused on their purpose.
+
+Messages that start with "[Sent by the voice assistant]" are the user's own requests, spoken to the voice assistant they are talking with hands-free; it passes them on and retells your final reply to them aloud. Treat them exactly as if the user typed them. Do the work with your tools as usual, then end with a short plain-text reply that is easy to retell: lead with the result or what you need from the user, without tables, code or links unless asked. If the answer needs a table, document or code, put it in a gadget or the chat and say so briefly. Never write the marker yourself.
 `.trim();
+
+// Leads a message the voice-mode assistant sent on the user's behalf, in the model's copy only
+// (see COMMUNICATION_GUIDANCE).
+const SPOKEN_MESSAGE_PREFIX = "[Sent by the voice assistant] ";
 
 let SYSTEM_PROMPT = `
 You are a helpful assistant who helps users get things done. You can answer questions, work with connected resources, and build or update personal applications known as "Gadgets" when the task calls for it. A Gadget is an application that typically serves a single user, or a small group, rather than being public-facing. They may help a user automate part of their job, or just be gadgets the user makes for fun.
@@ -2249,6 +2255,7 @@ async function runAgentPass(
         switch (msg.author.type) {
           case "user":
           case "gadget":
+            if (msg.spoken) content = SPOKEN_MESSAGE_PREFIX + content;
             if (msg.attachments?.length) {
               let parts: (TextContent | ImageContent)[] = [];
               if (content) parts.push({type: "text", text: content});
@@ -4363,8 +4370,11 @@ async function runAgentPass(
     // prompt and tool declarations now ride the leading system message in pi's transcript.
     convertToLlm: (messages) => messages as Message[],
     toolExecution: "sequential",
-    getSteeringMessages: async () => hooks.takeSteers(chatId).map(
-        text => ({role: "user" as const, content: text, timestamp: Date.now()})),
+    getSteeringMessages: async () => hooks.takeSteers(chatId).map(({text, spoken}) => ({
+      role: "user" as const,
+      content: spoken ? SPOKEN_MESSAGE_PREFIX + text : text,
+      timestamp: Date.now(),
+    })),
     maxTokens: maxOutputTokens,
     finishTurn: ({message, toolResults}) => {
       if (message.stopReason === "error" || message.stopReason === "aborted") return;

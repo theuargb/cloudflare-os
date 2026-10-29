@@ -33,7 +33,8 @@ import {
 } from "@gadgets/workshop-shared/api";
 import { traceChat } from "./agent-tracing.js";
 import {
-  AiGatewayConfig, getAiGatewayConfig, getGatewayModels, type AiGatewayLogRoute,
+  AiGatewayConfig, CLOUDFLARE_GATEWAY_BINDING_AUTH_SENTINEL, bindingFetch, getAiGatewayConfig,
+  getGatewayModels, type AiGatewayLogRoute,
 } from "./ai-gateway.js";
 import { completeText } from "./ai-invoke.js";
 import { bridgePdfAttachments } from "./chat-attachment-pdf.js";
@@ -856,28 +857,6 @@ function getModelViaUserGateway(
   });
 }
 
-/**
- * Placeholder auth value for binding-routed requests. pi's API impls require an API key or a
- * recognized auth header (authorization, x-api-key, cf-aig-authorization) before dispatch;
- * binding calls are pre-authenticated in-account, so this satisfies the check and the gateway
- * recognizes and strips it rather than treating it as a BYOK provider key.
- */
-const CLOUDFLARE_GATEWAY_BINDING_AUTH_SENTINEL = "cloudflare-gateway-binding";
-
-/**
- * `Ai#fetch` exists at runtime but @cloudflare/workers-types' `Ai` doesn't declare it, so the
- * binding is cast structurally to reach the passthrough.
- */
-type AiFetchBinding = {
-  fetch(input: Request | string | URL, init?: RequestInit): Promise<Response>;
-};
-
-// pi drives the model's baseUrl, which already names the gateway route on the binding's host,
-// so the binding's fetch passes through unchanged -- no URL rewriting needed.
-function bindingFetch(binding: Ai): FetchFunction {
-  return (input, init) => (binding as unknown as AiFetchBinding).fetch(input, init);
-}
-
 // Platform free-tier path: route through the deployment's configured AI Gateway (platform-funded).
 // Used only for requests that are NOT billed to a connected user's account.
 function getModelViaGateway(
@@ -887,24 +866,15 @@ function getModelViaGateway(
   options: ModelRoutingOptions,
 ): ModelHandle {
   const metadata = buildMetadata(initiator, options.metadata);
-  const binding = gwConfig.bindingFor(config.provider);
-  // No binding means either the provider can't ride one or the deployment has none; the second
-  // case already required a token in the constructor, so this only fires for the first
-  if (!binding && !gwConfig.apiToken) {
-    throw new Error(`Provider "${config.provider}" cannot use the Workers AI binding transport, ` +
-        "and no CF_AI_GATEWAY_API_TOKEN is configured for the HTTPS one.");
-  }
+  const route = gwConfig.route(config.provider);
   const gatewayAuthHeaders: ProviderHeaders = {
     // pi's API impls explicitly recognize cf-aig-authorization and skip SDK auth; the null
     // values suppress the SDKs' own auth headers so the gateway's server-managed provider keys
     // apply.
-    "cf-aig-authorization":
-        `Bearer ${binding ? CLOUDFLARE_GATEWAY_BINDING_AUTH_SENTINEL : gwConfig.apiToken}`,
+    "cf-aig-authorization": route.authorization,
     Authorization: null,
     "x-api-key": null,
   };
-  const gatewayBase =
-      `https://gateway.ai.cloudflare.com/v1/${gwConfig.accountId}`;
   // Cost-log reads are same-account, so the binding arm applies whenever the binding transport
   // is active (gwConfig.binding is unset when CF_AI_GATEWAY_USE_BINDING=false opts out) --
   // even for Google inference, which itself rides HTTPS (see AiGatewayConfig.bindingFor).
@@ -913,14 +883,10 @@ function getModelViaGateway(
       : { gateway, accountId: gwConfig.accountId, apiToken: gwConfig.apiToken! };
 
   // Every provider -- Workers AI included -- rides the same gateway, with the same log route
-  // and attribution metadata. Binding-routed providers address it on the binding's host, which
-  // takes no account id (the binding channel carries identity); the paths are otherwise the
-  // same, so the model descriptors are built identically from either root.
+  // and attribution metadata (see AiGatewayConfig.route), so the model descriptors are built
+  // identically from either root.
   const gateway = gwConfig.gateway;
-  const gatewayUrl = binding
-      ? `https://workers-binding.ai/ai-gateway/gateways/${gateway}`
-      : `${gatewayBase}/${gateway}`;
-  const model = gatewayNativeModel(config, gatewayUrl);
+  const model = gatewayNativeModel(config, route.url);
   if (!model) {
     throw new Error(`Provider "${config.provider}" is not supported through AI Gateway.`);
   }
@@ -935,7 +901,7 @@ function getModelViaGateway(
     // the gateway recognizes its own token there and applies the stored Google key instead.
     ...(config.provider === "google" ? { apiKey: gwConfig.apiToken } : {}),
     headers: gatewayAuthHeaders,
-    ...(binding ? { fetch: bindingFetch(binding) } : {}),
+    ...(route.binding ? { fetch: bindingFetch(route.binding) } : {}),
     gatewayMetadata: metadata,
     sessionAffinity: options.sessionAffinity,
     reasoning: config.reasoning,

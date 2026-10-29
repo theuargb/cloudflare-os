@@ -70,6 +70,40 @@ export function gatewayRunConfig(
   };
 }
 
+/**
+ * Placeholder auth value for binding-routed requests. pi's API impls require an API key or a
+ * recognized auth header (authorization, x-api-key, cf-aig-authorization) before dispatch;
+ * binding calls are pre-authenticated in-account, so this satisfies the check and the gateway
+ * recognizes and strips it rather than treating it as a BYOK provider key.
+ */
+export const CLOUDFLARE_GATEWAY_BINDING_AUTH_SENTINEL = "cloudflare-gateway-binding";
+
+/**
+ * `Ai#fetch` exists at runtime but @cloudflare/workers-types' `Ai` doesn't declare it, so the
+ * binding is cast structurally to reach the passthrough.
+ */
+type AiFetchBinding = {
+  fetch(input: Request | string | URL, init?: RequestInit): Promise<Response>;
+};
+
+/**
+ * A fetch over the Workers AI binding. A request's URL already names the gateway route on the
+ * binding's host (see AiGatewayConfig.route), so it passes through unchanged.
+ */
+export function bindingFetch(binding: Ai): typeof fetch {
+  return (input, init) => (binding as unknown as AiFetchBinding).fetch(input, init);
+}
+
+/** Where and how a request reaches a provider through the deployment's gateway. */
+export type AiGatewayRoute = {
+  /** The gateway's root URL; the provider's native API path follows `/<provider>`. */
+  url: string;
+  /** The `cf-aig-authorization` header value. */
+  authorization: string;
+  /** The Workers AI binding to fetch through (see bindingFetch), or unset for HTTPS. */
+  binding?: Ai;
+};
+
 export class AiGatewayConfig {
   readonly gateway: string;
   /**
@@ -148,6 +182,29 @@ export class AiGatewayConfig {
    */
   bindingFor(provider: string): Ai | undefined {
     return HTTPS_ONLY_PROVIDERS.has(provider) ? undefined : this.binding;
+  }
+
+  /**
+   * The route of a request to `provider` through the gateway, which then applies its own stored
+   * provider key. Binding-routed providers address the gateway on the binding's host, which takes
+   * no account id (the binding channel carries identity); the paths are otherwise the same.
+   */
+  route(provider: string): AiGatewayRoute {
+    let binding = this.bindingFor(provider);
+    // No binding means either the provider can't ride one or the deployment has none; the second
+    // case already required a token in the constructor, so this only fires for the first
+    if (!binding && !this.apiToken) {
+      throw new Error(`Provider "${provider}" cannot use the Workers AI binding transport, ` +
+          "and no CF_AI_GATEWAY_API_TOKEN is configured for the HTTPS one.");
+    }
+    return {
+      url: binding
+          ? `https://workers-binding.ai/ai-gateway/gateways/${this.gateway}`
+          : `https://gateway.ai.cloudflare.com/v1/${this.accountId}/${this.gateway}`,
+      authorization:
+          `Bearer ${binding ? CLOUDFLARE_GATEWAY_BINDING_AUTH_SENTINEL : this.apiToken}`,
+      ...(binding && { binding }),
+    };
   }
 
   /**

@@ -24,6 +24,7 @@ import {
 import { useDocumentTitle } from "../useDocumentTitle";
 import { homePromptFromSearch } from "../homePrompt";
 import { composerDraftStorageKey } from "../features/chat/composer/draft/composerDraft";
+import { useVoiceCall } from "../features/voice/useVoiceCall";
 
 type HomeSearch = {
   prompt?: string;
@@ -121,19 +122,21 @@ export function HomePageContent({ prompt }: HomeSearch) {
       capsules?: CapsuleSpecifier[],
       attachments?: ChatAttachmentHandle[],
       formats?: MessageFormatRef[],
-    ) => {
+      spoken?: boolean,
+    ): Promise<number> => {
       try {
         ensureProvisionalGadget();
         const overseer = provisionalOverseerRef.current!.stub;
         // Pipeline both independent calls in one batch, but settle both before releasing the stub.
         const [chat, {id}] = await Promise.all([
-          overseer.newChat(message, modelId, capsules, attachments, formats),
+          overseer.newChat(message, modelId, capsules, attachments, formats, spoken),
           overseer.getMetadata(),
         ]);
         provisionalOverseerRef.current?.stub[Symbol.dispose]();
         provisionalOverseerRef.current = null;
         // Open the conversation we just started.
         navigate({ to: "/workspace/$id", params: { id }, search: { chat } });
+        return chat;
       } catch (err) {
         const transient = logRpcFailure("Failed to create gadget:", err,
             { reportSite: "workspace.create" });
@@ -154,6 +157,16 @@ export function HomePageContent({ prompt }: HomeSearch) {
     },
     [ensureProvisionalGadget, navigate, toasts],
   );
+
+  // A voice-mode call started here creates the workspace with its first utterance and follows
+  // it into the new chat.
+  const voiceCall = useVoiceCall({
+    chatId: null,
+    isAgentActive: false,
+    hasQueuedSteers: false,
+    send: (text) => handleSend(text, selectedModel, undefined, undefined, undefined, true)
+        .catch((err: unknown) => { throw new Error(rpcFailureDescription(err), { cause: err }); }),
+  });
 
   const getOverseer = useCallback((): RpcStub<Overseer> => {
     ensureProvisionalGadget();
@@ -203,7 +216,9 @@ export function HomePageContent({ prompt }: HomeSearch) {
           <ChatComposer
             createCapsuleGatekeeper={createCapsuleGatekeeper}
             getOverseer={getOverseer}
-            onSend={handleSend}
+            onSend={async (message, modelId, capsules, attachments, formats) => {
+              await handleSend(message, modelId, capsules, attachments, formats);
+            }}
             isAgentActive={false}
             models={models}
             selectedModel={selectedModel === null ? null : { id: selectedModel }}
@@ -217,6 +232,9 @@ export function HomePageContent({ prompt }: HomeSearch) {
             onTextChange={setDraft}
             draftStorageKey={currentUser
               ? composerDraftStorageKey(currentUser.id, "home")
+              : undefined}
+            voice={voiceCall.controller
+              ? { controller: voiceCall.controller, snapshot: voiceCall.snapshot, chatId: null }
               : undefined}
           />
         </div>
