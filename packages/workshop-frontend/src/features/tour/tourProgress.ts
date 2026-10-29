@@ -1,11 +1,13 @@
-// Which tours (and versions) a user has finished, kept in this browser only.
+// Which tours (and versions) the user has finished, kept per user on the server (user preferences).
 
-const STORAGE_PREFIX = 'workshop.tours.completed:'
+import { readUserPreference, writeUserPreference } from '../user-preferences/userPreferences'
 
-/** Tour key → highest finished version; empty when nothing is stored or storage is unreadable. */
-export const readCompletedTours = (userId: string): Record<string, number> => {
+const TOURS_COMPLETED_PREFERENCE = 'tours.completed'
+
+/** Tour key → highest finished version; empty when nothing is stored or the value is unreadable. */
+export const readCompletedTours = (): Record<string, number> => {
   try {
-    const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE_PREFIX + userId) ?? '{}')
+    const parsed: unknown = JSON.parse(readUserPreference(TOURS_COMPLETED_PREFERENCE) ?? '{}')
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {}
     const completed: Record<string, number> = {}
     for (const [key, version] of Object.entries(parsed)) {
@@ -17,12 +19,8 @@ export const readCompletedTours = (userId: string): Record<string, number> => {
   }
 }
 
-export const markTourCompleted = (userId: string, key: string, version: number): void => {
-  const completed = readCompletedTours(userId)
+export const markTourCompleted = (key: string, version: number): void => {
+  const completed = readCompletedTours()
   completed[key] = Math.max(completed[key] ?? 0, version)
-  try {
-    localStorage.setItem(STORAGE_PREFIX + userId, JSON.stringify(completed))
-  } catch {
-    // Storage disabled or full: the tour simply shows again.
-  }
+  writeUserPreference(TOURS_COMPLETED_PREFERENCE, JSON.stringify(completed))
 }

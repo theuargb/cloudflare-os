@@ -27,7 +27,7 @@ export default function TourHost() {
   const candidate = pending.find((request) => routeMatches(request.route, pathname)) ?? null
   useEffect(() => {
     if (active || !userId || !candidate) return
-    if (!candidate.replay && (readCompletedTours(userId)[candidate.key] ?? 0) >= candidate.tour.version) {
+    if (!candidate.replay && (readCompletedTours()[candidate.key] ?? 0) >= candidate.tour.version) {
       discardTour(candidate.key)
       return
     }
@@ -43,7 +43,7 @@ export default function TourHost() {
 
   const finish = useCallback(
     (completed: boolean) => {
-      if (completed && userId && active) markTourCompleted(userId, active.key, active.tour.version)
+      if (completed && userId && active) markTourCompleted(active.key, active.tour.version)
       finishTour()
     },
     [active, userId],
