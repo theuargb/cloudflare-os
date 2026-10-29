@@ -4324,6 +4324,8 @@ export type AiToolCall = {
     name: string | number;
     /** Chat binding name of a gadget; when present, `name` is a binding in that gadget's env. */
     gadget?: string;
+    /** A type section of a gatekeeper binding (ResourceDescription.typeSections). */
+    section?: string;
   };
 
   /**

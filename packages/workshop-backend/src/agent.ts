@@ -230,14 +230,41 @@ export type AgentGadgetInfo = {
  */
 export const GIT_BINDING_NAME = "GIT";
 
+// The gatekeeper a describeBinding call with `section` names: only a gatekeeper binding has type
+// sections.
+function sectionTarget(
+    name: string, gadget: string | undefined, chatBindings: Map<string, ChatBindingEntry>,
+    chatId: number, hooks: Pick<AgentHooks, "listGadgetInfo">)
+    : {envName: string, id: WorkpieceId} {
+  if (gadget === undefined) {
+    let entry = chatBindings.get(name);
+    if (entry?.type === "workpiece") return {envName: `env.${name}`, id: entry.id};
+    throw new Error(`env.${name} is not a binding with type sections.`);
+  }
+  let gadgetEntry = chatBindings.get(gadget);
+  let info = gadgetEntry?.type === "workpiece"
+      ? hooks.listGadgetInfo(chatId).find(candidate => candidate.id === gadgetEntry.id)
+      : undefined;
+  if (!info) throw new Error(`There is no gadget named "${gadget}" in your env.`);
+  let envName = `env.${name} (in gadget ${gadget}'s env)`;
+  let edge = info.bindings.find(binding => binding.name === name);
+  if (edge) return {envName, id: edge.target};
+  throw new Error(`${envName} is not a binding with type sections.`);
+}
+
 // Describes the binding named by a `describeBinding` tool call: a name in the chat's env or,
-// given `gadget`, in that gadget's own env.
+// given `gadget`, in that gadget's own env. With `section`, one type section of a gatekeeper
+// binding instead.
 async function describeBinding(
-    {name, gadget}: {name: string, gadget?: string},
+    {name, gadget, section}: {name: string, gadget?: string, section?: string},
     chatBindings: Map<string, ChatBindingEntry>,
     chatId: number,
     hooks: Pick<AgentHooks, "describeBinding" | "describeGitBinding" | "listGadgetInfo">)
     : Promise<string> {
+  if (section !== undefined) {
+    let {envName, id} = sectionTarget(name, gadget, chatBindings, chatId, hooks);
+    return hooks.describeBinding(envName, id, chatId, section);
+  }
   if (gadget === undefined) {
     let envName = `env.${name}`;
     let entry = chatBindings.get(name);
@@ -500,9 +527,11 @@ export interface AgentHooks {
   /**
    * Describe a workpiece (a gadget or a gatekeeper) reachable as `envName` in chat `chatId`'s
    * env, for the agent's describeBinding tool. (`envName` is provided here only so that it can
-   * be incorporated into the returned description.)
+   * be incorporated into the returned description.) `section` names one of a gatekeeper's
+   * ResourceDescription.typeSections.
    */
-  describeBinding(envName: string, id: WorkpieceId, chatId: number): Promise<string>;
+  describeBinding(envName: string, id: WorkpieceId, chatId: number, section?: string)
+      : Promise<string>;
 
   /** Describe the env.GIT binding (see GIT_BINDING_NAME), for the describeBinding tool. */
   describeGitBinding(envName: string): string;
@@ -1251,6 +1280,8 @@ Describe one of the bindings in your \`env\` (as used with the \`executeCode\` t
 Sometimes user messages may contain text like \`[Resource Title](env.SOME_NAME)\`. This means the user has granted you access to an external resource, available in your \`env\` under that name. Describe it with this tool before using it.
 
 To describe one of a Gadget's own bindings (as the Gadget's code sees it) instead, pass the Gadget's env binding name as \`gadget\`. This works even for bindings that have no counterpart in your \`env\`.
+
+A binding with a large API may split its types into sections: its description then gives the types every section shares and lists the sections. Before writing code against a section, describe it by calling this tool again with the same arguments plus \`section\` set to the section's id.
 
 IMPORTANT: The objects found in \`env\` most likely do NOT implement any API you are familiar with from your training. DO NOT try to guess what API they implement, and DO NOT use executeCode to try to enumerate them programmatically (this will not work, as they are RPC interfaces). Use the describeBinding tool to learn what interface they provide before writing any code.
 `.trim();
@@ -3545,12 +3576,18 @@ async function runAgentPass(
               "Env binding name of a gadget. When given, `name` is a binding in that gadget's " +
               "own env (as its code sees it) rather than in yours.",
         })),
+        section: Type.Optional(Type.String({
+          description:
+              "Id of a type section listed in the binding's description. Omit it to get the " +
+              "description itself.",
+        })),
       }),
       execute: async (toolCallId, input) => {
         try {
           // Deliberately not bounded to MAX_TOOL_RESULT_CHARS: the agent can't write code
-          // against a partial API description, and there is no way yet to query it
-          // progressively. Recorded so replay shows the model exactly what it saw.
+          // against a partial API description. A gatekeeper whose API is too large for one
+          // description splits it into type sections (ResourceDescription.typeSections),
+          // described one per call. Recorded so replay shows the model exactly what it saw.
           let output = await describeBinding(input, chatBindings, chatId, hooks);
           return toolResult(output, {output} as Partial<AiToolCall>);
         } catch (error) {

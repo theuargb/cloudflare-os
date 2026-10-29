@@ -7010,8 +7010,12 @@ class OverseerImpl implements AgentHooks {
 
   // Describe a workpiece -- a gadget or a gatekeeper -- reachable as `envName` in chat `chatId`'s
   // env, for the agent's describeBinding tool.
-  async describeBinding(envName: string, id: WorkpieceId, chatId: number): Promise<string> {
+  async describeBinding(envName: string, id: WorkpieceId, chatId: number, section?: string)
+      : Promise<string> {
     let gadget = this.storage.gadgets.get(id);
+    if (gadget && section !== undefined) {
+      throw new Error(`${envName} is not a binding with type sections.`);
+    }
     if (gadget?.type === "worktree") {
       return `Binding: ${envName}\n` +
           `\n` +
@@ -7045,7 +7049,7 @@ class OverseerImpl implements AgentHooks {
     if (!gatekeeper) {
       throw new Error(`The resource behind ${envName} no longer exists.`);
     }
-    return this.describeGatekeeper(envName, gatekeeper, chatId);
+    return this.describeGatekeeper(envName, gatekeeper, chatId, section);
   }
 
   // Describe the env.GIT binding, for the agent's describeBinding tool.
@@ -7061,11 +7065,33 @@ class OverseerImpl implements AgentHooks {
         `\`\`\`\n`;
   }
 
-  async describeGatekeeper(name: string, gatekeeper: GatekeeperRecord, chatId: number)
+  async describeGatekeeper(
+      name: string, gatekeeper: GatekeeperRecord, chatId: number, section?: string)
       : Promise<string> {
     let facet = await this.getGatekeeperFacet(gatekeeper.id);
 
     let desc = await facet.describe();
+
+    if (section !== undefined) {
+      let entry = desc.typeSections?.find(candidate => candidate.id === section);
+      if (!entry) {
+        throw new Error(`${name} has no type section "${section}".` +
+            (desc.typeSections?.length
+                ? ` Its sections: ${desc.typeSections.map(s => s.id).join(", ")}.`
+                : ""));
+      }
+      let sectionTypes = await facet.getTypeScriptTypes(section);
+      return `Binding: ${name}\n` +
+          `Type section: ${entry.id} (${entry.title})\n` +
+          `\n` +
+          `The section's TypeScript type definitions, which build on the binding's own ` +
+          `description:\n` +
+          `\n` +
+          `\`\`\`\n` +
+          `${sectionTypes}\n` +
+          `\`\`\`\n`;
+    }
+
     let types = await facet.getTypeScriptTypes();
 
     return `Binding: ${name}\n` +
@@ -7081,6 +7107,13 @@ class OverseerImpl implements AgentHooks {
         `\`\`\`\n` +
         `${types}\n` +
         `\`\`\`\n` +
+        (desc.typeSections?.length
+            ? `\n` +
+              `This API is split into type sections; the definitions above are what every ` +
+              `section shares. Before using a section, call describeBinding again for this ` +
+              `binding with \`section\` set to its id:\n` +
+              desc.typeSections.map(s => `* ${s.id}: ${s.title}`).join("\n") + "\n"
+            : "") +
         this.#describeSpawnerBindings(gatekeeper, chatId);
   }
 

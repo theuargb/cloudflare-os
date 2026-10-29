@@ -280,6 +280,14 @@ export type AccountDescription = {
   providesUi?: { title: string; icon?: AvatarImage };
 }
 
+/** One part of a typed API too large for one description (ResourceDescription.typeSections). */
+export type TypeSection = {
+  /** Passed back to Gatekeeper.getTypeScriptTypes(section). */
+  id: string;
+  /** Short label listed to the agent in the binding's description. */
+  title: string;
+};
+
 /** Describes metadata about a specific instance of a resource. Returned by Gatekeeper.describe(). */
 export type ResourceDescription = {
   /**
@@ -316,6 +324,13 @@ export type ResourceDescription = {
    * `getTypeScriptTypes()` method.
    */
   tsType: string;
+
+  /**
+   * Splits a typed API too large for one description: getTypeScriptTypes() then returns what
+   * every section shares (including `tsType`), and getTypeScriptTypes(id) one section's own
+   * declarations, which the agent fetches with describeBinding's `section` before using them.
+   */
+  typeSections?: TypeSection[];
 
   /** Indicates that getSlashCommandProvider() is available. */
   hasSlashCommands?: true;
@@ -1000,8 +1015,11 @@ export interface Gatekeeper<Session> extends DurableObject {
    * GatekeeperVendor.getTypeScriptTypes(), specifically covering types used by this Gatekeeper.
    * This allows the agent to be provided with only types relevant to them rather than the entire
    * API space of the vendor, which may support many kinds of resources.
+   *
+   * `section` is one of the ids in this gatekeeper's `describe().typeSections`; the Workshop
+   * passes only a listed id, and never one to a gatekeeper that lists none.
    */
-  getTypeScriptTypes(): Promise<string>;
+  getTypeScriptTypes(section?: string): Promise<string>;
 
   /**
    * Catalog of action kinds this gatekeeper MAY auto-apply without per-action review, for
