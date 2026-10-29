@@ -1,7 +1,7 @@
 import { Link, useRouterState, type LinkProps } from '@tanstack/react-router'
 import { ArrowSquareOut } from '@phosphor-icons/react'
 import { appRouteEntry } from '@gadgets/workshop-shared/app-host'
-import type { ReactNode } from 'react'
+import type { ReactElement, ReactNode } from 'react'
 
 /**
  * A single nav row in the sidebar. Renders as a TanStack <Link>. Active state is computed from the
@@ -27,6 +27,10 @@ export type SidebarItemProps = {
   matchPrefix?: boolean
   /** Hover-revealed control rendered beside, not inside, the link (a button in an anchor is invalid). */
   endAction?: ReactNode
+  /** Rendered under the row while it is active (the open app's section tree). */
+  nested?: ReactNode
+  /** Wraps the row's link while it is active (the collapsed rail's section flyout). */
+  flyout?: (link: ReactElement<{ title?: string }>) => ReactNode
 }
 
 /** The app entry named by an open `/gatekeepers/<app>?at=<route>` location (null when the route names none). */
@@ -47,6 +51,8 @@ export default function SidebarItem({
   collapsed = false,
   matchPrefix = false,
   endAction,
+  nested,
+  flyout,
 }: SidebarItemProps) {
   // Resolve the active path manually so we can style the icon as well as the row. For parameterized
   // routes (e.g. "/gatekeepers/$appId"), substitute the params so the resolved path can match.
@@ -108,11 +114,18 @@ export default function SidebarItem({
       {content}
     </Link>
   )
-  if (!endAction) return link
-  return (
+  const active = isActive && flyout ? flyout(link) : link
+  const row = endAction ? (
     <div className="group/item relative">
-      {link}
+      {active}
       <div className="absolute inset-y-0 right-1.5 flex items-center">{endAction}</div>
     </div>
+  ) : active
+  if (!isActive || !nested) return row
+  return (
+    <>
+      {row}
+      {nested}
+    </>
   )
 }
