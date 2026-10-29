@@ -2085,8 +2085,9 @@ export const WORKERS_AI_OUTPUT_LIMIT = 32768;
  * What a model does, which decides where it can be used. A `"language"` model writes text: it can
  * chat and back a `LanguageModelBinding`. A `"decision"` model answers typed questions with
  * probabilities: gadgets can bind it as a `DecisionModelBinding`, but it can't chat.
+ * An `"extraction"` model reads typed fields through ModelRunner.extract; it can't chat or back a gadget binding.
  */
-export type ModelKind = "language" | "decision";
+export type ModelKind = "language" | "decision" | "extraction";
 
 /** One entry of SUGGESTED_MODELS. */
 type SuggestedModel = {
@@ -2139,6 +2140,7 @@ const SUGGESTED_MODEL_CATALOG = {
     "@cf/cloudflare/clef-flash": {
       name: "Clef Flash (Workers AI)", contextWindow: 65536, kind: "decision",
     },
+    "@cf/cloudflare/clairic": {name: "Clairic (Workers AI)", contextWindow: 65536, kind: "extraction"},
   },
   "anthropic": {
     "claude-opus-5-5": {name: "Claude Opus 5.5", contextWindow: 1000000},
@@ -5469,7 +5471,7 @@ export type BlueprintBinding = {
   suggestedModel?: {provider: string, modelName: string};
 
   /** The source binding's model kind, so installers pick one of that kind; absent: `"language"`. */
-  modelKind?: ModelKind;
+  modelKind?: Exclude<ModelKind, "extraction">;
 } | {
   /** An agent spawner binding. */
   type: "agentSpawner";

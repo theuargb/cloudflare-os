@@ -259,6 +259,16 @@ describe('GatewayModelRow', () => {
     expect(document.body.querySelectorAll('[role="radio"]')).toHaveLength(3)
   })
 
+  it('offers extraction modes without chat Test or Settings', async () => {
+    await render({ model: {
+      ...SONNET, provider: 'cloudflare', id: '@cf/cloudflare/clairic', name: 'Clairic',
+    } }, { collapsed: true })
+    expect(document.body.querySelector('li')!.textContent).toContain('Extraction')
+    expect(() => testButton('Clairic')).toThrow('No Test button')
+    expect(() => button('Settings for Clairic')).toThrow('No button')
+    expect(document.body.querySelectorAll('[role="radio"]')).toHaveLength(3)
+  })
+
   describe('the reasoning level', () => {
     it.each<[BuiltInReasoning, string]>([
       ['adaptive', 'Deployment default (built-in: Provider default)'],

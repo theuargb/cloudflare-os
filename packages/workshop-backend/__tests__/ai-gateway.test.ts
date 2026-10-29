@@ -194,9 +194,10 @@ describe("GatewayModels", () => {
       ...Object.keys(SUGGESTED_MODELS.openai),
     ]);
     // Each enabled model is listed as exactly one kind.
-    expect([...ids(models.list("language")), ...ids(models.list("decision"))].toSorted())
+    expect([...ids(models.list("language")), ...ids(models.list("decision")), ...ids(models.list("extraction"))].toSorted())
         .toEqual(ids(models.all.filter(model => model.mode === "enabled")).toSorted());
     expect(ids(models.list("decision"))).toEqual(["@cf/cloudflare/clef", "@cf/cloudflare/clef-flash"]);
+    expect(ids(models.list("extraction"))).toEqual(["@cf/cloudflare/clairic"]);
     expect(ids(models.list("language"))).toContain("claude-opus-5-5");
     expect(ids(models.list("language"))).not.toContain("gpt-6-sol");
   });

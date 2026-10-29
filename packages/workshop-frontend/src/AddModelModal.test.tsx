@@ -108,6 +108,7 @@ describe('AddModelModal', () => {
     const options = Array.from(document.body.querySelectorAll('[role="option"]'), option => option.textContent)
     expect(options).toContain('GLM 5.2 (Workers AI)')
     expect(options.includes('Clef (Workers AI)')).toBe(!chatModelsOnly)
+    expect(options.includes('Clairic (Workers AI)')).toBe(!chatModelsOnly)
   })
 
   it.each([false, true])('adds a decision model typed as a custom model only without chatModelsOnly (chatModelsOnly: %s)', async (chatModelsOnly) => {

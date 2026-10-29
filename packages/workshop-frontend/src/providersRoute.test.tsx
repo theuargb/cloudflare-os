@@ -10,6 +10,7 @@ import type { AiChatAuthorInfo, ModelKind } from '@gadgets/workshop-shared/api'
 const api = vi.hoisted(() => ({
   listModels: vi.fn<(kind?: ModelKind) => Promise<AiChatAuthorInfo[]>>(async (kind) => kind === 'decision'
     ? [{ type: 'agent', id: 'decision-model', name: 'Decision model' }]
+    : kind === 'extraction' ? []
     : [{ type: 'agent', id: 'chat-model', name: 'Chat model' }]),
   getQuickModel: async () => null,
   getAiConfig: async () => ({ enabled: false }),
