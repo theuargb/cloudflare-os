@@ -17,6 +17,7 @@
 // `Adapter` type is the root interface implemented by the service binding.
 
 import type { WorkerEntrypoint, DurableObject, RpcTarget, RpcStub } from "cloudflare:workers";
+import type { AppEntry, AppInbox, AppNavigation, AppSearchHit } from "./app-host.js";
 
 /**
  * A pagination cursor.
@@ -34,6 +35,9 @@ export interface Cursor<T> {
 export type AvatarImage = {
   url: string;
 }
+
+/** A gatekeeper's sidebar/connector group. `order` is the group's hundred, e.g. 100, 200. */
+export type VendorGroup = { title: string; order: number };
 
 /** Describes a connected GatekeeperVendor, for display purposes. */
 export type VendorDescription = {
@@ -77,6 +81,27 @@ export type VendorDescription = {
    * management UI (see AccountDescription.singleton / .providesUi).
    */
   autoProvisionsAccount?: boolean;
+
+  /** Group shared by related gatekeepers: one sidebar section, adjacent connector cards. */
+  group?: VendorGroup;
+
+  /** Default position: `group.order` + index inside the group (e.g. 101, 110). Lower first. */
+  order?: number;
+
+  /**
+   * Sidebar rows of an app that serves several business areas: one row per entry instead of one for
+   * the app (e.g. a trade module's "Purchases" and "Sales"). Vendor-level like `group`/`order`, so
+   * it follows module upgrades. Fewer than two valid entries are ignored (see sanitizeAppEntries).
+   */
+  entries?: AppEntry[];
+}
+
+type Ordered = { group?: VendorGroup; order?: number };
+const rank = (value: number | undefined) => value ?? Number.MAX_SAFE_INTEGER;
+
+/** Group order, then item order; undeclared values sort last; equal keys keep input order (stable sort). */
+export function compareGatekeeperOrder(a: Ordered, b: Ordered): number {
+  return rank(a.group?.order) - rank(b.group?.order) || rank(a.order) - rank(b.order);
 }
 
 /**
@@ -166,22 +191,35 @@ export interface GatekeeperUserSelectionReceiver extends RpcTarget {
 }
 
 /**
- * Per-open context the Workshop passes to GatekeeperUser.startAppUi(). Supplied
- * fresh each time rather than baked into the account: a user's admin status can
- * change over time, and the exchange is scoped to the account whose UI is being
- * opened.
+ * Authenticated actor facts the Workshop supplies to a gatekeeper: to an agent session (the human
+ * whose authority the domain must check) and to a management UI on each open. `isAdmin` is freshly
+ * computed by the Workshop and is never a claim made by a gatekeeper or agent.
  */
-export type AppUiContext = {
-  /** Whether the opening user is currently a deployment admin. */
+export type ActorContext = {
+  /**
+   * Canonical authenticated actor id — the username for password accounts, the email for Access
+   * and sign-in accounts. The same person has the same id in agent sessions and management UIs.
+   */
+  actorId: string;
+  /** Current display data used to identify the actor in audit trails and shared management activity. */
+  actor: { displayName: string; avatar?: AvatarImage };
+  /** Whether the actor is currently a deployment administrator under `ADMINS`. */
   isAdmin: boolean;
+}
 
+/**
+ * Per-open context the Workshop passes to GatekeeperUser.startAppUi(): the actor, supplied fresh
+ * each time rather than baked into the account (a user's admin status can change over time), and
+ * the exchange scoped to the account whose UI is being opened.
+ */
+export type AppUiContext = ActorContext & {
   /**
    * Redeems the tickets this account's UI receives from the Workshop user
    * picker (via the host's `selectUsers()`); see
    * GatekeeperUserSelectionExchange.
    */
   userSelectionExchange: Fetcher<GatekeeperUserSelectionExchange>;
-}
+};
 
 // The agent catalog is bounded discovery metadata a gatekeeper exposes via
 // Gatekeeper.getAgentCatalog() so the agent can see *what* is reachable through a session (e.g. the
@@ -272,6 +310,12 @@ export type AccountDescription = {
    * as returned by the gatekeeper's getTypeScriptTypes().
    */
   singleton?: { tsType: string };
+
+  /**
+   * If set, this account feeds the Workshop topbar inbox (bell) through GatekeeperUser.getInbox and
+   * .markInboxRead. The first account declaring it is the deployment's inbox provider.
+   */
+  providesInbox?: boolean;
 
   /**
    * If set, this account has a full-page management UI (see GatekeeperUser.startAppUi). The Workshop
@@ -546,13 +590,12 @@ export interface ResourceConfiguratorHost extends RpcTarget {
 }
 
 /**
- * A self-contained sandboxed UI served by a gatekeeper: complete HTML hosted in a
+ * A self-contained sandboxed UI served by a gatekeeper as complete HTML, hosted in a
  * sandbox="allow-scripts" iframe, plus an arbitrary gatekeeper-defined capability exposed to the
- * iframe over a MessagePort RPC session. Used both for the small resource-configurator form
- * (startResourceConfigurator, hosted in the connect modal) and for full-page gatekeeper management
- * apps (startAppUi, e.g. the Context Library file manager, hosted on its own Workshop page).
+ * iframe over a MessagePort RPC session. The return type of startResourceConfigurator (the small
+ * form hosted in the connect modal).
  */
-export type GatekeeperUiFrame = {
+export type ResourceConfiguratorFrame = {
   /** Complete HTML for the UI. Workshop hosts it in a sandboxed iframe. */
   iframeHtml: string;
 
@@ -561,10 +604,18 @@ export type GatekeeperUiFrame = {
 }
 
 /**
- * Legacy alias for GatekeeperUiFrame: the established return type of startResourceConfigurator,
- * referenced by every gatekeeper implementation. Kept to avoid a repo-wide rename.
+ * A full-page gatekeeper management app (startAppUi, e.g. the Context Library file manager, hosted
+ * on its own Workshop page): the capability plus either complete HTML (`srcdoc`) or a URL the
+ * gatekeeper serves itself.
  */
-export type ResourceConfiguratorFrame = GatekeeperUiFrame;
+export type GatekeeperUiFrame = { ui: RpcStub<RpcTarget> } & (
+  | { iframeHtml: string; iframeUrl?: never }
+  /**
+   * Same-origin path under `/gatekeeper/<vendor>/` (see isAppFrameUrl), served by the gatekeeper's
+   * own Worker. The frame stays opaque-origin (no allow-same-origin), so the document's scripts and
+   * chunks must be served with `Access-Control-Allow-Origin: *`; hashed assets cache like any page.
+   */
+  | { iframeUrl: string; iframeHtml?: never });
 
 /**
  * The root interface of an Adapter, as provided to the Gadget Workshop.
@@ -842,7 +893,7 @@ export interface GatekeeperUser extends WorkerEntrypoint {
    * Gatekeeper.applyCreation(). The choice must not change the simulated resource's interface.
    * Present when the type sets SupportedResource.creationConfigurator.
    */
-  startCreationConfigurator?(resourceUrlPattern: string): Promise<GatekeeperUiFrame>;
+  startCreationConfigurator?(resourceUrlPattern: string): Promise<ResourceConfiguratorFrame>;
 
   /**
    * Revoke this account connection. The GatekeeperUser, and all Gatekeepers created through it,
@@ -935,6 +986,29 @@ export interface GatekeeperUser extends WorkerEntrypoint {
    * the tickets its UI receives from the Workshop user picker (GatekeeperUserSelection).
    */
   startAppUi?(context: AppUiContext): Promise<GatekeeperUiFrame>;
+
+  /**
+   * Search records in the account's management app. The account filters results by the actor's
+   * current access. Accounts without the method contribute no results.
+   */
+  searchApp?(context: ActorContext, request: { query: string; limit: number }): Promise<AppSearchHit[]>;
+
+  /**
+   * Launcher actions of the account's management UI (Workshop topbar menus by `menu`, and ⌘K).
+   * Called on demand, not declared in describe(), because the stored description is not refreshed
+   * on redeploy. The account filters by the actor's access. Accounts without the method contribute
+   * nothing.
+   */
+  getAppNavigation?(context: ActorContext): Promise<AppNavigation>;
+
+  /**
+   * The actor's inbox for the topbar bell: the unread total and at most `limit` latest entries.
+   * Called only on accounts whose description sets `providesInbox`.
+   */
+  getInbox?(context: ActorContext, limit: number): Promise<AppInbox>;
+
+  /** Mark the actor's inbox entries read; an empty `ids` marks all of them. */
+  markInboxRead?(context: ActorContext, ids: string[]): Promise<void>;
 
   // TODO:
   // - Query whether account has scope to access a particular URL.
@@ -1150,7 +1224,7 @@ export interface Gatekeeper<Session> extends DurableObject {
    * ignore this parameter (and can even omit the parameter from their `applyAction()`
    * declaration).
    */
-  applyAction(action: number, cache: RpcStub<GitCache>): Promise<void>;
+  applyAction(action: number, cache: RpcStub<GitCache>, context?: ActorContext): Promise<void>;
 
   /**
    * Indicates that an action was rejected by the user. The gatekeeper should clean up any
@@ -1299,6 +1373,21 @@ export interface SlashCommandProvider extends RpcTarget {
  * called before applying them.
  */
 export interface ApprovalQueue extends ObservationAuthorizer {
+  /**
+   * Resolves the authenticated actor initiating this agent session, including current workspace
+   * admin status. Returns undefined for non-agent sessions. Agent callers must fail closed when
+   * this is undefined; the result is authority context, not caller-provided input.
+   */
+  getAgentActionContext?(): Promise<ActorContext | undefined>;
+  /**
+   * Resolves the authenticated user a gadget's calls through an ambient singleton session act
+   * for: the workspace owner, whose singleton account backs that session. Returns undefined for
+   * every other caller (agents, users, hooks) and for non-ambient gatekeepers. Like
+   * getAgentActionContext, it is authority context, not caller input; reads must still be
+   * authorized as observations, and observer verification keeps what the gadget read from
+   * collaborators who could not read it themselves.
+   */
+  getGadgetActorContext?(): Promise<ActorContext | undefined>;
   // TODO: Method to indicate that the gadget tried to perform an action that the gatekeeper itself
   //   hasn't been authorized to do (e.g. the user hasn't authorized the right OAuth scopes). The
   //   system should direct the user to the right UI to authorize the action.

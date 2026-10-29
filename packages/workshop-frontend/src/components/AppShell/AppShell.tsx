@@ -2,11 +2,15 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouterState } from '@tanstack/react-router'
 import { List, X } from '@phosphor-icons/react'
 import TopBarNotice from '../../TopBarNotice'
+import TopNav from '../AppNavigation/TopNav'
 import ReconnectingChip from '../ReconnectingChip'
 import { useConnectionLost } from '../../RpcContext'
 import Sidebar from './Sidebar'
-import CommandPalette from './CommandPalette'
+import CommandPalette from '../Spotlight/Spotlight'
+import ShellTopbarActions from './ShellTopbarActions'
 import { OPEN_COMMAND_PALETTE_EVENT } from './commandPaletteBus'
+import { KeptGatekeeperApp, KeptGatekeeperAppProvider } from '../../KeptGatekeeperApp'
+import TourHost, { useTourActive } from "../../features/tour/TourHost";
 
 const STORAGE_KEY_COLLAPSED = 'gadgets:sidebar-collapsed'
 
@@ -29,6 +33,14 @@ function readCollapsed(): boolean {
  * is simpler and matches how the rest of the app handles small screens.
  */
 export default function AppShell({ children }: { children: React.ReactNode }) {
+  return (
+    <KeptGatekeeperAppProvider>
+      <ShellFrame>{children}</ShellFrame>
+    </KeptGatekeeperAppProvider>
+  )
+}
+
+function ShellFrame({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
@@ -88,6 +100,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     setMobileOpen(false)
   }, [pathname])
 
+  // A tour highlights the page, not the drawer: close it so the tour is not trapped under its modal.
+  const tourActive = useTourActive();
+  useEffect(() => {
+    if (tourActive) setMobileOpen(false);
+  }, [tourActive]);
+
   // Global ⌘K / Ctrl+K opens the command palette; the rail's search button opens it via a custom
   // event so it doesn't have to prop-drill into the palette.
   useEffect(() => {
@@ -146,6 +164,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <div className="relative flex h-14 shrink-0 items-center justify-between border-b border-kumo-line bg-kumo-base px-3">
           <button
             type="button"
+            data-tour="menu-button"
             ref={menuButtonRef}
             onClick={() => setMobileOpen((o) => !o)}
             aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
@@ -153,21 +172,27 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           >
             {mobileOpen ? <X size={16} /> : <List size={16} />}
           </button>
-          <TopBarNotice />
+          <TopNav />
+          <TopBarNotice inline />
           {/* `ml-auto` rather than the container's `justify-between`: on desktop the hamburger is
               hidden, leaving this the only in-flow child, which `justify-between` would park on the
               left. */}
           <div className="ml-auto flex items-center gap-2">
             {connectionLost && <ReconnectingChip />}
-            <span aria-hidden="true" className="h-11 w-11 md:hidden" />
+            <ShellTopbarActions />
           </div>
         </div>
 
-        {/* Routed content. Flat enterprise canvas — no texture. */}
-        <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
+        {/* Routed content. Flat enterprise canvas — no texture. The last gatekeeper app stays
+            mounted above it (hidden off its route), so returning to it is instant. */}
+        <main className="relative min-h-0 flex-1 overflow-y-auto">
+          {children}
+          <KeptGatekeeperApp />
+        </main>
       </div>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <TourHost />
     </div>
   )
 }

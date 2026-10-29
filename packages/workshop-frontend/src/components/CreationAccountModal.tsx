@@ -4,7 +4,7 @@ import type { RpcStub } from 'capnweb'
 import type {
   ConnectFlowStart, CreationApproval, GatekeeperVendorInfo, Overseer, WorkpieceId,
 } from '@gadgets/workshop-shared/api'
-import type { GatekeeperUiFrame } from '@gadgets/workshop-shared/gatekeeper'
+import type { ResourceConfiguratorFrame } from '@gadgets/workshop-shared/gatekeeper'
 import { useAuthenticatedApi } from '../AuthContext'
 import { AccountsSubscriberAdapter, type AccountEvent } from '../accountsSubscriber'
 import { openConnectWindow } from '../connectHandoff'
@@ -21,7 +21,7 @@ type CreationTarget = { vendor: GatekeeperVendorInfo; typeUrlPattern: string }
 type StartingFlow = { kind: 'connect' } | { kind: 'reconnect' | 'grant'; accountId: number }
 
 // The creation configurator started for an account, or why it could not start.
-type Configurator = { accountId: number } & ({ frame: GatekeeperUiFrame } | { error: string })
+type Configurator = { accountId: number } & ({ frame: ResourceConfiguratorFrame } | { error: string })
 
 /**
  * Approving a creation (see ActionLogEntry.creation) makes the resource in one of the approver's
@@ -134,7 +134,7 @@ export const CreationAccountModal = ({ overseer, gatekeeperId, onChoose, onCance
   useEffect(() => {
     if (configuratorAccountId === null || configuratorPattern === null) return
     let cancelled = false
-    let started: GatekeeperUiFrame | undefined
+    let started: ResourceConfiguratorFrame | undefined
     authenticatedApi.startCreationConfigurator(configuratorAccountId, configuratorPattern)
       .then(frame => {
         if (cancelled) return disposeConfiguratorFrame(frame)

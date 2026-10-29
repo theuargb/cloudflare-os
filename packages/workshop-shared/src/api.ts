@@ -25,8 +25,10 @@
 
 import { RpcCompatible, RpcStub, RpcTarget } from "capnweb";
 import { AccountDescription, ActionKind, ActionDescription, AgentCatalog, AvatarImage, GatekeeperUiFrame, GatekeeperUserSelection, ObservationDescription, ResourceDescription, ResourceConfiguratorFrame, SupportedResource, VendorDescription, HookDescription } from "./gatekeeper.js";
+import type { VendorGroup } from "./gatekeeper.js";
 import type { CodeChange } from "./code-change.js";
 import type { GitOid } from "./gatekeeper.js";
+import type { AppInbox, AppNavigation, AppSearchHit, AppEntry } from "./app-host.js";
 import type { UiFeatureFlags } from "./feature-flags.js";
 
 export const SERVICE_SALT = new Uint8Array([
@@ -613,6 +615,12 @@ export interface AuthenticatedApi extends RpcTarget {
   /** Mark the onboarding wizard as completed. */
   completeOnboarding(): Promise<void>;
 
+  /** The user's UI preferences (sidebar layout, finished tours, gatekeeper app preferences), key → value. */
+  getUiPreferences(): Promise<Record<string, string>>;
+
+  /** Set one UI preference; null deletes it. Keys match /^[a-z][a-z0-9.:-]{0,79}$/, values ≤ 32768 chars. */
+  setUiPreference(key: string, value: string | null): Promise<void>;
+
   // --- Optional Cloudflare limits / top-up flow (only meaningful when enabled server-side) ---
 
   /** Get the user's current free-tier usage and connected-account balance. */
@@ -806,7 +814,7 @@ export interface AuthenticatedApi extends RpcTarget {
    * frame's collectResourceUrl() gives CreationApproval.configuration.
    */
   startCreationConfigurator(accountId: number, resourceUrlPattern: string)
-      : Promise<GatekeeperUiFrame>;
+      : Promise<ResourceConfiguratorFrame>;
 
   /**
    * Remove a shared gadget from the user's home page listing. Does NOT revoke the user's
@@ -924,6 +932,30 @@ export interface AuthenticatedApi extends RpcTarget {
       vendorId: string, selectedUserId: string,
   ): Promise<GatekeeperUserSelection | null>;
 
+  /**
+   * Launcher actions of every UI-providing gatekeeper: the Workshop topbar menus (by `menu`) and
+   * search (⌘K) fan out to each providesUi account's `getAppNavigation()` in parallel with a
+   * per-app timeout, returning whichever apps respond. An app that is missing the method, throws,
+   * or exceeds the deadline contributes empty `actions`. Each app's actions are validated and
+   * truncated.
+   */
+  listAppNavigation(): Promise<GatekeeperAppNavigation[]>;
+
+  /**
+   * Search records in one UI-providing gatekeeper. Invalid queries, unavailable apps, and app
+   * errors return no hits. Each app response is validated and truncated.
+   */
+  searchApp(appId: string, query: string): Promise<AppSearchHit[]>;
+
+  /**
+   * The topbar inbox from the deployment's inbox provider (the first account whose description sets
+   * `providesInbox`), validated and truncated; null when there is no provider.
+   */
+  getInbox(): Promise<GatekeeperInbox | null>;
+
+  /** Mark entries of the topbar inbox read at the provider; an empty `ids` marks all of them. */
+  markInboxRead(ids: string[]): Promise<void>;
+
   // --- Deployment admin ---
 
   /**
@@ -956,6 +988,27 @@ export type GatekeeperAppInfo = {
   title: string;
   /** Optional icon. */
   icon?: AvatarImage;
+  /** Sidebar section (VendorDescription.group); ungrouped apps list at the top level. */
+  group?: VendorGroup;
+  /** Default position (VendorDescription.order). */
+  order?: number;
+  /** Sidebar rows (VendorDescription.entries): one per business area; empty for a single-row app. */
+  entries?: AppEntry[];
+};
+
+/**
+ * One management app's navigation (topbar menus, ⌘K); app title and icon come from GatekeeperAppInfo.
+ * Empty when the app has none, failed, or did not answer in time.
+ */
+export type GatekeeperAppNavigation = AppNavigation & {
+  /** The vendor id (same as GatekeeperAppInfo.id). */
+  appId: string;
+};
+
+/** The topbar inbox (AuthenticatedApi.getInbox) with the provider app it came from. */
+export type GatekeeperInbox = AppInbox & {
+  /** The provider's vendor id (same as GatekeeperAppInfo.id): "All notifications" opens this app. */
+  appId: string;
 };
 
 // ---------------------------------------------------------------------------
@@ -2514,6 +2567,9 @@ export type ActionLogEntry = {
    * authority (see `autoApproved`).
    */
   resolvedBy?: AiChatAuthorInfo;
+
+  /** Authenticated actor who initiated an agent action, when one was available at submission. */
+  requestedBy?: AiChatAuthorInfo;
 
   /**
    * True when the action was applied automatically by an auto-approval rule rather than by a human

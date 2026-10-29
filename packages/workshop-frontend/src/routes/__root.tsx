@@ -1,6 +1,6 @@
 import { logRpcFailure } from '../rpcErrors'
 import { useState, useEffect } from 'react'
-import { createRootRoute, Outlet, useRouterState } from '@tanstack/react-router'
+import { createRootRoute, Outlet, useMatches } from '@tanstack/react-router'
 import { TooltipProvider, Toasty } from '@cloudflare/kumo'
 import { RpcStub } from 'capnweb'
 import { AuthenticatedApi } from '@gadgets/workshop-shared/api'
@@ -21,6 +21,7 @@ import {
 } from '../features/native-app/DeviceSessionHandoff'
 import { NativeAppBridge } from '../features/native-app/NativeAppBridge'
 import { PageUpdateNotice } from '../features/stale-session/PageUpdateNotice'
+import { hydrateUserPreferences } from '../features/user-preferences/userPreferences'
 
 export const Route = createRootRoute({
   component: RootComponent,
@@ -30,7 +31,11 @@ function RootComponent() {
   const rpcStub = useRpcStub()
   const connectionLost = useConnectionLost()
   const { isAuthenticated, authenticatedApi, isLoading, error, logout, login } = useAuth(rpcStub)
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
+  // The chrome follows the rendered leaf match, not `location`: the router moves `location` to the
+  // next URL while the previous route is still rendered (lazy chunk, loaders), so switching the
+  // chrome on `location` would re-parent that route outside its shell (e.g. the gatekeeper app
+  // route outside the AppShell's KeptGatekeeperAppProvider when leaving for the workspace editor).
+  const pathname = useMatches({ select: (matches) => matches[matches.length - 1]?.pathname ?? "/" })
 
   // Routes that don't require auth (public routes)
   const isSignup = pathname === '/signup'
@@ -158,12 +163,17 @@ function AuthenticatedShell({
 
   useEffect(() => {
     let cancelled = false
-    authenticatedApi.isOnboardingCompleted().then((completed) => {
-      if (!cancelled) setOnboardingNeeded(!completed)
-    }).catch((err) => {
-      logRpcFailure('Failed to check onboarding status:', err)
-      // If the check fails, skip onboarding to avoid blocking the user
-      if (!cancelled) setOnboardingNeeded(false)
+    const onboarding = authenticatedApi.isOnboardingCompleted().then(
+      (completed) => !completed,
+      (err: unknown) => {
+        logRpcFailure('Failed to check onboarding status:', err)
+        // If the check fails, skip onboarding to avoid blocking the user
+        return false
+      },
+    )
+    // The user's UI preferences load with it, so the shell's first paint already shows them.
+    void Promise.all([onboarding, hydrateUserPreferences(authenticatedApi)]).then(([needed]) => {
+      if (!cancelled) setOnboardingNeeded(needed)
     })
     return () => { cancelled = true }
   }, [authenticatedApi])
