@@ -69,6 +69,7 @@ import {
   AiChatMetadata,
   AiChatMessage,
   AiChatSubscriber,
+  ActionState,
   ActionLogEntry,
   AiChatAuthorInfo,
   CapsuleSpecifier,
@@ -4431,7 +4432,7 @@ function ChatInterface({
     return changed;
   };
 
-  const applyOptimisticActionState = (actionId: number, state: "approved" | "rejected"): boolean => {
+  const applyOptimisticActionState = (actionId: number, state: Exclude<ActionState, "pending">): boolean => {
     let changed = false;
     const locations = cacheRef.current.actionMessages.get(actionId);
     if (!locations) return false;
@@ -5116,13 +5117,13 @@ function ChatInterface({
     // decision. Resolved actions are history, and collapse so a long thread stays scannable.
     const showDescription = isPending || open;
     const metadata = log.resourceTitle;
+    const isFailed = state === "failed";
     const stateLabel = isApproved
       ? "Approved"
       : isRejected
         ? "Denied"
-        : null;
-    const stateLabelCls = isRejected
-      ? "text-kumo-danger"
+        : isFailed ? "Failed" : null;
+    const stateLabelCls = isRejected || isFailed ? "text-kumo-danger"
       : "text-kumo-inactive";
     // Auto-approval target: offer "Always approve this type" only when enabling a rule would
     // actually apply this action -- a tagged action on a connection that the gatekeeper marked
@@ -5296,6 +5297,11 @@ function ChatInterface({
               />
             </span>
           </button>
+        )}
+        {isFailed && log.type === "action" && log.error && (
+          <p className="ml-8 mt-0.5 whitespace-pre-wrap break-words text-[12px] leading-4 text-kumo-danger">
+            {log.error}
+          </p>
         )}
         {showDescription && (
           <div className="themed-surface-inset ml-8 mt-1 space-y-1.5 rounded-2xl border border-kumo-line/70 bg-kumo-elevated/45 p-3 text-[13px] leading-[19px] tracking-[-0.25px] text-kumo-subtle">

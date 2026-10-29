@@ -36,13 +36,14 @@ export function autoApprovalRule(
 }
 
 /**
- * Applies a single eligible pending action: invoke the gatekeeper, mark it approved, persist. The
- * caller has already validated that the record is still pending.
+ * Decides a single eligible pending action: applies it, or closes it as failed when the apply
+ * failed and the agent awaiting it takes the error. Throws when it stays pending. The caller has
+ * already validated that the record is still pending.
  */
 export type ApplyPendingActionFn = (
     record: ActionRecord & {type: "action"},
     resolvedBy: AiChatAuthorInfo,
-    autoApproved: boolean) => Promise<void>;
+    autoApproved: boolean) => Promise<"approved" | "failed">;
 
 export class AutoApprovalDrainer {
   // Per-gatekeeper single-flight state: the running drain, and whether another was requested while
@@ -79,8 +80,9 @@ export class AutoApprovalDrainer {
 
   // Apply all currently-eligible pending actions of the gatekeeper, in ascending id order. Stops
   // at the first pending action that is NOT auto-eligible (a manual gate) or that throws while
-  // applying -- it is never skipped ahead of. This preserves in-order application and the
-  // invariant that nothing is silently applied past a human gate.
+  // applying and stays pending -- it is never skipped ahead of. This preserves in-order
+  // application and the invariant that nothing is silently applied past a human gate. An action
+  // closed as failed (its agent takes the error) is decided, so the drain goes on past it.
   //
   // Eligibility is `autoApprovalRule()`: the author's `autoApprovable` verdict, a user-enabled
   // rule for the action's kind, and no restricted-data latch.
