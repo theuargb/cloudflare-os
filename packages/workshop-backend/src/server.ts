@@ -16,7 +16,7 @@ import { deploymentOutputForBlueprint, listFormatOffers, readAdminConfig } from 
 export { PendingLogin, LoginConnectCallbackImpl };
 import { GatekeeperUiFrame, GatekeeperUserSelection } from "@gadgets/workshop-shared/gatekeeper";
 import type { ActorContext } from "@gadgets/workshop-shared/gatekeeper";
-import type { AppSearchHit } from "@gadgets/workshop-shared/app-host";
+import { isAppId, isAppWorkplaceId, type AppSearchHit } from "@gadgets/workshop-shared/app-host";
 import type { GatekeeperAppNavigation, GatekeeperInbox } from "@gadgets/workshop-shared/api";
 import { DecisionModelGatekeeper, LanguageModelGatekeeper } from "./ai-models";
 import { getGatewayModels } from "./ai-gateway.js";
@@ -647,6 +647,11 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
 
   async searchApp(appId: string, query: string): Promise<AppSearchHit[]> {
     return this.#user.searchApp(await this.#appUiContext(), appId, query);
+  }
+
+  async selectAppWorkplace(appId: string, workplaceId: string): Promise<void> {
+    if (!isAppId(appId) || !isAppWorkplaceId(workplaceId)) throw new TypeError("Invalid workplace.");
+    await this.#user.selectAppWorkplace(await this.#appUiContext(), appId, workplaceId);
   }
 
   async getInbox(): Promise<GatekeeperInbox | null> {
