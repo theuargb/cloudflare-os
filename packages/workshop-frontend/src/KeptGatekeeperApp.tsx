@@ -13,6 +13,8 @@ type KeptAppState = {
   active: boolean,
   show: (app: ShownApp) => void,
   hide: () => void,
+  /** Mounts `app` hidden when no app is kept yet. */
+  warm: (app: ShownApp) => void,
 }
 
 const KeptAppContext = createContext<KeptAppState | null>(null)
@@ -35,7 +37,8 @@ export function KeptGatekeeperAppProvider({ children }: { children: ReactNode })
     setActive(true)
   }, [])
   const hide = useCallback(() => setActive(false), [])
-  return <KeptAppContext.Provider value={{ app, active, show, hide }}>{children}</KeptAppContext.Provider>
+  const warm = useCallback((next: ShownApp) => setApp((current) => current ?? next), [])
+  return <KeptAppContext.Provider value={{ app, active, show, hide, warm }}>{children}</KeptAppContext.Provider>
 }
 
 /** Called by the app route: puts the app on screen at `route`, and takes it off screen on leave. */
@@ -45,6 +48,16 @@ export function useShowGatekeeperApp(appId: string, route: string): void {
     show({ appId, route })
   }, [show, appId, route])
   useEffect(() => hide, [hide])
+}
+
+/**
+ * Boots an app hidden at `route` before the user opens it (a sidebar module row was expanded), so
+ * its frame, session and the route's code are ready when a page is picked. Only while no app is
+ * kept: a kept app is never replaced off screen.
+ */
+export function useWarmGatekeeperApp(): (appId: string, route: string) => void {
+  const { warm } = useKeptApp()
+  return useCallback((appId: string, route: string) => warm({ appId, route }), [warm])
 }
 
 /**

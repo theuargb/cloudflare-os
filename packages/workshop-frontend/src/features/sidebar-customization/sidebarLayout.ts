@@ -1,8 +1,11 @@
 // Per-user sidebar customization: item order, group membership/order and label overrides.
-// Pure model. Keys: items `builtin:<id>` / `app:<id>`; containers `main` / `group:<module group title>`.
+// Pure model, persisted per user on the server (user preferences, `sidebar.layout`).
+// Keys: items `builtin:<id>` / `app:<id>`; containers `main` / `group:<module group title>`.
 
 export const MAIN_CONTAINER = 'main'
 export const MAX_SIDEBAR_LABEL_LENGTH = 60
+/** User preference key of the saved layout (JSON of `SidebarLayout`). */
+export const SIDEBAR_LAYOUT_PREFERENCE = 'sidebar.layout'
 
 export type SidebarLayout = {
   /** Saved group order (container keys). */
@@ -48,35 +51,17 @@ export const parseSidebarLayout = (raw: string | null): SidebarLayout => {
   return { groups: isStringArray(groups) ? groups : [], items: validItems, labels: validLabels }
 }
 
-const storageKey = (userId: string) => `workshop.sidebar.layout:${userId}`
-
-export const readSidebarLayout = (userId: string): SidebarLayout => {
-  try {
-    return parseSidebarLayout(localStorage.getItem(storageKey(userId)))
-  } catch {
-    return EMPTY_SIDEBAR_LAYOUT
-  }
-}
-
-export const writeSidebarLayout = (userId: string, layout: SidebarLayout): void => {
-  try {
-    localStorage.setItem(storageKey(userId), JSON.stringify(layout))
-  } catch {
-    // Storage disabled or full: the customization simply does not persist.
-  }
-}
-
 const unique = (keys: string[]): string[] => [...new Set(keys)]
 
 /** Applies saved customization on top of the default structure. */
 export const resolveSidebar = (defaults: SidebarStructure, layout: SidebarLayout): SidebarStructure => {
-  const defaultGroupKeys = defaults.groups.map((group) => group.key)
+  const groupKeys = defaults.groups.map((group) => group.key)
   const groupOrder = [
-    ...unique(layout.groups.filter((key) => defaultGroupKeys.includes(key))),
-    ...defaultGroupKeys.filter((key) => !layout.groups.includes(key)),
+    ...unique(layout.groups.filter((key) => groupKeys.includes(key))),
+    ...groupKeys.filter((key) => !layout.groups.includes(key)),
   ]
 
-  const containers = [MAIN_CONTAINER, ...defaultGroupKeys]
+  const containers = [MAIN_CONTAINER, ...groupKeys]
   const defaultOrder: { container: string; key: string }[] = [
     ...defaults.main.map((key) => ({ container: MAIN_CONTAINER, key })),
     ...defaults.groups.flatMap((group) => group.items.map((key) => ({ container: group.key, key }))),
