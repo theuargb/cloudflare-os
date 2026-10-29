@@ -212,6 +212,9 @@ export function makeUserStorage(storage: DurableObjectStorage) {
       quickModel: <string | null>null,
       preferredModel: <string | null>null,
       onboardingCompleted: false,
+      // Small UI preferences of the user (sidebar layout, finished tours, gatekeeper app preferences),
+      // key → string value; validated and bounded by ui-preferences.ts.
+      uiPreferences: <Record<string, string>>{},
 
       // Central push subscriptions, keyed by the install-scoped device key the service returns, so a
       // device that registers again replaces its own subscription. Only this installation's signing
