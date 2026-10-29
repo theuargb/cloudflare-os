@@ -62,7 +62,7 @@ export type SpotlightSection = { id: string; heading: string; icon?: ReactNode; 
 export function moduleSections(entries: SpotlightEntry[]): SpotlightSection[] {
   const modules = new Map<string, { entry: SpotlightEntry; groups: Map<string, RankedEntry[]> }>()
   for (const entry of entries) {
-    const key = entry.appId ?? 'core'
+    const key = entry.moduleKey ?? 'core'
     const module = modules.get(key) ?? { entry, groups: new Map<string, RankedEntry[]>() }
     modules.set(key, module)
     const title = entry.group ?? ''
