@@ -814,7 +814,7 @@ export interface AuthenticatedApi extends RpcTarget {
    * frame's collectResourceUrl() gives CreationApproval.configuration.
    */
   startCreationConfigurator(accountId: number, resourceUrlPattern: string)
-      : Promise<GatekeeperUiFrame>;
+      : Promise<ResourceConfiguratorFrame>;
 
   /**
    * Remove a shared gadget from the user's home page listing. Does NOT revoke the user's
