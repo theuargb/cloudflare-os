@@ -25,9 +25,10 @@
 
 import { RpcCompatible, RpcStub, RpcTarget } from "capnweb";
 import { AccountDescription, ActionKind, ActionDescription, AgentCatalog, AvatarImage, GatekeeperUiFrame, GatekeeperUserSelection, ObservationDescription, ResourceDescription, ResourceConfiguratorFrame, SupportedResource, VendorDescription, HookDescription } from "./gatekeeper.js";
+import type { VendorGroup } from "./gatekeeper.js";
 import type { CodeChange } from "./code-change.js";
 import type { GitOid } from "./gatekeeper.js";
-import type { AppInbox, AppNavigation, AppSearchHit } from "./app-host.js";
+import type { AppInbox, AppNavigation, AppSearchHit, AppEntry } from "./app-host.js";
 import type { UiFeatureFlags } from "./feature-flags.js";
 
 export const SERVICE_SALT = new Uint8Array([
@@ -987,6 +988,12 @@ export type GatekeeperAppInfo = {
   title: string;
   /** Optional icon. */
   icon?: AvatarImage;
+  /** Sidebar section (VendorDescription.group); ungrouped apps list at the top level. */
+  group?: VendorGroup;
+  /** Default position (VendorDescription.order). */
+  order?: number;
+  /** Sidebar rows (VendorDescription.entries): one per business area; empty for a single-row app. */
+  entries?: AppEntry[];
 };
 
 /**
