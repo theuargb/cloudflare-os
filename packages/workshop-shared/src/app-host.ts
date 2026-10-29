@@ -109,6 +109,30 @@ export function isAppRoute(route: unknown): route is string {
     && !/^[a-z][a-z0-9+.-]*:/i.test(route);
 }
 
+/** What a screen is, for its icon in the Workshop sidebar: a section kind, or the app's own documentation. */
+export type AppNavSectionKind = AppSectionKind | "instructions";
+
+/** One screen of the open app, in navigation order. */
+export type AppNavSection = { id: string; label: string; count?: number; kind?: AppNavSectionKind };
+
+/**
+ * The open screen's navigation a sandboxed app publishes for the Workshop sidebar
+ * (GatekeeperAppHost.setSectionNav): its sections in display order, nested under the app's active
+ * sidebar row. `module` is the `AppNavigation.modules` id of the open module (absent when the app is
+ * a single module). Filter chips and other on-page switchers are not part of it: they stay in the app's page.
+ */
+export type AppSectionNav = {
+  module?: string;
+  sections: AppNavSection[];
+  active: string;
+};
+
+/** Frame side of the section navigation: picks made in the Workshop sidebar. */
+export interface GatekeeperAppSectionNavReceiver extends RpcTarget {
+  /** The user picked a section (AppNavSection.id) in the Workshop sidebar. */
+  selectSection(id: string): void;
+}
+
 /** A gatekeeper app id: the lowercased suffix of its GATEKEEPER_<NAME> binding. */
 export function isAppId(appId: unknown): appId is string {
   return typeof appId === "string" && /^[a-z0-9_]{1,64}$/.test(appId);
@@ -158,6 +182,10 @@ export interface GatekeeperAppHost extends RpcTarget {
    * of its areas the user sees. Calls in quick succession are ignored.
    */
   refreshNavigation(): void;
+  /** Register for picks in the Workshop's section navigation (see AppSectionNav). */
+  subscribeSectionNav(receiver: RpcStub<GatekeeperAppSectionNavReceiver>): void;
+  /** Publish the open screen's navigation (null = none); the Workshop validates and caps it. */
+  setSectionNav(nav: AppSectionNav | null): void;
   /** Reload the Workshop page: the frame cannot reload itself (a second handshake ends its session). Apps call it from a user click. */
   reloadPage(): void;
   /**
@@ -518,4 +546,51 @@ export function sanitizeAppInbox(raw: unknown): AppInbox {
   }
   let count = typeof unread === "number" && Number.isFinite(unread) ? Math.max(0, Math.floor(unread)) : 0;
   return { unread: count, items: result };
+}
+
+const NAV_ID = /^[a-z0-9][a-z0-9_./:-]{0,95}$/i;
+const MAX_NAV_SECTIONS = 64;
+const NAV_SECTION_KINDS: Record<AppNavSectionKind, true> = {
+  overview: true, documents: true, registers: true, journals: true, reports: true,
+  references: true, classifiers: true, settings: true, instructions: true,
+};
+
+/**
+ * Keep well-formed items (unique ids, a trimmed label capped at MAX_GROUP), capped; `build` shapes
+ * each from its raw fields and its count (a non-negative integer, else undefined).
+ */
+function navItems<T>(
+  raw: unknown,
+  max: number,
+  build: (id: string, label: string, count: number | undefined, item: Record<string, unknown>) => T,
+): T[] {
+  if (!Array.isArray(raw)) return [];
+  let result: T[] = [];
+  let ids: Record<string, true> = {};
+  for (let item of raw) {
+    if (result.length >= max) break;
+    if (typeof item !== "object" || item === null) continue;
+    let { id, label, count } = item as Record<string, unknown>;
+    if (typeof id !== "string" || !NAV_ID.test(id) || ids[id] || typeof label !== "string" || !label.trim()) continue;
+    ids[id] = true;
+    let kept = typeof count === "number" && Number.isInteger(count) && count >= 0 ? count : undefined;
+    result.push(build(id, label.trim().slice(0, MAX_GROUP), kept, item as Record<string, unknown>));
+  }
+  return result;
+}
+
+/** Keep a well-formed section navigation from an untrusted app; none without valid sections and an existing active section. */
+export function sanitizeAppSectionNav(raw: unknown): AppSectionNav | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  let { module, sections, active } = raw as Record<string, unknown>;
+  let keptSections = navItems(sections, MAX_NAV_SECTIONS, (id, label, count, item): AppNavSection => {
+    let section: AppNavSection = { id, label };
+    if (count !== undefined) section.count = count;
+    if (typeof item.kind === "string" && Object.hasOwn(NAV_SECTION_KINDS, item.kind)) section.kind = item.kind as AppNavSectionKind;
+    return section;
+  });
+  if (typeof active !== "string" || !keptSections.some((section) => section.id === active)) return null;
+  let result: AppSectionNav = { sections: keptSections, active };
+  if (typeof module === "string" && NAV_ID.test(module)) result.module = module;
+  return result;
 }
