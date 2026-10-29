@@ -1,4 +1,5 @@
 import { Link, useRouterState, type LinkProps } from '@tanstack/react-router'
+import { ArrowSquareOut } from '@phosphor-icons/react'
 import { appRouteEntry } from '@gadgets/workshop-shared/app-host'
 import type { ReactNode } from 'react'
 
@@ -11,7 +12,10 @@ import type { ReactNode } from 'react'
 export type SidebarItemProps = {
   icon: ReactNode
   label: string
-  to: LinkProps['to']
+  /** In-app route; absent on an external row (`href`). */
+  to?: LinkProps['to'];
+  /** External page: the row is a plain anchor that opens in a new tab and is never active. */
+  href?: string;
   params?: LinkProps['params']
   /** Search params of the link (an app entry row passes the entry's route as `at`). */
   search?: { at: string }
@@ -35,6 +39,7 @@ export default function SidebarItem({
   icon,
   label,
   to,
+  href,
   params,
   search,
   entry,
@@ -61,36 +66,46 @@ export default function SidebarItem({
   // Kept loose: the generated route-tree union is stricter than is convenient for a generic row.
   const linkProps = { to, params, search } as unknown as LinkProps
 
-  const link = (
-    <Link
-      {...linkProps}
-      title={collapsed ? label : undefined}
-      className={[
-        'group relative flex items-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kumo-ring focus-visible:ring-offset-2 focus-visible:ring-offset-kumo-elevated',
-        // Collapsed: a centered 36px tile like the rail's search button, so the hover/active box sits on the icon.
-        collapsed
-          ? 'mx-auto h-9 w-9 justify-center'
-          : 'h-11 gap-2.5 px-2.5 text-[14px] leading-5 md:h-8 md:text-[13px] md:leading-[18px]',
-        isActive
-          ? 'bg-kumo-fill font-medium text-kumo-strong'
-          : 'font-normal text-kumo-default hover:bg-kumo-tint',
-        endAction ? 'pr-9' : '',
-      ].join(' ')}
-    >
-      <span
-        className={[
-          'flex h-5 w-5 shrink-0 items-center justify-center transition-colors',
-          isActive ? 'text-kumo-brand' : 'text-kumo-subtle group-hover:text-kumo-default',
-        ].join(' ')}
-      >
-        {icon}
-      </span>
+  // Collapsed: a centered 36px tile like the rail's search button, so the hover/active box sits on the icon.
+  const rowClass = [
+    'group relative flex items-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kumo-ring focus-visible:ring-offset-2 focus-visible:ring-offset-kumo-elevated',
+    collapsed
+      ? 'mx-auto h-9 w-9 justify-center'
+      : 'h-11 gap-2.5 px-2.5 text-[14px] leading-5 md:h-8 md:text-[13px] md:leading-[18px]',
+    isActive
+      ? 'bg-kumo-fill font-medium text-kumo-strong'
+      : 'font-normal text-kumo-default hover:bg-kumo-tint',
+    endAction ? 'pr-9' : '',
+  ].join(' ')
+  const iconClass = [
+    'flex h-5 w-5 shrink-0 items-center justify-center transition-colors',
+    isActive ? 'text-kumo-brand' : 'text-kumo-subtle group-hover:text-kumo-default',
+  ].join(' ')
+  const content = (
+    <>
+      <span className={iconClass}>{icon}</span>
       {!collapsed && (
         <>
           <span className="min-w-0 flex-1 truncate">{label}</span>
+          {href && <ArrowSquareOut size={12} aria-hidden className="shrink-0 text-kumo-inactive" />}
           {trailing && <span className="shrink-0 text-kumo-inactive">{trailing}</span>}
         </>
       )}
+    </>
+  );
+  const link = href ? (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={collapsed ? label : "Opens in a new tab"}
+      className={rowClass}
+    >
+      {content}
+    </a>
+  ) : (
+    <Link {...linkProps} title={collapsed ? label : undefined} className={rowClass}>
+      {content}
     </Link>
   )
   if (!endAction) return link
