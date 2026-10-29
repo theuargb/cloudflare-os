@@ -614,6 +614,12 @@ export interface AuthenticatedApi extends RpcTarget {
   /** Mark the onboarding wizard as completed. */
   completeOnboarding(): Promise<void>;
 
+  /** The user's UI preferences (sidebar layout, finished tours, gatekeeper app preferences), key → value. */
+  getUiPreferences(): Promise<Record<string, string>>;
+
+  /** Set one UI preference; null deletes it. Keys match /^[a-z][a-z0-9.:-]{0,79}$/, values ≤ 32768 chars. */
+  setUiPreference(key: string, value: string | null): Promise<void>;
+
   // --- Optional Cloudflare limits / top-up flow (only meaningful when enabled server-side) ---
 
   /** Get the user's current free-tier usage and connected-account balance. */
