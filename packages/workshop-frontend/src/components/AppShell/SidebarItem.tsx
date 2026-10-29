@@ -1,14 +1,15 @@
 import { Link, useRouterState, type LinkProps } from '@tanstack/react-router'
-import { ArrowSquareOut } from '@phosphor-icons/react'
+import { ArrowSquareOut, CaretDown } from '@phosphor-icons/react'
 import { appRouteEntry } from '@gadgets/workshop-shared/app-host'
 import type { ReactElement, ReactNode } from 'react'
 import { preloadIntent } from '../../features/app-preload/appPreload'
 
 /**
- * A single nav row in the sidebar. Renders as a TanStack <Link>. Active state is computed from the
- * current router pathname so we can also tint the icon (TanStack's activeProps only swaps top-level
- * className, not child styles). When `collapsed` is true the label is hidden but kept in the DOM for
- * screen readers / hover-tooltips.
+ * A single nav row in the sidebar: a TanStack <Link>, an external anchor, or — for a row with pages
+ * (`pages`) — a toggle that lists them under it instead of opening the app's landing screen. Active
+ * state is computed from the current router pathname so we can also tint the icon (TanStack's
+ * activeProps only swaps top-level className, not child styles). When `collapsed` is true the label
+ * is hidden but kept in the DOM for screen readers / hover-tooltips.
  */
 export type SidebarItemProps = {
   icon: ReactNode
@@ -28,12 +29,18 @@ export type SidebarItemProps = {
   matchPrefix?: boolean
   /** Hover-revealed control rendered beside, not inside, the link (a button in an anchor is invalid). */
   endAction?: ReactNode
-  /** Rendered under the row while it is active (the open app's section tree). */
-  nested?: ReactNode
-  /** Wraps the row's link while it is active (the collapsed rail's section flyout). */
-  flyout?: (link: ReactElement<{ title?: string }>) => ReactNode
+  /** Rendered under the row while it is open (`active`: the row's app screen is on screen). */
+  nested?: (active: boolean) => ReactNode
+  /** Wraps the row (the collapsed rail's page flyout): on a row with pages always, else while active. */
+  flyout?: (row: ReactElement<{ title?: string }>, active: boolean) => ReactNode
   /** Warms the row's target while the pointer rests on it or it has focus (a row that opens an app route). */
   preload?: () => void
+  /**
+   * The row lists pages instead of opening `to`: it is a toggle that shows `nested` under it. `open`
+   * overrides the default (open while active); `onToggle` gets the requested state and the row.
+   * `draggable`: the toggle is a drag source (a link is one natively, a button is not).
+   */
+  pages?: { open?: boolean; onToggle?: (open: boolean, row: HTMLElement) => void; draggable?: boolean }
 }
 
 /** The app entry named by an open `/gatekeepers/<app>?at=<route>` location (null when the route names none). */
@@ -57,6 +64,7 @@ export default function SidebarItem({
   nested,
   flyout,
   preload,
+  pages,
 }: SidebarItemProps) {
   // Resolve the active path manually so we can style the icon as well as the row. For parameterized
   // routes (e.g. "/gatekeepers/$appId"), substitute the params so the resolved path can match.
@@ -72,6 +80,8 @@ export default function SidebarItem({
     ? pathname === target || pathname.startsWith(target + '/')
     : pathname === target
   const isActive = onPath && (!entry || openEntry === entry.id || (openEntry === null && entry.first))
+  // A row with pages opens them in place (the active row by default); any other row nests under itself while active.
+  const open = pages ? (pages.open ?? isActive) : isActive
 
   // Kept loose: the generated route-tree union is stricter than is convenient for a generic row.
   const linkProps = { to, params, search } as unknown as LinkProps
@@ -81,7 +91,7 @@ export default function SidebarItem({
     'group relative flex items-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kumo-ring focus-visible:ring-offset-2 focus-visible:ring-offset-kumo-elevated',
     collapsed
       ? 'mx-auto h-9 w-9 justify-center'
-      : 'h-11 gap-2.5 px-2.5 text-[14px] leading-5 md:h-8 md:text-[13px] md:leading-[18px]',
+      : 'h-11 gap-2.5 px-2.5 text-[14px] leading-5 md:h-7 md:text-[13px] md:leading-[18px]',
     isActive
       ? 'bg-kumo-fill font-medium text-kumo-strong'
       : 'font-normal text-kumo-default hover:bg-kumo-tint',
@@ -99,6 +109,13 @@ export default function SidebarItem({
           <span className="min-w-0 flex-1 truncate">{label}</span>
           {href && <ArrowSquareOut size={12} aria-hidden className="shrink-0 text-kumo-inactive" />}
           {trailing && <span className="shrink-0 text-kumo-inactive">{trailing}</span>}
+          {pages && (
+            <CaretDown
+              size={10}
+              aria-hidden
+              className={`shrink-0 text-kumo-inactive transition-transform ${open ? '' : '-rotate-90'}`}
+            />
+          )}
         </>
       )}
     </>
@@ -113,23 +130,35 @@ export default function SidebarItem({
     >
       {content}
     </a>
+  ) : pages ? (
+    <button
+      type="button"
+      aria-expanded={collapsed ? undefined : open}
+      {...(preload ? preloadIntent(preload) : {})}
+      draggable={pages.draggable}
+      title={collapsed ? label : undefined}
+      onClick={(event) => pages.onToggle?.(!open, event.currentTarget)}
+      className={`${rowClass} cursor-pointer text-left ${collapsed ? '' : 'w-full'}`}
+    >
+      {content}
+    </button>
   ) : (
     <Link {...linkProps} {...(preload ? preloadIntent(preload) : {})} title={collapsed ? label : undefined} className={rowClass}>
       {content}
     </Link>
   )
-  const active = isActive && flyout ? flyout(link) : link
+  const shown = flyout && (pages || isActive) ? flyout(link, isActive) : link
   const row = endAction ? (
     <div className="group/item relative">
-      {active}
+      {shown}
       <div className="absolute inset-y-0 right-1.5 flex items-center">{endAction}</div>
     </div>
-  ) : active
-  if (!isActive || !nested) return row
+  ) : shown
+  if (!open || !nested) return row
   return (
     <>
       {row}
-      {nested}
+      {nested(isActive)}
     </>
   )
 }

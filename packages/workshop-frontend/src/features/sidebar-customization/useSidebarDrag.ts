@@ -11,6 +11,7 @@ export type DropIndicator = { key: string; edge: 'top' | 'bottom' }
 
 const DRAG_MIME = 'application/x-workshop-sidebar'
 export const ROW_ATTRIBUTE = 'data-sidebar-row'
+export const GROUP_ATTRIBUTE = 'data-sidebar-group'
 
 /** First element (other than the dragged one) whose vertical midpoint is below the pointer. */
 const firstBelow = (elements: HTMLElement[], clientY: number): HTMLElement | null =>
@@ -20,11 +21,13 @@ const firstBelow = (elements: HTMLElement[], clientY: number): HTMLElement | nul
   }) ?? null
 
 /**
- * Native drag-and-drop state for the sidebar. The drop position is derived from the pointer against
- * the container's rows (not from the row under the pointer), so gaps and padding behave like rows
- * and each insertion point has exactly one indicator. Positions that would not change the order
- * produce no target and no indicator. The drag source lives in a ref because `dataTransfer` is
- * unreadable during `dragover`.
+ * Native drag-and-drop state for the sidebar. Items drop only between items (the main nav and every
+ * group are item zones) and groups only between groups (the module nav is the group zone): a zone
+ * of the other level never accepts the drag, so the browser shows it as not droppable. The drop
+ * position is derived from the pointer against the zone's rows (not from the row under the pointer),
+ * so gaps and padding behave like rows and each insertion point has exactly one indicator.
+ * Positions that would not change the order are not droppable either. The drag source lives in a ref
+ * because `dataTransfer` is unreadable during `dragover`; `dragging` mirrors it for rendering.
  */
 export const useSidebarDrag = (
   resolved: SidebarStructure,
@@ -33,6 +36,8 @@ export const useSidebarDrag = (
 ) => {
   const source = useRef<Source | null>(null)
   const targetRef = useRef<Target | null>(null)
+  const dragTimer = useRef<number | undefined>(undefined)
+  const [dragging, setDragging] = useState<Source | null>(null)
   const [indicator, setIndicator] = useState<DropIndicator | null>(null)
   const [dropContainer, setDropContainer] = useState<string | null>(null)
 
@@ -48,15 +53,20 @@ export const useSidebarDrag = (
   }
 
   const clear = () => {
+    window.clearTimeout(dragTimer.current)
     source.current = null
+    setDragging(null)
     setTarget(null, null, null)
   }
 
   const start = (kind: Source['kind'], key: string) => (event: DragEvent<HTMLElement>) => {
     event.stopPropagation()
-    source.current = { kind, key }
+    const dragged = { kind, key }
+    source.current = dragged
     event.dataTransfer.effectAllowed = 'move'
     event.dataTransfer.setData(DRAG_MIME, key)
+    // Re-rendering inside dragstart aborts the drag in Chromium: show the drag state a tick later.
+    dragTimer.current = window.setTimeout(() => setDragging(dragged), 0)
   }
 
   const drop = (event: DragEvent<HTMLElement>) => {
@@ -74,7 +84,12 @@ export const useSidebarDrag = (
     clear()
   }
 
-  const overItemContainer = (event: DragEvent<HTMLElement>, container: string, dragged: string) => {
+  const leave = (event: DragEvent<HTMLElement>) => {
+    if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setTarget(null, null, null)
+  }
+
+  /** Whether the item can drop here; sets the target and indicator when it can. */
+  const overItems = (event: DragEvent<HTMLElement>, container: string, dragged: string): boolean => {
     const rows = [...event.currentTarget.querySelectorAll<HTMLElement>(`[${ROW_ATTRIBUTE}]`)].filter(
       (row) => row.getAttribute(ROW_ATTRIBUTE) !== dragged,
     )
@@ -85,7 +100,7 @@ export const useSidebarDrag = (
     const index = items.indexOf(dragged)
     if (index !== -1 && (items[index + 1] ?? null) === beforeKey) {
       setTarget(null, null, null)
-      return
+      return false
     }
     const last = rows[rows.length - 1]?.getAttribute(ROW_ATTRIBUTE)
     const next: DropIndicator | null = beforeKey
@@ -94,22 +109,30 @@ export const useSidebarDrag = (
         ? { key: last, edge: 'bottom' }
         : null
     setTarget({ kind: 'item', container, beforeKey }, next, next ? null : container)
+    return true
   }
 
-  const overGroup = (event: DragEvent<HTMLElement>, groupKey: string, dragged: string) => {
+  /** Whether the group can drop here; sets the target and indicator when it can. */
+  const overGroups = (event: DragEvent<HTMLElement>, dragged: string): boolean => {
+    const sections = [...event.currentTarget.querySelectorAll<HTMLElement>(`[${GROUP_ATTRIBUTE}]`)].filter(
+      (section) => section.getAttribute(GROUP_ATTRIBUTE) !== dragged,
+    )
+    const below = firstBelow(sections, event.clientY)
+    const beforeGroupKey = below?.getAttribute(GROUP_ATTRIBUTE) ?? null
     const order = resolved.groups.map((group) => group.key)
-    const rect = event.currentTarget.getBoundingClientRect()
-    const edge = event.clientY < rect.top + rect.height / 2 ? 'top' : 'bottom'
-    const beforeGroupKey = edge === 'top' ? groupKey : (order[order.indexOf(groupKey) + 1] ?? null)
     const index = order.indexOf(dragged)
-    if (beforeGroupKey === dragged || (index !== -1 && (order[index + 1] ?? null) === beforeGroupKey)) {
+    if (index !== -1 && (order[index + 1] ?? null) === beforeGroupKey) {
       setTarget(null, null, null)
-      return
+      return false
     }
-    const next: DropIndicator = beforeGroupKey
+    const last = sections[sections.length - 1]?.getAttribute(GROUP_ATTRIBUTE)
+    const next: DropIndicator | null = beforeGroupKey
       ? { key: beforeGroupKey, edge: 'top' }
-      : { key: groupKey, edge: 'bottom' }
+      : last
+        ? { key: last, edge: 'bottom' }
+        : null
     setTarget({ kind: 'group', beforeGroupKey }, next, null)
+    return true
   }
 
   /** Attributes for a draggable row wrapper. */
@@ -119,19 +142,31 @@ export const useSidebarDrag = (
     onDragEnd: clear,
   })
 
-  /** Drop zone for a list of rows: the main nav or one group section. */
-  const containerProps = (container: string): HTMLAttributes<HTMLElement> => ({
+  /** Drop zone for item drags: the main nav or one group section. */
+  const itemZoneProps = (container: string): HTMLAttributes<HTMLElement> => ({
     onDrop: drop,
+    onDragLeave: leave,
     onDragOver: (event) => {
       const dragged = source.current
-      if (!dragged) return
-      if (dragged.kind === 'item') {
-        event.preventDefault()
-        overItemContainer(event, container, dragged.key)
-      } else if (container !== MAIN_CONTAINER) {
-        event.preventDefault()
-        overGroup(event, container, dragged.key)
-      }
+      if (dragged?.kind !== 'item') return
+      // A group section is also inside the group zone: the item zone owns its item drags.
+      event.stopPropagation()
+      if (!overItems(event, container, dragged.key)) return
+      event.preventDefault()
+      event.dataTransfer.dropEffect = 'move'
+    },
+  })
+
+  /** Drop zone for group drags: the nav that lists the groups. */
+  const groupListProps = (): HTMLAttributes<HTMLElement> => ({
+    onDrop: drop,
+    onDragLeave: leave,
+    onDragOver: (event) => {
+      const dragged = source.current
+      if (dragged?.kind !== 'group') return
+      if (!overGroups(event, dragged.key)) return
+      event.preventDefault()
+      event.dataTransfer.dropEffect = 'move'
     },
   })
 
@@ -141,5 +176,5 @@ export const useSidebarDrag = (
     onDragEnd: clear,
   })
 
-  return { dropIndicator: indicator, dropContainer, rowProps, containerProps, groupHandleProps }
+  return { dragging, dropIndicator: indicator, dropContainer, rowProps, itemZoneProps, groupListProps, groupHandleProps }
 }

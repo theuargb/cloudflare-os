@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import type { LinkProps } from '@tanstack/react-router'
 import { GlobeSimple, House } from '@phosphor-icons/react'
 import type { GatekeeperAppInfo, GatekeeperAppNavigation } from '@gadgets/workshop-shared/api'
-import type { AppEntry, AppExternalLink } from '@gadgets/workshop-shared/app-host'
+import type { AppEntry, AppExternalLink, AppNavSection } from '@gadgets/workshop-shared/app-host'
 import { GatekeeperAppIcon } from '../../components/GatekeeperAppIcon'
 import type { SidebarStructure } from './sidebarLayout'
 
@@ -20,6 +20,8 @@ export type SidebarItemDef = {
   entry?: { id: string; first: boolean }
   /** Set on rows that open a gatekeeper app: the open app's section tree nests under the active one. */
   appId?: string
+  /** The row's pages (`AppEntry.sections`): the row expands to them instead of opening the app. */
+  pages?: AppNavSection[]
   icon: ReactNode
 }
 
@@ -59,6 +61,7 @@ const entryItem = (app: GatekeeperAppInfo, entry: AppEntry, first: boolean): Sid
   search: { at: entry.route },
   entry: { id: entry.id, first },
   icon: <GatekeeperAppIcon app={{ ...app, icon: entry.icon ?? app.icon }} />,
+  ...(entry.sections ? { pages: entry.sections } : {}),
 })
 
 /** One row for a single-area app, one row per entry for an app that publishes `entries`. */

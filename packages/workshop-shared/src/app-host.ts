@@ -118,8 +118,8 @@ export function isAppRoute(route: unknown): route is string {
 /** What a screen is, for its icon in the Workshop sidebar: a section kind, or the app's own documentation. */
 export type AppNavSectionKind = AppSectionKind | "instructions";
 
-/** One screen of the open app, in navigation order. */
-export type AppNavSection = { id: string; label: string; count?: number; kind?: AppNavSectionKind };
+/** One screen of the open app, in navigation order; `route` opens it from anywhere (favorite pages). */
+export type AppNavSection = { id: string; label: string; count?: number; kind?: AppNavSectionKind; route?: string };
 
 /**
  * The open screen's navigation a sandboxed app publishes for the Workshop sidebar
@@ -236,6 +236,11 @@ export type AppEntry = {
   route: string;
   /** Optional row icon (an `AvatarImage`, kept structural: this file stays free of worker types); the app's own icon is used when absent. */
   icon?: { url: string };
+  /**
+   * The row's pages, each with the route that opens it: the sidebar expands the row to them instead
+   * of opening `route` (no counts; the open app's live `AppSectionNav` replaces them on its row).
+   */
+  sections?: AppNavSection[];
 };
 
 /** The `entry` param of an app route (`section/path?entry=sales`), or null. */
@@ -251,12 +256,15 @@ const ENTRY_ID = /^[a-z][a-z0-9-]{0,31}$/;
 /** One well-formed entry (unique kebab-case id, a title, a valid route naming its own entry), or null. */
 function sanitizeEntry(item: unknown, ids: Record<string, true>): AppEntry | null {
   if (typeof item !== "object" || item === null) return null;
-  let { id, title, route, icon } = item as Record<string, unknown>;
+  let { id, title, route, icon, sections } = item as Record<string, unknown>;
   if (typeof id !== "string" || !ENTRY_ID.test(id) || ids[id]) return null;
   if (typeof title !== "string" || !title.trim() || !isAppRoute(route) || appRouteEntry(route) !== id) return null;
   ids[id] = true;
   let url = typeof icon === "object" && icon !== null ? (icon as Record<string, unknown>).url : undefined;
-  return { id, title: title.slice(0, MAX_ENTRY_TITLE), route, icon: typeof url === "string" ? { url } : undefined };
+  let entry: AppEntry = { id, title: title.slice(0, MAX_ENTRY_TITLE), route, icon: typeof url === "string" ? { url } : undefined };
+  let pages = sanitizeEntrySections(sections);
+  if (pages) entry.sections = pages;
+  return entry;
 }
 
 /** Keep well-formed entries (see sanitizeEntry). Fewer than two valid entries means none. */
@@ -585,16 +593,26 @@ function navItems<T>(
   return result;
 }
 
+/** One well-formed section item: its kind when known, its route when valid, its count when given. */
+function navSection(id: string, label: string, count: number | undefined, item: Record<string, unknown>): AppNavSection {
+  let section: AppNavSection = { id, label };
+  if (count !== undefined) section.count = count;
+  if (typeof item.kind === "string" && Object.hasOwn(NAV_SECTION_KINDS, item.kind)) section.kind = item.kind as AppNavSectionKind;
+  if (isAppRoute(item.route)) section.route = item.route;
+  return section;
+}
+
+/** An entry's page list: well-formed sections that carry a route (the sidebar opens them by it); none when empty. */
+function sanitizeEntrySections(raw: unknown): AppNavSection[] | undefined {
+  let kept = navItems(raw, MAX_NAV_SECTIONS, navSection).filter((section) => section.route !== undefined);
+  return kept.length > 0 ? kept : undefined;
+}
+
 /** Keep a well-formed section navigation from an untrusted app; none without valid sections and an existing active section. */
 export function sanitizeAppSectionNav(raw: unknown): AppSectionNav | null {
   if (typeof raw !== "object" || raw === null) return null;
   let { module, sections, active } = raw as Record<string, unknown>;
-  let keptSections = navItems(sections, MAX_NAV_SECTIONS, (id, label, count, item): AppNavSection => {
-    let section: AppNavSection = { id, label };
-    if (count !== undefined) section.count = count;
-    if (typeof item.kind === "string" && Object.hasOwn(NAV_SECTION_KINDS, item.kind)) section.kind = item.kind as AppNavSectionKind;
-    return section;
-  });
+  let keptSections = navItems(sections, MAX_NAV_SECTIONS, navSection);
   if (typeof active !== "string" || !keptSections.some((section) => section.id === active)) return null;
   let result: AppSectionNav = { sections: keptSections, active };
   if (typeof module === "string" && NAV_ID.test(module)) result.module = module;

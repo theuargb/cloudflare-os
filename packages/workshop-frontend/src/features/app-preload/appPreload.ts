@@ -23,9 +23,11 @@ export function detachAppPreload(appId: string, owner: object): void {
   if (slots.get(appId)?.owner === owner) slots.delete(appId)
 }
 
-/** Warm `route` of app `appId` if its frame is running; otherwise nothing. */
-export function preloadAppRoute(appId: string, route: string): void {
-  slots.get(appId)?.preload(route)
+/** Warm `route` of app `appId` if its frame is running; false (nothing sent) when it is not. */
+export function preloadAppRoute(appId: string, route: string): boolean {
+  const slot = slots.get(appId)
+  slot?.preload(route)
+  return slot !== undefined
 }
 
 /** Calls `preload` once the user has rested on a target for a moment; returns the cancel. */
