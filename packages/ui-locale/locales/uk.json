@@ -1319,6 +1319,8 @@
   "Started by people": "Розпочато користувачами",
   "Stated:": "Задано:",
   "Status": "Статус",
+  "Step back: {0}": "Назад: {0}",
+  "Step forward: {0}": "Вперед: {0}",
   "Still checking older activity…": "Перевіряємо попередню активність…",
   "Still running another release of this deployment: {0}. ": "Досі працює інший випуск цього розгортання: {0}. ",
   "Stop agent": "Зупинити агента",
