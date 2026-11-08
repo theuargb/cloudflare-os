@@ -28,7 +28,11 @@ const INLINE_MARKDOWN_COMPONENTS: Components = {
   ),
 }
 
-export default function TopBarNotice() {
+/**
+ * The deployment announcement. By default it is centred over its (relatively positioned) bar; with
+ * `inline` it takes the free space between its siblings instead, for bars that carry navigation.
+ */
+export default function TopBarNotice({ inline = false }: { inline?: boolean }) {
   const notice = (useServerConfig()?.announcement ?? '').trim()
 
   if (!notice) return null
@@ -36,7 +40,9 @@ export default function TopBarNotice() {
   return (
     <div
       aria-hidden="false"
-      className="hidden lg:flex absolute inset-0 items-center justify-center pointer-events-none px-40"
+      className={inline
+        ? 'hidden lg:flex min-w-0 flex-1 items-center justify-center pointer-events-none px-4'
+        : 'hidden lg:flex absolute inset-0 items-center justify-center pointer-events-none px-40'}
     >
       <div className="max-w-full truncate text-[13px] leading-[18px] font-normal tracking-[-0.25px] text-kumo-subtle">
         <ReactMarkdown remarkPlugins={[remarkGfm]} components={INLINE_MARKDOWN_COMPONENTS}>

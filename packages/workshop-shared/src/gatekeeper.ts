@@ -17,6 +17,7 @@
 // `Adapter` type is the root interface implemented by the service binding.
 
 import type { WorkerEntrypoint, DurableObject, RpcTarget, RpcStub } from "cloudflare:workers";
+import type { AppEntry, AppInbox, AppNavigation, AppSearchHit } from "./app-host.js";
 
 /**
  * A pagination cursor.
@@ -34,6 +35,9 @@ export interface Cursor<T> {
 export type AvatarImage = {
   url: string;
 }
+
+/** A gatekeeper's sidebar/connector group. `order` is the group's hundred, e.g. 100, 200. */
+export type VendorGroup = { title: string; order: number };
 
 /** Describes a connected GatekeeperVendor, for display purposes. */
 export type VendorDescription = {
@@ -77,6 +81,27 @@ export type VendorDescription = {
    * management UI (see AccountDescription.singleton / .providesUi).
    */
   autoProvisionsAccount?: boolean;
+
+  /** Group shared by related gatekeepers: one sidebar section, adjacent connector cards. */
+  group?: VendorGroup;
+
+  /** Default position: `group.order` + index inside the group (e.g. 101, 110). Lower first. */
+  order?: number;
+
+  /**
+   * Sidebar rows of an app that serves several business areas: one row per entry instead of one for
+   * the app (e.g. a trade module's "Purchases" and "Sales"). Vendor-level like `group`/`order`, so
+   * it follows module upgrades. Fewer than two valid entries are ignored (see sanitizeAppEntries).
+   */
+  entries?: AppEntry[];
+}
+
+type Ordered = { group?: VendorGroup; order?: number };
+const rank = (value: number | undefined) => value ?? Number.MAX_SAFE_INTEGER;
+
+/** Group order, then item order; undeclared values sort last; equal keys keep input order (stable sort). */
+export function compareGatekeeperOrder(a: Ordered, b: Ordered): number {
+  return rank(a.group?.order) - rank(b.group?.order) || rank(a.order) - rank(b.order);
 }
 
 /**
@@ -285,6 +310,12 @@ export type AccountDescription = {
    * as returned by the gatekeeper's getTypeScriptTypes().
    */
   singleton?: { tsType: string };
+
+  /**
+   * If set, this account feeds the Workshop topbar inbox (bell) through GatekeeperUser.getInbox and
+   * .markInboxRead. The first account declaring it is the deployment's inbox provider.
+   */
+  providesInbox?: boolean;
 
   /**
    * If set, this account has a full-page management UI (see GatekeeperUser.startAppUi). The Workshop
@@ -568,13 +599,12 @@ export interface ResourceConfiguratorHost extends RpcTarget {
 }
 
 /**
- * A self-contained sandboxed UI served by a gatekeeper: complete HTML hosted in a
+ * A self-contained sandboxed UI served by a gatekeeper as complete HTML, hosted in a
  * sandbox="allow-scripts" iframe, plus an arbitrary gatekeeper-defined capability exposed to the
- * iframe over a MessagePort RPC session. Used both for the small resource-configurator form
- * (startResourceConfigurator, hosted in the connect modal) and for full-page gatekeeper management
- * apps (startAppUi, e.g. the Context Library file manager, hosted on its own Workshop page).
+ * iframe over a MessagePort RPC session. The return type of startResourceConfigurator (the small
+ * form hosted in the connect modal).
  */
-export type GatekeeperUiFrame = {
+export type ResourceConfiguratorFrame = {
   /** Complete HTML for the UI. Workshop hosts it in a sandboxed iframe. */
   iframeHtml: string;
 
@@ -592,10 +622,22 @@ export type GatekeeperUiFrame = {
 }
 
 /**
- * Legacy alias for GatekeeperUiFrame: the established return type of startResourceConfigurator,
- * referenced by every gatekeeper implementation. Kept to avoid a repo-wide rename.
+ * A full-page gatekeeper management app (startAppUi, e.g. the Context Library file manager, hosted
+ * on its own Workshop page): the capability plus either complete HTML (`srcdoc`) or a URL the
+ * gatekeeper serves itself.
  */
-export type ResourceConfiguratorFrame = GatekeeperUiFrame;
+export type GatekeeperUiFrame = {
+  ui: RpcStub<RpcTarget>;
+  /** Complete HTML of the app, hosted as the iframe's `srcdoc`. Exactly one of this and `iframeUrl` is set. */
+  iframeHtml?: string;
+  /**
+   * Same-origin path under `/gatekeeper/<vendor>/` (see isAppFrameUrl), served by the gatekeeper's
+   * own Worker. The frame stays opaque-origin (no allow-same-origin), so the document's scripts and
+   * chunks must be served with `Access-Control-Allow-Origin: *`; hashed assets cache like any page.
+   * One object type rather than a union, so the API schema generator sees `ui` as the frame's capability.
+   */
+  iframeUrl?: string;
+};
 
 /**
  * The root interface of an Adapter, as provided to the Gadget Workshop.
@@ -877,7 +919,7 @@ export interface GatekeeperUser extends WorkerEntrypoint {
    * Gatekeeper.applyCreation(). The choice must not change the simulated resource's interface.
    * Present when the type sets SupportedResource.creationConfigurator.
    */
-  startCreationConfigurator?(resourceUrlPattern: string): Promise<GatekeeperUiFrame>;
+  startCreationConfigurator?(resourceUrlPattern: string): Promise<ResourceConfiguratorFrame>;
 
   /**
    * Revoke this account connection. The GatekeeperUser, and all Gatekeepers created through it,
@@ -970,6 +1012,35 @@ export interface GatekeeperUser extends WorkerEntrypoint {
    * the tickets its UI receives from the Workshop user picker (GatekeeperUserSelection).
    */
   startAppUi?(context: AppUiContext): Promise<GatekeeperUiFrame>;
+
+  /**
+   * Search records in the account's management app. The account filters results by the actor's
+   * current access. Accounts without the method contribute no results.
+   */
+  searchApp?(context: ActorContext, request: { query: string; limit: number }): Promise<AppSearchHit[]>;
+
+  /**
+   * Launcher actions of the account's management UI (Workshop topbar menus by `menu`, and ⌘K).
+   * Called on demand, not declared in describe(), because the stored description is not refreshed
+   * on redeploy. The account filters by the actor's access. Accounts without the method contribute
+   * nothing.
+   */
+  getAppNavigation?(context: ActorContext): Promise<AppNavigation>;
+
+  /**
+   * Switch the actor's workplace (AppNavigation.workplaces); the next getAppNavigation reflects it.
+   * Throws on an unknown or unavailable id. Called only on accounts whose description sets `providesUi`.
+   */
+  selectAppWorkplace?(context: ActorContext, workplaceId: string): Promise<void>;
+
+  /**
+   * The actor's inbox for the topbar bell: the unread total and at most `limit` latest entries.
+   * Called only on accounts whose description sets `providesInbox`.
+   */
+  getInbox?(context: ActorContext, limit: number): Promise<AppInbox>;
+
+  /** Mark the actor's inbox entries read; an empty `ids` marks all of them. */
+  markInboxRead?(context: ActorContext, ids: string[]): Promise<void>;
 
   // TODO:
   // - Query whether account has scope to access a particular URL.

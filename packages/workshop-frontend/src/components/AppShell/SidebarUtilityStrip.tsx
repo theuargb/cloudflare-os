@@ -76,6 +76,7 @@ function StripLink({
 export default function SidebarUtilityStrip({ collapsed = false }: { collapsed?: boolean }) {
   return (
     <div
+      data-tour="sidebar-utilities"
       className={[
         // shrink-0 + solid base so the strip is visually pinned above the scrolling rail body
         // and content can't bleed through it. Flat treatment — no top shadow.

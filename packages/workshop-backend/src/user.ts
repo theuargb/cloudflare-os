@@ -2,6 +2,10 @@ import { RpcStub } from "capnweb";
 import type { ChatReadState, ChatTimelineHead, UnreadStateScope, UnreadStateSubscriber, UserUnreadState, UnreadThread, UserUnreadSummary, WorkspaceUnreadSummary } from "@gadgets/workshop-shared/api";
 import { WorkspaceMetadataWithTimestamps, AiChatAuthorInfo, AiModelConfig, RedactedAiModelConfig, ModelKind, modelKind, CollaboratorRole, ConnectedAccountsSubscriber, ConnectedAccountsFilter, GatekeeperVendorFilter, WorkspaceMetadata, BlueprintMetadata, BlueprintLibrarySummary, BlueprintSource, BlueprintUserSummary, BLUEPRINT_SCREENSHOT_R2_PREFIX, GatekeeperVendorInfo, OutputSummary, ListOutputsResult, AUTH_ERROR_CODES, createAuthError, ConnectFlowStart, validateCommitEmail, NotificationSubscriber, NotificationMute, UserNotification, type DeviceSessionHandoffStart, type WebPushSubscription } from '@gadgets/workshop-shared/api';
 import { ActionDescription, Gatekeeper, GatekeeperUser, GatekeeperUserVerifier, GatekeeperVendor, AccountDescription, VendorDescription, GatekeeperConnectCallback, ConnectHandoff, SupportedResource, ResourceConfiguratorFrame, ActorContext, GatekeeperUiFrame, GatekeeperUserSelection, GatekeeperUserSelectionExchange, RedeemedGatekeeperUserSelection } from "@gadgets/workshop-shared/gatekeeper";
+import type { GatekeeperAppInfo } from '@gadgets/workshop-shared/api';
+import * as appHost from "./app-host-fanout.js";
+import { compareGatekeeperOrder } from "@gadgets/workshop-shared/gatekeeper";
+import { sanitizeAppEntries } from "@gadgets/workshop-shared/app-host";
 import { shouldAutoProvisionAccount, ambientGatekeeperMode } from "./provisioning-policy.js";
 import { CloudflareGatekeeperUser } from "@gadgets/workshop-shared/cloudflare-gatekeeper";
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
@@ -23,6 +27,7 @@ import type { AdminSettings } from "./admin-settings.js";
 import { deleteBlueprintContent } from "./blueprint-archive.js";
 import { isReservedBlueprintKey, readBlueprintKvRecord } from "./storage-schema/blueprints-kv.js";
 import { filterEnabledResources, isResourceDisabled, readAdminConfig } from "./admin-config.js";
+import type { AdminConfig } from "./storage-schema/admin-settings-storage.js";
 import { buildGatekeeperVendorMap } from "./auth/auth-vendors.js";
 import { CONNECT_FLOW_LIFETIME_MS, handoffTargetOrigin, hashPresentedSecret, hashSecret, newSecretToken, PENDING_HANDOFF_LIFETIME_MS } from "./connect-handoff.js";
 import {
@@ -32,6 +37,7 @@ import {
   DEVICE_HANDOFF_LIFETIME_MS, isDeviceHandoffState, sealDeviceSessionHandoff,
   type DeviceSessionCredential, type DeviceSessionHandoff,
 } from "./auth/device-session-handoff.js";
+import { withUiPreference } from "./ui-preferences.js";
 
 const logger = createWorkshopLogger("workshop.user");
 
@@ -1458,6 +1464,14 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
     this.storage.onboardingCompleted.put(true);
   }
 
+  async getUiPreferences(): Promise<Record<string, string>> {
+    return this.storage.uiPreferences.get();
+  }
+
+  async setUiPreference(key: string, value: string | null): Promise<void> {
+    this.storage.uiPreferences.put(withUiPreference(this.storage.uiPreferences.get(), key, value));
+  }
+
   // ---------------------------------------------------------------------------------------------
   // Cloudflare account connection (optional top-up flow).
   // ---------------------------------------------------------------------------------------------
@@ -2148,18 +2162,19 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
   // calls (e.g. the nav listing apps while a gadget opens) could both see "not provisioned" and
   // create duplicate accounts. Cleared on completion so a later call re-checks (e.g. for a gatekeeper
   // bound after this DO started).
-  #ensureAccountsPromise?: Promise<void>;
+  #ensureAccountsPromise?: Promise<Map<string, VendorDescription>>;
 
   // Ensure an auto-provisioned connected account exists for every bound vendor that requests it
   // (VendorDescription.autoProvisionsAccount) and is permitted by the provisioning policy. Idempotent
   // and best-effort: a single failing vendor never blocks the others. Creates at most one account per
   // vendor. Deduped via #ensureAccountsPromise (above); callers reach it through listProvidedAccounts.
-  #ensureAutoProvisionedAccounts(): Promise<void> {
+  #ensureAutoProvisionedAccounts(): Promise<Map<string, VendorDescription>> {
     return (this.#ensureAccountsPromise ??=
       this.#provisionMissingAccounts().finally(() => { this.#ensureAccountsPromise = undefined; }));
   }
 
-  async #provisionMissingAccounts(): Promise<void> {
+  // Resolves to the fresh description of every ambient vendor (the app nav sorts by its group/order).
+  async #provisionMissingAccounts(): Promise<Map<string, VendorDescription>> {
     // Which vendors already have an auto-provisioned account?
     let provisioned = new Set<string>();
     for (let rec of this.#connectedAccountRecords()) {
@@ -2167,7 +2182,8 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
     }
 
     let config = await readAdminConfig(this.env);
-    for (let {vendorId, vendor} of await this.#ambientVendors()) {
+    let ambientVendors = await this.#ambientVendors();
+    for (let {vendorId, vendor} of ambientVendors) {
       if (provisioned.has(vendorId)) continue;
       // Only "enabled" (forced) vendors are auto-provisioned for everyone. "optional" vendors are
       // added on demand by the user (provisionAmbientAccount); "disabled" ones never.
@@ -2181,6 +2197,7 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
         });
       }
     }
+    return new Map(ambientVendors.map(({vendorId, description}) => [vendorId, description]));
   }
 
   /**
@@ -2192,16 +2209,47 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
    */
   async listProvidedAccounts(): Promise<ProvidedAccountInfo[]> {
     await this.#ensureAutoProvisionedAccounts();
-    let config = await readAdminConfig(this.env);
+    return this.#providedAccounts(await readAdminConfig(this.env));
+  }
+
+  #providedAccounts(config: AdminConfig): ProvidedAccountInfo[] {
     let result: ProvidedAccountInfo[] = [];
     for (let rec of this.#connectedAccountRecords()) {
       if (!rec.description.singleton && !rec.description.providesUi) continue;
+      // The vendor's binding was removed from this deployment (e.g. Context/Scheduler dropped from
+      // the config): the stored account is dormant, there is nothing left to open or call.
+      if (!this.vendors.has(rec.vendorId)) continue;
       // A "disabled" ambient gatekeeper's account stays dormant: don't surface its singleton capsule
       // or management UI. (Its data is preserved, so re-enabling restores it.)
       if (rec.autoProvisioned && ambientGatekeeperMode(config, rec.vendorId) === "disabled") continue;
       result.push({ accountId: rec.id, vendorId: rec.vendorId, description: rec.description });
     }
     return result;
+  }
+
+  /**
+   * Management apps (providesUi accounts) in default nav order. Group and order come from the
+   * vendor's fresh describe(), not the stored account description, so an upgraded gatekeeper's
+   * order applies to existing users. A UI account whose vendor is not ambient gets neither and
+   * lists last at the top level.
+   */
+  async listGatekeeperApps(): Promise<GatekeeperAppInfo[]> {
+    let vendors = await this.#ensureAutoProvisionedAccounts();
+    let config = await readAdminConfig(this.env);
+    return this.#providedAccounts(config)
+        .filter(account => account.description.providesUi)
+        .map(account => {
+          let vendor = vendors.get(account.vendorId);
+          return {
+            id: account.vendorId,
+            title: account.description.providesUi!.title,
+            icon: account.description.providesUi!.icon,
+            group: vendor?.group,
+            order: vendor?.order,
+            entries: sanitizeAppEntries(vendor?.entries),
+          };
+        })
+        .toSorted(compareGatekeeperOrder);
   }
 
   /**
@@ -2303,6 +2351,39 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
     if (!app || app.vendorId !== record.vendorId) throw new Error("No such app.");
     return this.ctx.exports.UserDurableObject.getByName(record.selectedUserId)
         .selectableGatekeeperUsers(record.vendorId);
+  }
+
+  // The provided accounts as the app-host fan-out (./app-host-fanout.ts) sees them.
+  async #appHostAccounts(): Promise<appHost.AppHostAccount[]> {
+    return (await this.listProvidedAccounts()).map(({vendorId, accountId, description}) => ({
+      appId: vendorId,
+      description,
+      stub: this.storage.connectedAccounts.get(accountId)!.account as unknown as appHost.AppHostStub,
+    }));
+  }
+
+  /** Navigation (launcher actions) of every management app (AuthenticatedApi.listAppNavigation). */
+  async listAppNavigation(context: ActorContext) {
+    return appHost.listAppNavigation(await this.#appHostAccounts(), context);
+  }
+
+  /** Record search of one management app (AuthenticatedApi.searchApp). */
+  async searchApp(context: ActorContext, appId: string, query: string) {
+    return appHost.searchApp(await this.#appHostAccounts(), context, appId, query);
+  }
+
+  /** Workplace switch of one management app (AuthenticatedApi.selectAppWorkplace). */
+  async selectAppWorkplace(context: ActorContext, appId: string, workplaceId: string) {
+    await appHost.selectAppWorkplace(await this.#appHostAccounts(), context, appId, workplaceId);
+  }
+
+  /** Topbar inbox (AuthenticatedApi.getInbox). */
+  async getInbox(context: ActorContext) {
+    return appHost.getInbox(await this.#appHostAccounts(), context);
+  }
+
+  async markInboxRead(context: ActorContext, ids: string[]) {
+    await appHost.markInboxRead(await this.#appHostAccounts(), context, ids);
   }
 
   /**
@@ -2515,7 +2596,7 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
   }
 
   async startCreationConfigurator(accountId: number, resourceUrlPattern: string)
-      : Promise<GatekeeperUiFrame> {
+      : Promise<ResourceConfiguratorFrame> {
     let record = this.storage.connectedAccounts.get(accountId);
     if (!record) throw new Error("No such account.");
     return (record.account as unknown as CreationConfiguratorStub)

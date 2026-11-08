@@ -17,6 +17,8 @@ import { deploymentOutputForBlueprint, listFormatOffers, readAdminConfig } from 
 export { PendingLogin, LoginConnectCallbackImpl };
 import { GatekeeperUiFrame, GatekeeperUserSelection } from "@gadgets/workshop-shared/gatekeeper";
 import type { ActorContext } from "@gadgets/workshop-shared/gatekeeper";
+import { isAppId, isAppWorkplaceId, type AppSearchHit } from "@gadgets/workshop-shared/app-host";
+import type { GatekeeperAppNavigation, GatekeeperInbox } from "@gadgets/workshop-shared/api";
 import { DecisionModelGatekeeper, LanguageModelGatekeeper } from "./ai-models";
 import { getGatewayModels } from "./ai-gateway.js";
 import { AdminSettings, AdminApiImpl } from "./admin-settings.js";
@@ -256,6 +258,12 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
   }
   completeOnboarding(): Promise<void> {
     return this.#user.completeOnboarding();
+  }
+  getUiPreferences(): Promise<Record<string, string>> {
+    return retryOnDoReset(() => this.#user.getUiPreferences());
+  }
+  setUiPreference(key: string, value: string | null): Promise<void> {
+    return this.#user.setUiPreference(key, value);
   }
 
   getCloudflareUsage(): Promise<CloudflareUsageInfo> {
@@ -666,16 +674,34 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
   // vendor id, e.g. "context"), so each app is hosted at /gatekeepers/<vendorId>. UI-providing
   // accounts are auto-provisioned singletons (one per vendor), so the vendor id identifies them.
   async listGatekeeperApps(): Promise<GatekeeperAppInfo[]> {
-    // listProvidedAccounts provisions auto-provisioned accounts first (idempotent), so their apps
-    // appear in the nav even before the user opens a gadget — in a single round trip.
-    let accounts = await this.#user.listProvidedAccounts();
-    return accounts
-        .filter((account: (typeof accounts)[number]) => account.description.providesUi)
-        .map((account: (typeof accounts)[number]) => ({
-          id: account.vendorId,
-          title: account.description.providesUi!.title,
-          icon: account.description.providesUi!.icon,
-        }));
+    // The user DO provisions auto-provisioned accounts first (idempotent), so their apps appear in
+    // the nav even before the user opens a gadget — in a single round trip — and sorts them by
+    // their vendor's group and order.
+    return this.#user.listGatekeeperApps();
+  }
+
+  async listAppNavigation(): Promise<GatekeeperAppNavigation[]> {
+    return this.#user.listAppNavigation(await this.#appUiContext());
+  }
+
+  async searchApp(appId: string, query: string): Promise<AppSearchHit[]> {
+    return this.#user.searchApp(await this.#appUiContext(), appId, query);
+  }
+
+  async selectAppWorkplace(appId: string, workplaceId: string): Promise<void> {
+    if (!isAppId(appId) || !isAppWorkplaceId(workplaceId)) throw new TypeError("Invalid workplace.");
+    await this.#user.selectAppWorkplace(await this.#appUiContext(), appId, workplaceId);
+  }
+
+  async getInbox(): Promise<GatekeeperInbox | null> {
+    return this.#user.getInbox(await this.#appUiContext());
+  }
+
+  async markInboxRead(ids: string[]): Promise<void> {
+    if (!Array.isArray(ids) || ids.length > 100 || !ids.every((id) => typeof id === "string")) {
+      throw new TypeError("Invalid inbox ids.");
+    }
+    await this.#user.markInboxRead(await this.#appUiContext(), ids);
   }
 
   async getGatekeeperApp(vendorId: string): Promise<GatekeeperUiFrame | null> {
