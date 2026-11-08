@@ -36,7 +36,7 @@ export const SidebarLabelEditor = ({
       onFocus={(event) => event.currentTarget.select()}
       onKeyDown={onKeyDown}
       onBlur={(event) => finish(() => onCommit(event.currentTarget.value))}
-      className="min-w-0 flex-1 bg-transparent text-[14px] leading-5 normal-case tracking-normal text-kumo-strong outline-none md:text-[13px] md:leading-[18px]"
+      className="min-w-0 flex-1 bg-transparent text-(length:--app-fs-14) leading-(--app-lh-20) normal-case tracking-normal text-kumo-strong outline-none md:text-(length:--app-fs-13) md:leading-(--app-lh-18)"
     />
   )
 }

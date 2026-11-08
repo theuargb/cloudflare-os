@@ -66,7 +66,7 @@ export default function Sidebar({
             <Hexagon size={20} weight="bold" className="text-kumo-brand shrink-0" />
           </SiteLogo>
           {!collapsed && (
-            <span className="truncate text-[14px] leading-5 font-semibold tracking-[-0.25px] text-kumo-default">
+            <span className="truncate text-(length:--app-fs-14) leading-(--app-lh-20) font-semibold tracking-[-0.25px] text-kumo-default">
               {siteName}
             </span>
           )}
@@ -139,7 +139,7 @@ export default function Sidebar({
           onClick={returnToInstalls}
           aria-label="Back to installs"
           className={[
-            'flex min-h-11 shrink-0 items-center border-t border-kumo-line py-2 text-sm text-kumo-default hover:bg-kumo-tint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kumo-ring',
+            'flex min-h-11 shrink-0 items-center border-t border-kumo-line py-2 text-(length:--app-fs-14) leading-(--app-lh-20) text-kumo-default hover:bg-kumo-tint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kumo-ring',
             collapsed ? 'justify-center px-2' : 'gap-2 px-4',
           ].join(' ')}
         >

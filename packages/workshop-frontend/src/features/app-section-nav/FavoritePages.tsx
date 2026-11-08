@@ -31,13 +31,13 @@ export default function FavoritePages({ apps, collapsed, open, onToggle }: {
         type="button"
         aria-expanded={open}
         onClick={(event) => onToggle(event.currentTarget)}
-        className="group flex h-11 w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 text-left text-[14px] leading-5 text-kumo-default transition-colors hover:bg-kumo-tint md:h-7 md:text-[13px] md:leading-[18px]"
+        className="group flex h-11 w-full cursor-pointer items-center gap-2.5 rounded-lg px-2.5 text-left text-(length:--app-fs-14) leading-(--app-lh-20) text-kumo-default transition-colors hover:bg-kumo-tint md:h-7 md:text-(length:--app-fs-13) md:leading-(--app-lh-18)"
       >
         <span className="flex h-5 w-5 shrink-0 items-center justify-center text-kumo-brand">
           <StarIcon size={16} weight="fill" />
         </span>
         <span className="min-w-0 flex-1 truncate">{LABEL}</span>
-        <span className="shrink-0 text-[12px] tabular-nums text-kumo-inactive">{favorites.length}</span>
+        <span className="shrink-0 text-(length:--app-fs-12) tabular-nums text-kumo-inactive">{favorites.length}</span>
         <CaretDownIcon
           size={10}
           aria-hidden
@@ -74,7 +74,7 @@ function FavoritesFlyout({ favorites }: { favorites: FavoritePage[] }) {
         sideOffset={10}
         className="!z-[1100] !w-[260px] !min-w-0 flex max-h-[min(70vh,480px)] flex-col overflow-hidden rounded-xl bg-kumo-base p-1 shadow-lg shadow-kumo-tip-shadow"
       >
-        <Popover.Title className="shrink-0 truncate px-2 pt-1.5 pb-1 text-[11px] leading-4 font-medium uppercase tracking-[0.06em] text-kumo-inactive">
+        <Popover.Title className="shrink-0 truncate px-2 pt-1.5 pb-1 text-(length:--app-fs-11) leading-(--app-lh-16) font-medium uppercase tracking-[0.06em] text-kumo-inactive">
           {LABEL}
         </Popover.Title>
         <div role="navigation" aria-label={LABEL} className="min-h-0 flex-1 overflow-y-auto">

@@ -14,6 +14,7 @@ import AppTopbarControls from '../../features/app-topbar/AppTopbarControls'
 import { OPEN_COMMAND_PALETTE_EVENT } from './commandPaletteBus'
 import { KeptGatekeeperApp, KeptGatekeeperAppProvider } from '../../KeptGatekeeperApp'
 import TourHost, { useTourActive } from "../../features/tour/TourHost";
+import { useAppTextSize } from '../../features/app-text-size/useAppTextSize'
 
 const STORAGE_KEY_COLLAPSED = 'gadgets:sidebar-collapsed'
 
@@ -50,6 +51,7 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
   const drawerRef = useRef<HTMLDivElement>(null)
   const menuButtonRef = useRef<HTMLButtonElement>(null)
   const connectionLost = useConnectionLost()
+  useAppTextSize()
 
   const toggleCollapsed = useCallback(() => {
     setCollapsed((prev) => {

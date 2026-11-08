@@ -91,7 +91,7 @@ export default function SidebarItem({
     'group relative flex items-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kumo-ring focus-visible:ring-offset-2 focus-visible:ring-offset-kumo-elevated',
     collapsed
       ? 'mx-auto h-9 w-9 justify-center'
-      : 'h-11 gap-2.5 px-2.5 text-[14px] leading-5 md:h-7 md:text-[13px] md:leading-[18px]',
+      : 'h-11 gap-2.5 px-2.5 text-(length:--app-fs-14) leading-(--app-lh-20) md:h-7 md:text-(length:--app-fs-13) md:leading-(--app-lh-18)',
     isActive
       ? 'bg-kumo-fill font-medium text-kumo-strong'
       : 'font-normal text-kumo-default hover:bg-kumo-tint',

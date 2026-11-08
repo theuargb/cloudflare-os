@@ -256,7 +256,7 @@ export const SidebarNav = ({
                 {...(customizable && !editing ? drag.groupHandleProps(group.key) : {})}
                 aria-expanded={editing ? undefined : open}
                 className={[
-                  'group/section flex h-6 items-center gap-1 rounded-md px-1.5 text-[11px] font-medium uppercase tracking-[0.06em] text-kumo-inactive transition-colors hover:text-kumo-subtle',
+                  'group/section flex h-6 items-center gap-1 rounded-md px-1.5 text-(length:--app-fs-11) font-medium uppercase tracking-[0.06em] text-kumo-inactive transition-colors hover:text-kumo-subtle',
                   editing ? '' : 'cursor-pointer',
                   drag.dropContainer === group.key ? 'bg-kumo-tint' : '',
                 ].join(' ')}
@@ -289,7 +289,7 @@ export const SidebarNav = ({
                 <div className="mt-0.5 flex flex-col gap-0.5">
                   {rows(group.items)}
                   {customizable && group.items.length === 0 && (
-                    <div className="flex h-7 items-center rounded-lg border border-dashed border-kumo-line px-2.5 text-[12px] text-kumo-inactive">
+                    <div className="flex h-7 items-center rounded-lg border border-dashed border-kumo-line px-2.5 text-(length:--app-fs-12) text-kumo-inactive">
                       Drag an item here
                     </div>
                   )}

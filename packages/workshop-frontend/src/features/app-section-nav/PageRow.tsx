@@ -25,7 +25,7 @@ export function PageRow({ appId, section, current, live, detail, onOpen, favorit
   if (!live && route === undefined) return null
   const KindIcon = section.kind ? KIND_ICONS[section.kind] : undefined
   const className = [
-    'group flex h-11 w-full items-center gap-2 rounded-md px-2 text-left text-[14px] transition-colors md:h-8 md:text-[13px]',
+    'group flex h-11 w-full items-center gap-2 rounded-md px-2 text-left text-(length:--app-fs-14) transition-colors md:h-8 md:text-(length:--app-fs-13)',
     current ? 'bg-kumo-fill font-medium text-kumo-strong' : 'cursor-pointer text-kumo-default hover:bg-kumo-tint',
     favorite ? 'pr-8' : '',
   ].join(' ')
@@ -39,9 +39,9 @@ export function PageRow({ appId, section, current, live, detail, onOpen, favorit
         />
       )}
       <span className={`min-w-0 truncate ${detail ? 'max-w-[60%] shrink-0' : 'flex-1'}`}>{section.label}</span>
-      {detail && <span className="min-w-0 flex-1 truncate text-[12px] font-normal text-kumo-inactive">{detail}</span>}
+      {detail && <span className="min-w-0 flex-1 truncate text-(length:--app-fs-12) font-normal text-kumo-inactive">{detail}</span>}
       {section.count !== undefined && (
-        <span className={`shrink-0 text-[12px] tabular-nums ${current ? 'text-kumo-brand' : 'text-kumo-inactive'}`}>
+        <span className={`shrink-0 text-(length:--app-fs-12) tabular-nums ${current ? 'text-kumo-brand' : 'text-kumo-inactive'}`}>
           {section.count}
         </span>
       )}

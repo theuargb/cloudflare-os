@@ -34,7 +34,7 @@ export default function AppSectionFlyout({ appId, entry, label, active, pages, c
         sideOffset={10}
         className="!z-[1100] !w-[240px] !min-w-0 flex max-h-[min(70vh,480px)] flex-col overflow-hidden rounded-xl bg-kumo-base p-1 shadow-lg shadow-kumo-tip-shadow"
       >
-        <Popover.Title className="shrink-0 truncate px-2 pt-1.5 pb-1 text-[11px] leading-4 font-medium uppercase tracking-[0.06em] text-kumo-inactive">
+        <Popover.Title className="shrink-0 truncate px-2 pt-1.5 pb-1 text-(length:--app-fs-11) leading-(--app-lh-16) font-medium uppercase tracking-[0.06em] text-kumo-inactive">
           {label}
         </Popover.Title>
         <ul role="navigation" aria-label="Sections" className="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto">
