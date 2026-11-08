@@ -1,9 +1,16 @@
-// Finds the user-visible strings in a TypeScript or TSX source file and rewrites them from a
-// locale map. The map is keyed by the English source text, so a string with no entry stays English
-// and the source files themselves never change.
+// Finds the user-visible strings in a TypeScript or TSX source file and rewrites them from locale
+// maps. A map is keyed by the source text, so a string with no entry keeps its source text and the
+// source files themselves never change. With several locales each rewritten string becomes a
+// choice on the runtime `uiLocale` (see `UI_LOCALE_MODULE`).
 
 import ts from "typescript6";
 import MagicString, { type SourceMap } from "magic-string";
+
+/** Module the rewritten code imports `uiLocale` from; the plugin resolves it to the page's locale. */
+export const UI_LOCALE_MODULE = "virtual:ui-locale";
+
+/** One locale the bundle serves. `map` null means the source text as written. */
+export type LocaleTexts = { locale: string; map: ReadonlyMap<string, string> | null };
 
 /**
  * One translatable piece of source text. `key` is what a locale map is keyed by: JSX text with
@@ -83,6 +90,8 @@ function isCodeLiteral(node: ts.Node): boolean {
       (parent.operatorToken.kind === ts.SyntaxKind.InKeyword && parent.left === node))) {
     return true;
   }
+  // `Mode = "value"` is the member's value, and a ternary there would make it computed.
+  if (ts.isEnumMember(parent) && parent.initializer === node) return true;
   if (ts.isCaseClause(parent) && parent.expression === node) return true;
   // Directives such as "use client".
   if (ts.isExpressionStatement(parent)) return true;
@@ -147,12 +156,12 @@ export function collectUnits(code: string, file: string): Unit[] {
 }
 
 /**
- * Parses a locale map, an object of English source text to translation. Throws if an entry is not
+ * Parses a locale map, an object of source text to translation. Throws if an entry is not
  * a string, or if the translation does not use exactly the `{n}` placeholders its key has.
  */
 export function parseLocaleMap(json: unknown): Map<string, string> {
   if (typeof json !== "object" || json === null || Array.isArray(json)) {
-    throw new Error("A ui-locale map must be an object of English text to translation.");
+    throw new Error("A ui-locale map must be an object of source text to translation.");
   }
   let map = new Map<string, string>();
   for (let [key, value] of Object.entries(json)) {
@@ -165,9 +174,11 @@ export function parseLocaleMap(json: unknown): Map<string, string> {
   return map;
 }
 
+type Texts = ReadonlyMap<string, string> | null;
+
 /** `code[from, to)` with every outermost translated unit inside it replaced. */
-function render(code: string, units: ScannedUnit[], from: number, to: number,
-                map: Map<string, string>): string {
+function render(code: string, units: ScannedUnit[], from: number, to: number, map: Texts): string {
+  if (!map) return code.slice(from, to);
   let result = "";
   let position = from;
   for (let unit of units) {
@@ -180,7 +191,7 @@ function render(code: string, units: ScannedUnit[], from: number, to: number,
 }
 
 function templateSource(code: string, units: ScannedUnit[], unit: ScannedUnit, translation: string,
-                        map: Map<string, string>): string {
+                        map: Texts): string {
   let escape = (text: string) => text.replace(/[\\`]|\$\{/g, match => "\\" + match);
   let result = "";
   let last = 0;
@@ -193,36 +204,63 @@ function templateSource(code: string, units: ScannedUnit[], unit: ScannedUnit, t
   return "`" + result + escape(translation.slice(last)) + "`";
 }
 
+/** `text` as a JS expression standing for `unit`: a string literal, or a template that keeps its expressions. */
+function textExpression(code: string, units: ScannedUnit[], unit: ScannedUnit, text: string, map: Texts): string {
+  if (unit.kind === "template" && unit.expressions.length > 0) return templateSource(code, units, unit, text, map);
+  return JSON.stringify(text);
+}
+
 function replacement(code: string, units: ScannedUnit[], unit: ScannedUnit, translation: string,
-                     map: Map<string, string>): string {
+                     map: Texts): string {
   if (unit.kind === "jsx") {
     // Braces and angle brackets are JSX syntax, so text holding them travels as an expression.
     return /[{}<>]/.test(translation) ? `{${JSON.stringify(translation)}}` : translation;
   }
   // A JSX attribute value has no escape sequences, so a quoted string would not do.
   if (unit.isJsxAttributeValue) return `{${JSON.stringify(translation)}}`;
-  if (unit.kind === "template" && unit.expressions.length > 0) {
-    return templateSource(code, units, unit, translation, map);
+  return textExpression(code, units, unit, translation, map);
+}
+
+/** The unit as a choice on the page's locale: one branch per locale, the last one the bare else. */
+function choice(code: string, units: ScannedUnit[], unit: ScannedUnit, locales: readonly LocaleTexts[]): string {
+  let branches = locales.map(({ map }) => {
+    let translation = map?.get(unit.key);
+    return translation === undefined
+        ? textExpression(code, units, unit, unit.key, map)
+        : textExpression(code, units, unit, translation, map);
+  });
+  let expression = branches[branches.length - 1];
+  for (let index = locales.length - 2; index >= 0; index--) {
+    expression = `__uiLocale === ${JSON.stringify(locales[index].locale)} ? ${branches[index]} : ${expression}`;
   }
-  return JSON.stringify(translation);
+  return unit.kind === "jsx" || unit.isJsxAttributeValue ? `{${expression}}` : `(${expression})`;
 }
 
 /**
- * Rewrites the units of `code` that `map` has a translation for. Returns null when nothing
- * changed. Strings inside a translated template's expressions are translated as well, but they
- * carry no source map.
+ * Rewrites the units of `code` that some locale of `locales` has a translation for. One locale is
+ * inlined; several become a choice on the runtime `uiLocale`. Returns null when nothing changed.
+ * Strings inside a translated template's expressions are translated as well, but they carry no
+ * source map.
  */
-export function translate(code: string, file: string, map: Map<string, string>)
+export function translate(code: string, file: string, locales: readonly LocaleTexts[])
     : { code: string; map: SourceMap } | null {
   let units = scan(code, file);
   let output = new MagicString(code);
   let rewrittenUntil = 0;
+  let single = locales.length === 1 ? locales[0].map : undefined;
   for (let unit of units) {
-    let translation = map.get(unit.key);
-    if (translation === undefined || unit.start < rewrittenUntil) continue;
-    output.overwrite(unit.start, unit.end, replacement(code, units, unit, translation, map));
+    if (unit.start < rewrittenUntil) continue;
+    if (single !== undefined) {
+      let translation = single?.get(unit.key);
+      if (translation === undefined) continue;
+      output.overwrite(unit.start, unit.end, replacement(code, units, unit, translation, single));
+    } else {
+      if (!locales.some(({ map }) => map?.has(unit.key))) continue;
+      output.overwrite(unit.start, unit.end, choice(code, units, unit, locales));
+    }
     rewrittenUntil = unit.end;
   }
   if (rewrittenUntil === 0) return null;
+  if (single === undefined) output.prepend(`import { uiLocale as __uiLocale } from "${UI_LOCALE_MODULE}";\n`);
   return { code: output.toString(), map: output.generateMap({ source: file, hires: true, includeContent: true }) };
 }

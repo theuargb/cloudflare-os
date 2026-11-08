@@ -39,6 +39,7 @@ import { createWorkshopLogger } from "./observability";
 import { deployServiceInstall, routerVersionTag } from "./deployment-updates.js";
 import { retryOnDoReset, wrapDoStubForTelemetry } from "./do-retry";
 import { deviceSessionCallback } from "./auth/device-session-callback.js";
+import { UI_LOCALE_PREFERENCE } from "@gadgets/workshop-shared/api";
 
 const logger = createWorkshopLogger("workshop.server");
 
@@ -723,11 +724,16 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
   async #appUiContext(): Promise<ActorContext> {
     let actorId = this.#userId.name;
     if (!actorId) throw new Error("The authenticated user has no canonical identity.");
-    let profile = await retryOnDoReset(() => this.#user.whoamiIfExists());
+    let [profile, preferences] = await Promise.all([
+      retryOnDoReset(() => this.#user.whoamiIfExists()),
+      retryOnDoReset(() => this.#user.getUiPreferences()),
+    ]);
+    let locale = preferences[UI_LOCALE_PREFERENCE];
     return {
       actorId,
       actor: {displayName: profile?.name || actorId},
       isAdmin: this.#isAdmin(),
+      ...(locale ? {locale} : {}),
     };
   }
 

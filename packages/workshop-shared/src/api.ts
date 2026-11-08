@@ -1488,6 +1488,9 @@ export const ROUTER_TAG_PROBE_PATH = "/api/router-tag";
  */
 export const VERSION_PATH = "/api/version";
 
+/** The UI preference (AuthenticatedApi.setUiPreference) holding the language the user chose for the interface. */
+export const UI_LOCALE_PREFERENCE = "ui.locale";
+
 /** All admin-managed deployment settings, returned by AdminApi.getSettings() for the admin UI. */
 export type AdminSettingsView = {
   /** Whether new account signups are allowed. */

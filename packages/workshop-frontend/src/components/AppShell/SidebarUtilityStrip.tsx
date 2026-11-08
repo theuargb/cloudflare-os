@@ -2,6 +2,7 @@ import { Link, useRouterState } from '@tanstack/react-router'
 import { Desktop, Moon, Plug, Sun } from '@phosphor-icons/react'
 import { Tooltip } from '@cloudflare/kumo'
 import UserMenu from '../UserMenu'
+import LocaleMenu from './LocaleMenu'
 import { useTheme } from '../../ThemeContext'
 import type { ThemeMode } from '../../theme'
 import type { NavLayout } from '../../features/top-nav/navLayout'
@@ -95,6 +96,7 @@ export default function SidebarUtilityStrip({ layout }: { layout: NavLayout }) {
       </StripLink>
       <div className={inner}>
         <ThemeModeButton />
+        <LocaleMenu />
         <UserMenu />
       </div>
     </div>

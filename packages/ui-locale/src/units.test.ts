@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { collectUnits, parseLocaleMap, translate } from "./units.ts";
 
 const rewrite = (code: string, entries: Record<string, string>, file = "x.tsx") =>
-    translate(code, file, parseLocaleMap(entries))?.code;
+    translate(code, file, [{ locale: "uk", map: parseLocaleMap(entries) }])?.code;
 
 describe("translate", () => {
   it("translates JSX text across lines and keeps its surrounding whitespace", () => {
@@ -51,7 +51,7 @@ describe("translate", () => {
   });
 
   it("returns null when nothing matches", () => {
-    expect(translate(`const a = "x";`, "x.ts", new Map())).toBeNull();
+    expect(translate(`const a = "x";`, "x.ts", [{ locale: "uk", map: new Map() }])).toBeNull();
   });
 });
 

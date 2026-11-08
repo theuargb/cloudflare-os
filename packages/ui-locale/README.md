@@ -5,10 +5,10 @@ English strings of `workshop-frontend/src` and `ui/src` with the entries of `loc
 as they are built, and sets `<html lang>`.
 
 ```sh
-VITE_UI_LOCALE=uk pnpm exec vp run --no-cache -F @gadgets/workshop-frontend build
+VITE_UI_LOCALES=uk,ka pnpm exec vp run --no-cache -F @gadgets/workshop-frontend build
 ```
 
-Without `VITE_UI_LOCALE` the build and every test stay English.
+Without `VITE_UI_LOCALES` the build and every test stay English.
 
 ## The map
 
@@ -34,3 +34,16 @@ pnpm --filter @gadgets/ui-locale report uk packages/workshop-frontend/src packag
 
 lists the English units that files with at least one translation still lack. Translate the ones
 meant for readers and add them to the map.
+
+## Several languages at once
+
+`VITE_UI_LOCALES=uk,ka` (comma-separated, the first is the default) builds every language into one
+bundle: each translated unit becomes a choice resolved from the runtime locale, so switching language
+needs a reload but no second build. `<html lang>` starts as the first locale; the Workshop frontend
+reads the user's `ui.locale` preference and `LocaleMenu` switches it. `VITE_UI_LOCALES=uk` (or the
+legacy single value) inlines the one language and renders no menu. A locale needs its own
+`locales/<locale>.json` with the same keys as `uk.json`; a missing entry stays English.
+
+The plugin is reusable outside the Workshop: `uiLocalePlugin({ locales, mapFor, runtime })` takes a
+per-file map lookup, so a host project can translate its own sources (PEAK does, from
+Ukrainian, with per-package `locales/ka.json` maps).

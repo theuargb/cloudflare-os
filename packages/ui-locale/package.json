@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "type": "module",
   "exports": {
+    "./units": {
+      "types": "./src/units.ts",
+      "import": "./src/units.ts"
+    },
     "./vite": {
       "types": "./src/vite.ts",
       "import": "./src/vite.ts"
