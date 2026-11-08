@@ -2,7 +2,8 @@
  * Brand typefaces shared by every Workshop surface: the shell and the sandboxed gatekeeper apps.
  * Import it from an app stylesheet; the bundler resolves these relative URLs, so the shell ships
  * hashed font assets and the single-file gatekeeper apps inline them as `data:` URIs (their CSP is
- * `font-src data:`). See LICENSE.md for provenance and the 500–600 → Medium mapping.
+ * `font-src data:`). See LICENSE.md for provenance and the 500–600 → Medium mapping. These are the
+ * default (Ukrainian/English) faces; other languages pin theirs in `fonts/<locale>.css`.
  */
 
 @font-face {

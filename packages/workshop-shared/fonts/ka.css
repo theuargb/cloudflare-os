@@ -1,0 +1,58 @@
+/*
+ * Georgian (`lang="ka"`) typeface: FiraGO, the face Georgia's e-government sites use (rs.ge,
+ * napr.gov.ge). e-Ukraine, the default in fonts.css, has no Georgian glyphs.
+ *
+ * Nothing here applies to other languages: the tokens sit under `:root:lang(ka)`, and `lang` is set
+ * on <html> by the shell and by the PEAK frame from the user's UI language. A browser fetches a face
+ * only when text uses it, so a Ukrainian user never downloads these files. Cyrillic (server text
+ * that stays Ukrainian) is not in the subset and falls through to e-Ukraine.
+ *
+ * Convention for another language: `fonts/<locale>.css` with its @font-face rules and a
+ * `:root:lang(<locale>)` token rule, exported as `./fonts-<locale>.css`. Import it next to
+ * fonts.css in the stylesheets of the surfaces that localize. See LICENSE.md for provenance.
+ */
+
+@font-face {
+  font-family: "FiraGO";
+  src: url("./FiraGO/FiraGO-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "FiraGO";
+  src: url("./FiraGO/FiraGO-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "FiraGO";
+  src: url("./FiraGO/FiraGO-SemiBold.woff2") format("woff2");
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "FiraGO";
+  src: url("./FiraGO/FiraGO-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+
+/* Unlayered, like fonts.css: `:root:lang(ka)` outranks its `:root, :host` whatever the import order. */
+:root:lang(ka) {
+  --font-sans: "FiraGO", "e-Ukraine", -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto",
+    "Helvetica Neue", sans-serif;
+  --font-heading: "FiraGO", "e-Ukraine Head", "e-Ukraine", -apple-system, BlinkMacSystemFont,
+    "Segoe UI", "Roboto", "Helvetica Neue", sans-serif;
+}
+
+/*
+ * FiraGO has no Mtavruli (the capital Georgian letters U+1C90–1CBF), which browsers substitute for
+ * `text-transform: uppercase`; the capitals would render in a fallback face. Mkhedruli is the
+ * everyday script and is read as it is, so Georgian UI keeps its own case.
+ */
+:root:lang(ka) * {
+  text-transform: none;
+}

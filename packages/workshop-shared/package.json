@@ -39,7 +39,8 @@
       "types": "./src/theme.ts",
       "import": "./src/theme.ts"
     },
-    "./fonts.css": "./fonts/fonts.css"
+    "./fonts.css": "./fonts/fonts.css",
+    "./fonts-ka.css": "./fonts/ka.css"
   },
   "scripts": {
     "build": "tsc",
