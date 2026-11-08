@@ -2,6 +2,7 @@
 @import "@cloudflare/kumo/styles";
 @import "tailwindcss";
 @import "@gadgets/workshop-shared/fonts.css";
+@import "@gadgets/workshop-shared/fonts-ka.css";
 @custom-variant dark (&:where([data-mode="dark"], [data-mode="dark"] *));
 
 @theme {
