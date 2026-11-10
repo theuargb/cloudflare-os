@@ -85,7 +85,8 @@ function FavoritesFlyout({ favorites }: { favorites: FavoritePage[] }) {
   )
 }
 
-function FavoriteList({ favorites, onOpen }: { favorites: FavoritePage[]; onOpen?: () => void }) {
+/** The favorite pages as a list of page rows (the open one marked); `onOpen` runs after a pick. */
+export function FavoriteList({ favorites, onOpen }: { favorites: FavoritePage[]; onOpen?: () => void }) {
   const pathname = useRouterState({ select: (state) => state.location.pathname })
   const openAt = useRouterState({ select: (state) => searchAt(state.location.search) })
   const openPath = openAt === null ? null : routePath(openAt)

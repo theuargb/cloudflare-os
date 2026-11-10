@@ -1,8 +1,8 @@
-import { Link, useRouterState, type LinkProps } from '@tanstack/react-router'
+import { Link, type LinkProps } from '@tanstack/react-router'
 import { ArrowSquareOut, CaretDown } from '@phosphor-icons/react'
-import { appRouteEntry } from '@gadgets/workshop-shared/app-host'
 import type { ReactElement, ReactNode } from 'react'
 import { preloadIntent } from '../../features/app-preload/appPreload'
+import { isNavRowActive, useNavLocation } from './navRowActive'
 
 /**
  * A single nav row in the sidebar: a TanStack <Link>, an external anchor, or — for a row with pages
@@ -43,12 +43,6 @@ export type SidebarItemProps = {
   pages?: { open?: boolean; onToggle?: (open: boolean, row: HTMLElement) => void; draggable?: boolean }
 }
 
-/** The app entry named by an open `/gatekeepers/<app>?at=<route>` location (null when the route names none). */
-function openAppEntry(search: unknown): string | null {
-  if (typeof search !== 'object' || search === null || !('at' in search) || typeof search.at !== 'string') return null
-  return appRouteEntry(search.at)
-}
-
 export default function SidebarItem({
   icon,
   label,
@@ -66,20 +60,8 @@ export default function SidebarItem({
   preload,
   pages,
 }: SidebarItemProps) {
-  // Resolve the active path manually so we can style the icon as well as the row. For parameterized
-  // routes (e.g. "/gatekeepers/$appId"), substitute the params so the resolved path can match.
-  const pathname = useRouterState({ select: (s) => s.location.pathname })
-  const openEntry = useRouterState({ select: (s) => openAppEntry(s.location.search) })
-  let target = typeof to === 'string' ? to : ''
-  if (params) {
-    for (const [key, value] of Object.entries(params as Record<string, string>)) {
-      target = target.replaceAll(`$${key}`, String(value))
-    }
-  }
-  const onPath = matchPrefix
-    ? pathname === target || pathname.startsWith(target + '/')
-    : pathname === target
-  const isActive = onPath && (!entry || openEntry === entry.id || (openEntry === null && entry.first))
+  // Resolved manually so we can style the icon as well as the row.
+  const isActive = isNavRowActive({ to, params, entry, matchPrefix }, useNavLocation())
   // A row with pages opens them in place (the active row by default); any other row nests under itself while active.
   const open = pages ? (pages.open ?? isActive) : isActive
 

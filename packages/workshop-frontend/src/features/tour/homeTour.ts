@@ -30,7 +30,7 @@ export const HOME_TOUR: Tour = {
       target: { host: 'sidebar-toggle' },
       side: 'right',
       title: 'Sidebar width',
-      body: 'Collapse the sidebar to a narrow rail when you need more room, and expand it again with the same button.',
+      body: 'Collapse the sidebar to a narrow rail or move it to a top bar when you need more room; the button beside the logo brings it back.',
     },
     {
       target: { host: 'sidebar-utilities' },

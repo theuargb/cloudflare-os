@@ -15,22 +15,14 @@ import { OPEN_COMMAND_PALETTE_EVENT } from './commandPaletteBus'
 import { KeptGatekeeperApp, KeptGatekeeperAppProvider } from '../../KeptGatekeeperApp'
 import TourHost, { useTourActive } from "../../features/tour/TourHost";
 import { useAppTextSize } from '../../features/app-text-size/useAppTextSize'
-
-const STORAGE_KEY_COLLAPSED = 'gadgets:sidebar-collapsed'
-
-// Read synchronously for the initial state so the rail doesn't flash open then collapse.
-function readCollapsed(): boolean {
-  try {
-    return localStorage.getItem(STORAGE_KEY_COLLAPSED) === '1'
-  } catch {
-    return false
-  }
-}
+import TopNavBar from '../../features/top-nav/TopNavBar'
+import { readNavLayout, saveNavLayout, type NavLayout } from '../../features/top-nav/navLayout'
 
 /**
  * The authenticated, non-fullscreen application chrome: a persistent left rail + a thin top notice
  * strip + the routed content. Replaces the old <Header /> on these routes. Chat and Gadget editor
- * pages are still rendered fullscreen by __root.tsx without this shell.
+ * pages are still rendered fullscreen by __root.tsx without this shell. On desktop the rail can be
+ * collapsed or moved into a top bar with megamenus (`NavLayout`, kept per browser).
  *
  * Mobile: below `md` the rail collapses to an overlay drawer triggered by a hamburger button in a
  * minimal top bar. We don't try to gracefully shrink the rail at narrow widths; the overlay model
@@ -45,7 +37,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 }
 
 function ShellFrame({ children }: { children: React.ReactNode }) {
-  const [collapsed, setCollapsed] = useState<boolean>(readCollapsed)
+  // Read synchronously for the initial state so the rail doesn't flash open then collapse.
+  const [layout, setLayout] = useState<NavLayout>(readNavLayout)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const drawerRef = useRef<HTMLDivElement>(null)
@@ -53,12 +46,9 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
   const connectionLost = useConnectionLost()
   useAppTextSize()
 
-  const toggleCollapsed = useCallback(() => {
-    setCollapsed((prev) => {
-      const next = !prev
-      try { localStorage.setItem(STORAGE_KEY_COLLAPSED, next ? '1' : '0') } catch {}
-      return next
-    })
+  const changeLayout = useCallback((next: NavLayout) => {
+    setLayout(next)
+    saveNavLayout(next)
   }, [])
 
   // Close mobile drawer when escape is pressed.
@@ -131,10 +121,16 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-full min-h-0 w-full overflow-hidden bg-kumo-base">
-      {/* Desktop sidebar — hidden on mobile in favor of the drawer. */}
-      <div className="hidden h-full md:flex">
-        <Sidebar collapsed={collapsed} onToggleCollapsed={toggleCollapsed} />
-      </div>
+      {/* Desktop sidebar — hidden on mobile in favor of the drawer, and in the top-bar layout. */}
+      {layout !== 'top' && (
+        <div className="hidden h-full md:flex">
+          <Sidebar
+            collapsed={layout === 'rail'}
+            onToggleCollapsed={() => changeLayout(layout === 'rail' ? 'sidebar' : 'rail')}
+            onMoveToTop={() => changeLayout('top')}
+          />
+        </div>
+      )}
 
       {/* Mobile drawer */}
       {mobileOpen && (
@@ -163,6 +159,7 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
         inert={mobileOpen ? true : undefined}
         aria-hidden={mobileOpen ? true : undefined}
       >
+        {layout === 'top' && <TopNavBar onMoveToSidebar={() => changeLayout('sidebar')} />}
         {/* Top bar. Same height as the sidebar's brand row (h-14) so they read as one continuous
             chrome strip across the top. Mostly empty — carries the mobile hamburger on the left,
             any admin TopBarNotice centered, and the reconnecting chip on the right. */}

@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { ArrowLeft, Hexagon, MagnifyingGlass, SidebarSimple } from '@phosphor-icons/react'
+import { ArrowLeft, BrowserIcon, Hexagon, MagnifyingGlass, SidebarSimple } from '@phosphor-icons/react'
 import { useSiteName } from '../../ServerConfigContext'
 import SiteLogo from '../SiteLogo'
 import { useGatekeeperApps } from '../../useGatekeeperApps'
@@ -28,10 +28,13 @@ import { SidebarNav } from '../../features/sidebar-customization/SidebarNav'
 export default function Sidebar({
   collapsed,
   onToggleCollapsed,
+  onMoveToTop,
   drawer = false,
 }: {
   collapsed: boolean
   onToggleCollapsed: () => void
+  /** Moves the navigation into the top bar; absent in the mobile drawer. */
+  onMoveToTop?: () => void
   /** The mobile drawer instance rather than the desktop rail. */
   drawer?: boolean
 }) {
@@ -82,6 +85,17 @@ export default function Sidebar({
             >
               <MagnifyingGlass size={15} />
             </button>
+            {onMoveToTop && (
+              <button
+                type="button"
+                onClick={onMoveToTop}
+                aria-label="Move navigation to the top bar"
+                title="Move navigation to the top bar"
+                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-kumo-inactive transition-colors hover:bg-kumo-tint hover:text-kumo-default"
+              >
+                <BrowserIcon size={15} />
+              </button>
+            )}
             <button
               type="button"
               data-tour="sidebar-toggle"
@@ -109,6 +123,17 @@ export default function Sidebar({
           <SidebarSimple size={15} className="rotate-180" />
         </button>
       )}
+      {collapsed && onMoveToTop && (
+        <button
+          type="button"
+          onClick={onMoveToTop}
+          aria-label="Move navigation to the top bar"
+          title="Move navigation to the top bar"
+          className="mx-auto mt-1 flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-kumo-inactive transition-colors hover:bg-kumo-tint hover:text-kumo-default"
+        >
+          <BrowserIcon size={15} />
+        </button>
+      )}
 
       <SidebarWorkspacesProvider>
         {/* Keep essential controls outside the scrolling content. */}
@@ -132,7 +157,7 @@ export default function Sidebar({
         </div>
       </SidebarWorkspacesProvider>
 
-      <SidebarUtilityStrip collapsed={collapsed} />
+      <SidebarUtilityStrip layout={collapsed ? 'rail' : 'sidebar'} />
       {inNativeApp() && (
         <button
           type="button"
