@@ -76,7 +76,7 @@ import { reportIssue } from "@gadgets/observability/error-reporting";
 import type { ProductAnalyticsConnectionType, ProductAnalyticsGadgetInput } from "./analytics";
 import { checkUsageAndBalance } from "./ai-gateway-billing/limits/usage-checker";
 import { normalizeAgentCatalog } from "./agent-catalog";
-import { isDeploymentAdmin } from "./admin-authorization";
+import { isDeploymentAdmin } from "./auth/config.js";
 import { refreshCachedBalance } from "./ai-gateway-billing/cloudflare/connection-service";
 import { SharingManager, SharingCaller, accessIncludesGadget } from "./sharing";
 import {
@@ -6400,7 +6400,7 @@ class OverseerImpl implements AgentHooks {
       // `idFromString()` does not retain the Durable Object ID's original name, so use the
       // authenticated profile's canonical ID (whoami above), which is the username checked by
       // AuthenticatedApi.#isAdmin().
-      isAdmin: isDeploymentAdmin(this.env.ADMINS, profile.id),
+      isAdmin: isDeploymentAdmin(this.env, profile.id),
     };
   }
 
