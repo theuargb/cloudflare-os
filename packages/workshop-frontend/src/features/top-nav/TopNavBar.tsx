@@ -14,6 +14,7 @@ import { openCommandPalette } from '../../components/AppShell/commandPaletteBus'
 import { FavoriteList } from '../app-section-nav/FavoritePages'
 import { useFavoritePages } from '../app-section-nav/favoritePages'
 import { inNativeApp, returnToInstalls } from '../native-app/nativeApp'
+import { UnreadSummary } from '../notifications/UnreadSummary'
 import { useUserPreference } from '../user-preferences/userPreferences'
 import { SIDEBAR_LAYOUT_PREFERENCE, parseSidebarLayout, resolveSidebar } from '../sidebar-customization/sidebarLayout'
 import { buildSidebarDefaults } from '../sidebar-customization/sidebarNavDefs'
@@ -170,6 +171,7 @@ export default function TopNavBar({ onMoveToSidebar }: { onMoveToSidebar: () => 
 
         <TopNavMenu face={<StackIcon size={16} />} label="Workspaces" active={false} menu={menu('workspaces')} wide>
           <div className="pt-1">
+            <UnreadSummary collapsed={false} />
             <SidebarWorkspacesLists />
           </div>
         </TopNavMenu>

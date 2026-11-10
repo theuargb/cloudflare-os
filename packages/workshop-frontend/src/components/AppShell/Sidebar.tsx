@@ -152,6 +152,7 @@ export default function Sidebar({
           <SidebarNav apps={gatekeeperApps} navigation={appNavigation} collapsed={collapsed} drawer={drawer} />
 
           <div className="mt-1" data-tour="sidebar-workspaces">
+            <UnreadSummary collapsed={collapsed} />
             <SidebarWorkspacesLists collapsed={collapsed} />
           </div>
         </div>
