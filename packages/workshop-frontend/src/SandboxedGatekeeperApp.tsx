@@ -15,6 +15,7 @@ import { isAppId, isAppRoute, type AppRouteMode, type GatekeeperAppRouteReceiver
 import type { GatekeeperAppHost, GatekeeperAppTourLocator } from '@gadgets/workshop-shared/app-host'
 import { sanitizeTour, type Tour } from "@gadgets/workshop-shared/tour";
 import { locateInFrame } from "./features/tour/frameTarget";
+import { appHistoryBack } from './features/app-history/appHistory'
 import { dropAppTours, requestTour } from "./features/tour/tourStore";
 import { sanitizeAppSectionNav, sanitizeAppTitle, type GatekeeperAppSectionNavReceiver } from '@gadgets/workshop-shared/app-host'
 import { isAppTopbarAnchor, sanitizeAppTopbar, type AppTopbarAction, type GatekeeperAppTopbarReceiver } from '@gadgets/workshop-shared/app-host'
@@ -81,6 +82,7 @@ type StartTour = (tour: Tour, locator: RpcStub<GatekeeperAppTourLocator>, replay
 type AppRouting = {
   current: () => string,
   report: (route: string, mode: AppRouteMode) => void,
+  back: (path: string | undefined) => boolean,
   openApp: (appId: string, route: string, newTab: boolean) => void,
   refreshNavigation: () => void,
 }
@@ -337,6 +339,13 @@ class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
     followAppTitle(this.#appId, this, route)
     this.#unseen = [...this.#unseen.slice(1 - MAX_UNSEEN_ROUTES), route]
     this.#routing.report(route, mode ?? 'replace')
+  }
+
+  // The app's «До списку» / close: Back past the current screen when the screen before it is this app
+  // (at `path` when given); false lets the app navigate itself.
+  back(path?: unknown): boolean {
+    if (path !== undefined && !isAppRoute(path)) throw new TypeError('Invalid app route.')
+    return this.#routing.back(path)
   }
 
   // The Workshop URL shows `route` (every change while the app is on screen, and once more when it
@@ -688,6 +697,7 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, rout
         {
           current: () => routeRef.current,
           report: (next, mode) => onRouteChangeRef.current?.(next, mode),
+          back: (path) => appHistoryBack(handlersRef.current.router, gatekeeperVendorId, path),
           openApp: (appId, at, newTab) => {
             const { navigate, router } = handlersRef.current;
             const target = { to: '/gatekeepers/$appId', params: { appId }, search: at ? { at } : {} } as const

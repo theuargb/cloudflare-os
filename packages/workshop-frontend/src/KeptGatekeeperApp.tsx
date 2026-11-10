@@ -1,7 +1,8 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
-import { useNavigate } from '@tanstack/react-router'
+import { useNavigate, useRouter } from '@tanstack/react-router'
 import type { AppRouteMode } from '@gadgets/workshop-shared/app-host'
 import GatekeeperAppPage from './GatekeeperAppPage'
+import { trackAppHistory } from './features/app-history/appHistory'
 
 /** The app the `/gatekeepers/$appId` route shows: its id and the app route from the URL (`at`). */
 type ShownApp = { appId: string, route: string }
@@ -30,8 +31,11 @@ function useKeptApp(): KeptAppState {
  * other page shows it at once, at the screen it was left on, without reloading the frame.
  */
 export function KeptGatekeeperAppProvider({ children }: { children: ReactNode }) {
+  const router = useRouter()
   const [app, setApp] = useState<ShownApp | null>(null)
   const [active, setActive] = useState(false)
+  // Which app screen each history entry shows, so an app's «back» can tell the previous screen.
+  useEffect(() => trackAppHistory(router), [router])
   const show = useCallback((next: ShownApp) => {
     setApp((current) => (current?.appId === next.appId && current.route === next.route ? current : next))
     setActive(true)

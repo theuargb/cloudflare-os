@@ -211,6 +211,12 @@ export interface GatekeeperAppHost extends RpcTarget {
    * decides whether Back returns to the previous screen. Invalid routes or modes throw.
    */
   reportRoute(route: string, mode?: AppRouteMode): void;
+  /**
+   * Go Back in the Workshop history past the entries of the current screen (same app, same route path)
+   * when the entry before them shows this app — at `path` (a route without `?…`) when given. Returns
+   * whether it went back; on `false` the app navigates itself. Invalid paths throw.
+   */
+  back(path?: string): boolean;
   /** Open the Workshop's ⌘K launcher; keystrokes inside the frame never reach the Workshop. */
   openSearch(): void;
   /**
