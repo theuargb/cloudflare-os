@@ -26,7 +26,9 @@ export function PageRow({ appId, section, current, live, detail, onOpen, favorit
   const KindIcon = section.kind ? KIND_ICONS[section.kind] : undefined
   const className = [
     'group flex h-11 w-full items-center gap-2 rounded-md px-2 text-left text-(length:--app-fs-14) transition-colors md:h-8 md:text-(length:--app-fs-13)',
-    current ? 'bg-kumo-fill font-medium text-kumo-strong' : 'cursor-pointer text-kumo-default hover:bg-kumo-tint',
+    current
+      ? 'bg-kumo-fill font-medium text-kumo-strong'
+      : section.unavailable ? 'cursor-default text-kumo-inactive' : 'cursor-pointer text-kumo-default hover:bg-kumo-tint',
     favorite ? 'pr-8' : '',
   ].join(' ')
   const content = (
@@ -47,6 +49,18 @@ export function PageRow({ appId, section, current, live, detail, onOpen, favorit
       )}
     </>
   )
+  // A page that cannot be opened yet (its module is not set up) is listed, muted, so the module's extent stays visible.
+  if (section.unavailable && !current) {
+    return (
+      <span
+        aria-disabled="true"
+        title="Available after setup"
+        className={className}
+      >
+        {content}
+      </span>
+    )
+  }
   // Kept loose: the generated route-tree union is stricter than is convenient here (as in SidebarItem).
   const linkProps = { to: '/gatekeepers/$appId', params: { appId }, search: { at: route } } as unknown as LinkProps
   const row = live ? (

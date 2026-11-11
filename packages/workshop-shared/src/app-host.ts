@@ -66,9 +66,16 @@ export type AppWorkplaces = {
  * One sidebar section an app publishes (AppNavigation.sidebar); the Workshop merges it with other
  * apps' sections of the same title and orders sections by `order` (VendorGroup.order). Items are
  * entries: each route carries `entry=<id>` (APP_ENTRY_PARAM), which drives the row highlight.
- * `links` are rows that open an external page in a new tab.
+ * `links` are rows that open an external page in a new tab. `icon` marks the section's header (an
+ * `AvatarImage`, kept structural); the rows under a header carry no icons in the expanded rail.
  */
-export type AppSidebarGroup = { title: string; order: number; items: AppEntry[]; links?: AppExternalLink[] };
+export type AppSidebarGroup = {
+  title: string;
+  order: number;
+  icon?: { url: string };
+  items: AppEntry[];
+  links?: AppExternalLink[];
+};
 
 /**
  * What a management app exposes to the host shell: its launcher actions (topbar menus and ⌘K) and,
@@ -118,8 +125,19 @@ export function isAppRoute(route: unknown): route is string {
 /** What a screen is, for its icon in the Workshop sidebar: a section kind, or the app's own documentation. */
 export type AppNavSectionKind = AppSectionKind | "instructions";
 
-/** One screen of the open app, in navigation order; `route` opens it from anywhere (favorite pages). */
-export type AppNavSection = { id: string; label: string; count?: number; kind?: AppNavSectionKind; route?: string };
+/**
+ * One screen of the app, in navigation order; `route` opens it from anywhere (favorite pages).
+ * `unavailable`: the page cannot be opened yet (e.g. its
+ * module is not set up); the host shows it muted and not clickable.
+ */
+export type AppNavSection = {
+  id: string;
+  label: string;
+  count?: number;
+  kind?: AppNavSectionKind;
+  route?: string;
+  unavailable?: true;
+};
 
 /**
  * The open screen's navigation a sandboxed app publishes for the Workshop sidebar
@@ -381,7 +399,7 @@ function sanitizeAppSidebar(raw: unknown): AppSidebarGroup[] | undefined {
   for (let group of raw) {
     if (result.length >= MAX_SIDEBAR_GROUPS || count >= MAX_SIDEBAR_ITEMS) break;
     if (typeof group !== "object" || group === null) continue;
-    let { title, order, items, links } = group as Record<string, unknown>;
+    let { title, order, icon, items, links } = group as Record<string, unknown>;
     if (typeof title !== "string" || !title.trim() || typeof order !== "number" || !Number.isFinite(order)) continue;
     if (!Array.isArray(items)) continue;
     let kept: AppEntry[] = [];
@@ -402,6 +420,8 @@ function sanitizeAppSidebar(raw: unknown): AppSidebarGroup[] | undefined {
     }
     if (kept.length === 0 && keptLinks.length === 0) continue;
     let clean: AppSidebarGroup = { title: title.trim().slice(0, MAX_GROUP), order, items: kept };
+    let url = typeof icon === "object" && icon !== null ? (icon as Record<string, unknown>).url : undefined;
+    if (typeof url === "string") clean.icon = { url };
     if (keptLinks.length > 0) clean.links = keptLinks;
     result.push(clean);
   }
@@ -609,6 +629,57 @@ export function sanitizeAppInbox(raw: unknown): AppInbox {
   return { unread: count, items: result };
 }
 
+/**
+ * One work queue of the actor (GatekeeperUser.getWork): rows that wait for them in an app, e.g.
+ * "Statement lines to post" with its open count. A click opens the app at `route`. Plain data from an
+ * untrusted app: the host validates and truncates it.
+ */
+export type AppWorkItem = {
+  id: string;
+  title: string;
+  /** The module or area the queue belongs to. */
+  group?: string;
+  /** Id of the `AppNavigation.modules` row of the queue (its icon), for apps that publish several modules. */
+  module?: string;
+  /** What narrows it, e.g. the organization when the actor works in several. */
+  subtitle?: string;
+  /** Open items; the app sends only non-empty queues. */
+  count: number;
+  route: string;
+};
+
+/** The actor's work queues in the app's own order. */
+export type AppWork = { items: AppWorkItem[] };
+
+/** Most queues the host keeps per app. */
+export const MAX_WORK_ITEMS = 40;
+
+/** Keep well-formed queues with a positive count from an untrusted app, capped. */
+export function sanitizeAppWork(raw: unknown): AppWork {
+  if (typeof raw !== "object" || raw === null) return { items: [] };
+  let { items } = raw as Record<string, unknown>;
+  let ids: Record<string, true> = {};
+  let result: AppWorkItem[] = [];
+  for (let item of Array.isArray(items) ? items : []) {
+    if (result.length >= MAX_WORK_ITEMS) break;
+    if (typeof item !== "object" || item === null) continue;
+    let { id, title, group, module, subtitle, count, route } = item as Record<string, unknown>;
+    if (typeof id !== "string" || !NAV_ID.test(id) || ids[id] || typeof title !== "string" || !title.trim()) continue;
+    if (typeof count !== "number" || !Number.isFinite(count) || count < 1 || !isAppRoute(route)) continue;
+    ids[id] = true;
+    result.push({
+      id,
+      title: title.slice(0, MAX_TEXT),
+      group: typeof group === "string" && group ? group.slice(0, MAX_GROUP) : undefined,
+      module: typeof module === "string" && NAV_ID.test(module) ? module : undefined,
+      subtitle: typeof subtitle === "string" && subtitle ? subtitle.slice(0, MAX_TEXT) : undefined,
+      count: Math.floor(count),
+      route,
+    });
+  }
+  return { items: result };
+}
+
 const NAV_ID = /^[a-z0-9][a-z0-9_./:-]{0,95}$/i;
 const MAX_NAV_SECTIONS = 64;
 const NAV_SECTION_KINDS: Record<AppNavSectionKind, true> = {
@@ -646,6 +717,7 @@ function navSection(id: string, label: string, count: number | undefined, item: 
   if (count !== undefined) section.count = count;
   if (typeof item.kind === "string" && Object.hasOwn(NAV_SECTION_KINDS, item.kind)) section.kind = item.kind as AppNavSectionKind;
   if (isAppRoute(item.route)) section.route = item.route;
+  if (item.unavailable === true) section.unavailable = true;
   return section;
 }
 

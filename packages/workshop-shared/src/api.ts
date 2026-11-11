@@ -28,7 +28,7 @@ import { AccountDescription, ActionKind, ActionDescription, AgentCatalog, Avatar
 import type { VendorGroup } from "./gatekeeper.js";
 import type { CodeChange } from "./code-change.js";
 import type { GitOid } from "./gatekeeper.js";
-import type { AppInbox, AppNavigation, AppSearchHit, AppEntry } from "./app-host.js";
+import type { AppInbox, AppNavigation, AppSearchHit, AppEntry, AppWork } from "./app-host.js";
 import type { UiFeatureFlags } from "./feature-flags.js";
 
 export const SERVICE_SALT = new Uint8Array([
@@ -1257,6 +1257,9 @@ export interface AuthenticatedApi extends RpcTarget {
   /** Mark entries of the topbar inbox read at the provider; an empty `ids` marks all of them. */
   markInboxRead(ids: string[]): Promise<void>;
 
+  /** Work queues of every UI-providing gatekeeper (home screen and launcher), validated and truncated; apps without queues are omitted. */
+  getWork(): Promise<GatekeeperWork[]>;
+
   // --- Deployment admin ---
 
   /**
@@ -1305,6 +1308,12 @@ export type GatekeeperAppInfo = {
  * Empty when the app has none, failed, or did not answer in time.
  */
 export type GatekeeperAppNavigation = AppNavigation & {
+  /** The vendor id (same as GatekeeperAppInfo.id). */
+  appId: string;
+};
+
+/** One app's work queues (AuthenticatedApi.getWork). */
+export type GatekeeperWork = AppWork & {
   /** The vendor id (same as GatekeeperAppInfo.id). */
   appId: string;
 };

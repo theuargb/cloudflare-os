@@ -17,7 +17,7 @@ import { inNativeApp, returnToInstalls } from '../native-app/nativeApp'
 import { UnreadSummary } from '../notifications/UnreadSummary'
 import { useUserPreference } from '../user-preferences/userPreferences'
 import { SIDEBAR_LAYOUT_PREFERENCE, parseSidebarLayout, resolveSidebar } from '../sidebar-customization/sidebarLayout'
-import { buildSidebarDefaults } from '../sidebar-customization/sidebarNavDefs'
+import { GroupIcon, buildSidebarDefaults } from '../sidebar-customization/sidebarNavDefs'
 import { topNavItems, type TopNavItem } from './topNavItems'
 import { PANEL_TITLE, TopNavMenu, TriggerFace, triggerClass, type TopNavMenuState } from './TopNavMenu'
 import { TopNavColumns, TopNavRowItem } from './TopNavColumn'
@@ -29,9 +29,9 @@ const ICON_BUTTON =
 const BRAND_BUTTON =
   'press flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-kumo-inactive transition-colors hover:bg-kumo-tint hover:text-kumo-default'
 
-/** The face an item shows on the bar (also rendered in the hidden measuring row): text only, a caret on menus. */
+/** The face an item shows on the bar (also rendered in the hidden measuring row): a group's icon, the label, a caret on menus. */
 function itemFace(item: TopNavItem) {
-  if (item.kind === 'group') return <TriggerFace label={item.title} caret />
+  if (item.kind === 'group') return <TriggerFace icon={<GroupIcon icon={item.icon} />} label={item.title} caret />
   const external = item.def.href ? <ArrowSquareOutIcon size={12} aria-hidden className="shrink-0" /> : undefined
   return <TriggerFace label={item.label} caret={item.def.pages !== undefined} trailing={external} />
 }

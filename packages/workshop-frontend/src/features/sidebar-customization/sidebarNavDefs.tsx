@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import type { LinkProps } from '@tanstack/react-router'
-import { GlobeSimple, House } from '@phosphor-icons/react'
+import { FolderSimple, GlobeSimple, House } from '@phosphor-icons/react'
 import type { GatekeeperAppInfo, GatekeeperAppNavigation } from '@gadgets/workshop-shared/api'
 import type { AppEntry, AppExternalLink, AppNavSection } from '@gadgets/workshop-shared/app-host'
 import { GatekeeperAppIcon } from '../../components/GatekeeperAppIcon'
@@ -30,6 +30,13 @@ export type SidebarNavDefaults = {
   items: Map<string, SidebarItemDef>
   /** Module-declared group titles by container key. */
   groupTitles: Map<string, string>
+  /** Module-declared group header icons by container key (`AppSidebarGroup.icon`). */
+  groupIcons: Map<string, { url: string }>
+}
+
+/** A module group's icon (`AppSidebarGroup.icon`) in the sidebar header and on the top bar; a neutral folder when the group declares none. */
+export function GroupIcon({ icon }: { icon: { url: string } | undefined }) {
+  return icon ? <GatekeeperAppIcon app={{ icon }} /> : <FolderSimple size={14} aria-hidden />
 }
 
 const HOME: SidebarItemDef = {
@@ -70,7 +77,14 @@ const appItems = (app: GatekeeperAppInfo): SidebarItemDef[] => {
   return app.entries.map((entry, index) => entryItem(app, entry, index === 0))
 }
 
-type Container = { key: string; title: string; order: number | undefined; sidebarItems: string[]; appItems: string[] }
+type Container = {
+  key: string
+  title: string
+  order: number | undefined
+  icon?: { url: string }
+  sidebarItems: string[]
+  appItems: string[]
+}
 
 /**
  * The sidebar as modules declare it: Home, ungrouped apps, then the groups. An app that publishes a
@@ -88,15 +102,16 @@ export const buildSidebarDefaults = (apps: GatekeeperAppInfo[], navigation: Gate
 
   const main = [add(HOME)]
   const containers: Container[] = []
-  const container = (title: string, order: number | undefined): Container => {
+  const container = (title: string, order: number | undefined, icon?: { url: string }): Container => {
     const key = `group:${title}`
     let found = containers.find((candidate) => candidate.key === key)
     if (!found) {
-      found = { key, title, order, sidebarItems: [], appItems: [] }
+      found = { key, title, order, icon, sidebarItems: [], appItems: [] }
       containers.push(found)
     } else if (order !== undefined && (found.order === undefined || order < found.order)) {
       found.order = order
     }
+    found.icon ??= icon
     return found
   }
 
@@ -105,7 +120,7 @@ export const buildSidebarDefaults = (apps: GatekeeperAppInfo[], navigation: Gate
     if (tree) {
       let first = true
       for (const group of tree) {
-        const target = container(group.title, group.order)
+        const target = container(group.title, group.order, group.icon)
         for (const entry of group.items) {
           target.sidebarItems.push(add(entryItem(app, entry, first)))
           first = false
@@ -124,5 +139,6 @@ export const buildSidebarDefaults = (apps: GatekeeperAppInfo[], navigation: Gate
     structure: { main, groups: sorted.map(({ key, sidebarItems, appItems }) => ({ key, items: [...sidebarItems, ...appItems] })) },
     items,
     groupTitles: new Map(sorted.map(({ key, title }) => [key, title])),
+    groupIcons: new Map(sorted.flatMap(({ key, icon }) => (icon ? [[key, icon] as const] : []))),
   }
 }

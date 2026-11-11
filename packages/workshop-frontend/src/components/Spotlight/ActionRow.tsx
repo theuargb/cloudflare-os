@@ -42,7 +42,9 @@ export function ActionRow({ entry, ...row }: Omit<RowProps, 'children' | 'onPick
         </span>
         {entry.section && <span className="truncate text-[11.5px] leading-4 text-kumo-inactive">{entry.section}</span>}
       </span>
-      <KindPill kind={entry.kind} />
+      {entry.count === undefined
+        ? <KindPill kind={entry.kind} />
+        : <span className="shrink-0 rounded-full bg-kumo-brand/10 px-2 py-0.5 text-[12px] font-medium tabular-nums leading-4 text-kumo-brand">{entry.count}</span>}
       <kbd className={['hidden w-5 shrink-0 text-center font-sans text-[12px] text-kumo-inactive sm:block', row.active ? 'visible' : 'invisible'].join(' ')}>↵</kbd>
     </Row>
   )

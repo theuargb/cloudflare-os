@@ -7,6 +7,7 @@ import MeshBackground from "../components/MeshBackground";
 import HomeTaskSuggestions from "../components/AppShell/HomeTaskSuggestions";
 import { UpdateAvailableNotice } from "../features/deployment-updates/UpdateAvailableNotice";
 import QuickActions from "../components/Spotlight/QuickActions";
+import MyWork from "../features/app-work/MyWork";
 import { useAuthenticatedApi } from "../AuthContext";
 import { RpcStub } from "capnweb";
 import {
@@ -220,6 +221,9 @@ export function HomePageContent({ prompt }: HomeSearch) {
               : undefined}
           />
         </div>
+
+        {/* My work: what waits for the user in the management apps, with open counts. */}
+        <MyWork />
 
         {/* Quick actions: recent and featured module actions; the full catalog is ⌘K. */}
         <QuickActions query={actionQuery} />

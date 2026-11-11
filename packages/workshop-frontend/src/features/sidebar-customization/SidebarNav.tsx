@@ -23,7 +23,7 @@ import {
   setSidebarLabel,
   type SidebarLayout,
 } from './sidebarLayout'
-import { buildSidebarDefaults, type SidebarItemDef } from './sidebarNavDefs'
+import { GroupIcon, buildSidebarDefaults, type SidebarItemDef } from './sidebarNavDefs'
 import { GROUP_ATTRIBUTE, useSidebarDrag } from './useSidebarDrag'
 
 /** User preference key of the closed groups (JSON array of container keys). */
@@ -44,7 +44,9 @@ const HOME_KEY = 'builtin:home'
 
 /**
  * The sidebar's navigation: built-in rows, the user's favorite pages, ungrouped module apps and
- * module groups (or an app's own sidebar tree from its navigation). Per-user order, group
+ * module groups (or an app's own sidebar tree from its navigation). A group header carries the
+ * group's icon and its rows lead with the expand caret instead of their own icons (the collapsed rail
+ * keeps the row icons: it has no headers). Per-user order, group
  * membership, labels and closed groups are layered over the module defaults and kept on the server
  * (user preferences), so every browser of the user shows the same sidebar.
  */
@@ -109,7 +111,7 @@ export const SidebarNav = ({
     if (open && def.appId && !preloadAppRoute(def.appId, route)) warmApp(def.appId, route)
   }
 
-  const renderRow = (def: SidebarItemDef): ReactNode => {
+  const renderRow = (def: SidebarItemDef, grouped: boolean): ReactNode => {
     const label = layout.labels[def.key] ?? def.label
     if (editingKey === def.key && customizable) {
       return (
@@ -117,7 +119,7 @@ export const SidebarNav = ({
           key={def.key}
           className="flex h-11 items-center gap-2.5 rounded-lg bg-kumo-tint px-2.5 ring-2 ring-kumo-ring md:h-7"
         >
-          <span className="flex h-5 w-5 shrink-0 items-center justify-center text-kumo-subtle">{def.icon}</span>
+          <span className="flex h-5 w-5 shrink-0 items-center justify-center text-kumo-subtle">{grouped ? null : def.icon}</span>
           <SidebarLabelEditor
             initialValue={label}
             defaultLabel={def.label}
@@ -136,6 +138,7 @@ export const SidebarNav = ({
         entry={def.entry}
         label={label}
         icon={def.icon}
+        grouped={grouped}
         collapsed={collapsed}
         endAction={customizable ? <RenameButton label={label} onClick={() => setEditingKey(def.key)} /> : undefined}
         nested={def.appId && !collapsed ? (active) => <AppSectionTree appId={def.appId!} entry={def.entry} drawer={drawer} rowLabel={label} active={active} pages={def.pages} /> : undefined}
@@ -153,10 +156,10 @@ export const SidebarNav = ({
     )
   }
 
-  const rows = (keys: string[]) =>
+  const rows = (keys: string[], grouped = false) =>
     keys.flatMap((key) => {
       const def = defaults.items.get(key)
-      return def ? [renderRow(def)] : []
+      return def ? [renderRow(def, grouped)] : []
     })
 
   // Favorite pages sit right under Home (first when the user dragged Home elsewhere).
@@ -220,6 +223,7 @@ export const SidebarNav = ({
           }
           const group = run.groups[0]!;
           const title = defaults.groupTitles.get(group.key) ?? group.key
+          const icon = defaults.groupIcons.get(group.key)
           const label = layout.labels[group.key] ?? title
           const open = !closed.includes(group.key) && !groupDrag
           const editing = editingKey === group.key
@@ -237,7 +241,7 @@ export const SidebarNav = ({
               data-tour="sidebar-group"
               data-tour-group={title}
               className={[
-                'relative mt-2 flex flex-col px-2',
+                'relative mt-3 flex flex-col px-2',
                 drag.dragging?.key === group.key ? 'opacity-50' : '',
               ].join(' ')}
               {...dragProps(drag.itemZoneProps(group.key))}
@@ -256,16 +260,14 @@ export const SidebarNav = ({
                 {...(customizable && !editing ? drag.groupHandleProps(group.key) : {})}
                 aria-expanded={editing ? undefined : open}
                 className={[
-                  'group/section flex h-6 items-center gap-1 rounded-md px-1.5 text-(length:--app-fs-11) font-medium uppercase tracking-[0.06em] text-kumo-inactive transition-colors hover:text-kumo-subtle',
-                  editing ? '' : 'cursor-pointer',
+                  'group/section flex h-11 items-center gap-2.5 rounded-lg px-2.5 text-(length:--app-fs-14) font-semibold text-kumo-strong transition-colors md:h-7 md:text-(length:--app-fs-13)',
+                  editing ? '' : 'cursor-pointer hover:bg-kumo-tint',
                   drag.dropContainer === group.key ? 'bg-kumo-tint' : '',
                 ].join(' ')}
               >
-                <CaretDown
-                  size={10}
-                  weight="bold"
-                  className={['shrink-0 transition-transform', open ? '' : '-rotate-90'].join(' ')}
-                />
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center text-kumo-default">
+                  <GroupIcon icon={icon} />
+                </span>
                 {editing ? (
                   <SidebarLabelEditor
                     initialValue={label}
@@ -275,19 +277,26 @@ export const SidebarNav = ({
                   />
                 ) : (
                   <>
-                    <span className="min-w-0 truncate">{label}</span>
-                    <span className="ml-1 text-kumo-inactive">{group.items.length}</span>
-                    {customizable && (
-                      <span className="ml-auto">
-                        <RenameButton label={label} group="section" onClick={() => setEditingKey(group.key)} />
+                    <span className="min-w-0 flex-1 truncate">{label}</span>
+                    {/* A closed group tells how much it hides. */}
+                    {!open && (
+                      <span className="shrink-0 text-(length:--app-fs-12) font-normal tabular-nums text-kumo-inactive">
+                        {group.items.length}
                       </span>
                     )}
+                    {customizable && <RenameButton label={label} group="section" onClick={() => setEditingKey(group.key)} />}
+                    <CaretDown
+                      size={10}
+                      weight="bold"
+                      aria-hidden
+                      className={['shrink-0 text-kumo-inactive transition-transform', open ? '' : '-rotate-90'].join(' ')}
+                    />
                   </>
                 )}
               </div>
               {open && (
                 <div className="mt-0.5 flex flex-col gap-0.5">
-                  {rows(group.items)}
+                  {rows(group.items, true)}
                   {customizable && group.items.length === 0 && (
                     <div className="flex h-7 items-center rounded-lg border border-dashed border-kumo-line px-2.5 text-(length:--app-fs-12) text-kumo-inactive">
                       Drag an item here

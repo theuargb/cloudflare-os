@@ -7,12 +7,12 @@ export type TopNavRow = { def: SidebarItemDef; label: string }
 /** One top bar item: a plain row, or a module group that opens a megamenu of its rows. */
 export type TopNavItem =
   | ({ kind: 'row'; key: string } & TopNavRow)
-  | { kind: 'group'; key: string; title: string; rows: TopNavRow[] }
+  | { kind: 'group'; key: string; title: string; icon?: { url: string }; rows: TopNavRow[] }
 
 /**
  * The top bar's items in the user's sidebar order and labels (read-only; drag and rename stay in the
  * expanded sidebar): the main rows, then the groups. Empty groups are dropped and a one-row group is
- * just its row, as in the sidebar.
+ * just its row, as in the sidebar. Groups carry their icon; rows carry none on the bar.
  */
 export function topNavItems(
   defaults: SidebarNavDefaults,
@@ -33,7 +33,8 @@ export function topNavItems(
       continue
     }
     const title = labels[group.key] ?? defaults.groupTitles.get(group.key) ?? group.key
-    items.push({ kind: 'group', key: group.key, title, rows: groupRows.map(({ def, label }) => ({ def, label })) })
+    const icon = defaults.groupIcons.get(group.key)
+    items.push({ kind: 'group', key: group.key, title, ...(icon ? { icon } : {}), rows: groupRows.map(({ def, label }) => ({ def, label })) })
   }
   return items
 }

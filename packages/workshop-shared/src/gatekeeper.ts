@@ -17,7 +17,7 @@
 // `Adapter` type is the root interface implemented by the service binding.
 
 import type { WorkerEntrypoint, DurableObject, RpcTarget, RpcStub } from "cloudflare:workers";
-import type { AppEntry, AppInbox, AppNavigation, AppSearchHit } from "./app-host.js";
+import type { AppEntry, AppInbox, AppNavigation, AppSearchHit, AppWork } from "./app-host.js";
 
 /**
  * A pagination cursor.
@@ -1041,6 +1041,13 @@ export interface GatekeeperUser extends WorkerEntrypoint {
 
   /** Mark the actor's inbox entries read; an empty `ids` marks all of them. */
   markInboxRead?(context: ActorContext, ids: string[]): Promise<void>;
+
+  /**
+   * The actor's work queues for the Workshop home screen and the launcher: what waits for them in the
+   * app, with open counts. Called only on accounts whose description sets `providesUi`; accounts
+   * without the method contribute nothing.
+   */
+  getWork?(context: ActorContext): Promise<AppWork>;
 
   // TODO:
   // - Query whether account has scope to access a particular URL.

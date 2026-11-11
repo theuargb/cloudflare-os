@@ -39,27 +39,23 @@ function TopNavColumn({ row: { def, label }, location, onNavigate }: { row: TopN
   const active = isNavRowActive(def, location)
   const rowPages = useRowPages(def.appId ?? '', def.entry, active, def.pages)
   const favorites = useFavoritePages()
-  // Same box as a PageRow (px-2, gap-2, 14px icon), so header and page texts share one left edge.
+  // Same box as a PageRow (px-2): the header carries no icon (the group on the bar has it), so its text
+  // starts where the pages' kind icons do.
   const headerClass = 'flex h-8 items-center gap-2 rounded-md px-2 text-(length:--app-fs-13) font-semibold'
   // A row with pages never opens the module landing, so its header is a label, not a link: a primary
   // tint sets it apart from the page links under it (solid for the module on screen).
   const isLabel = Boolean(def.pages) && !def.href
-  const iconTone = isLabel ? (active ? 'text-kumo-inverse' : 'text-kumo-brand') : active ? 'text-kumo-brand' : 'text-kumo-subtle'
-  const icon = <span className={`flex h-3.5 w-3.5 shrink-0 items-center justify-center ${iconTone}`}>{def.icon}</span>
   const header = def.href ? (
     <a href={def.href} target="_blank" rel="noopener noreferrer" onClick={onNavigate} className={`${headerClass} text-kumo-strong hover:bg-kumo-tint`}>
-      {icon}
       <span className="min-w-0 flex-1 truncate">{label}</span>
       <ArrowSquareOutIcon size={12} aria-hidden className="shrink-0 text-kumo-inactive" />
     </a>
   ) : isLabel ? (
     <div className={`${headerClass} ${active ? 'bg-kumo-brand text-kumo-inverse' : 'bg-kumo-brand/10 text-kumo-brand'}`}>
-      {icon}
       <span className="min-w-0 flex-1 truncate">{label}</span>
     </div>
   ) : (
     <Link {...linkProps(def)} {...preloadOf(def)} onClick={onNavigate} className={`${headerClass} text-kumo-strong hover:bg-kumo-tint`}>
-      {icon}
       <span className="min-w-0 flex-1 truncate">{label}</span>
     </Link>
   )

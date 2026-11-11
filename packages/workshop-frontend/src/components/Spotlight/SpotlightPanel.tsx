@@ -10,6 +10,7 @@ import { getRecents, recordPick } from './recents'
 import { useRecordSearch } from './useRecordSearch'
 import { TypeTabs } from './TypeTabs'
 import { useSpotlightEntries } from './useSpotlightEntries'
+import { useWorkEntries } from './useWorkEntries'
 import { schedulePreload } from '../../features/app-preload/appPreload'
 
 function Key({ children }: { children: string }) {
@@ -22,6 +23,7 @@ function Key({ children }: { children: string }) {
  */
 export default function SpotlightPanel({ onDone }: { onDone: () => void }) {
   const entries = useSpotlightEntries()
+  const work = useWorkEntries()
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
   const [picked, setPicked] = useState<SpotlightType>('all')
@@ -39,7 +41,7 @@ export default function SpotlightPanel({ onDone }: { onDone: () => void }) {
   const totals = useMemo(() => countTypes(entries), [entries])
   const types = useMemo(() => SPOTLIGHT_TYPES.filter(({ type }) => type === 'all' || totals[type] > 0), [totals])
   const type = types.some((t) => t.type === picked) ? picked : 'all'
-  const { sections, counts } = useMemo(() => rankEntries(entries, query, type, recents), [entries, query, type, recents])
+  const { sections, counts } = useMemo(() => rankEntries(entries, query, type, recents, work), [entries, query, type, recents, work])
   const needle = query.trim()
   const records = useRecordSearch(query)
   const recordHits = useMemo(() => records.flatMap((group) => group.hits.map((hit) => ({ appId: group.app.id, hit }))), [records])
@@ -56,7 +58,8 @@ export default function SpotlightPanel({ onDone }: { onDone: () => void }) {
   useEffect(() => (activePreload ? schedulePreload(activePreload) : undefined), [activePreload])
 
   const pick = useCallback((entry: RankedEntry) => {
-    setRecents(recordPick(entry.id))
+    // A work queue is listed under "My work" while it has items; it is not a recent action.
+    if (entry.count === undefined) setRecents(recordPick(entry.id))
     onDone()
     entry.run()
   }, [onDone])

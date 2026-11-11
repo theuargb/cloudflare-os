@@ -2386,6 +2386,11 @@ export class UserDurableObject extends DurableObject<Cloudflare.Env> {
     await appHost.markInboxRead(await this.#appHostAccounts(), context, ids);
   }
 
+  /** Work queues of the management apps (AuthenticatedApi.getWork). */
+  async getWork(context: ActorContext) {
+    return appHost.getWork(await this.#appHostAccounts(), context);
+  }
+
   /**
    * Make the account's grant cover the resource types `resourceUrlPatterns` names. Only the
    * gatekeeper knows what it was granted, so it decides: it returns the URL of a consent flow that

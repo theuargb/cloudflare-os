@@ -1,11 +1,11 @@
-// Fan-out of the app-host surface (navigation, record search, topbar inbox) across a user's
+// Fan-out of the app-host surface (navigation, record search, topbar inbox, work queues) across a user's
 // management-app accounts. Every gatekeeper answer is untrusted and bounded: each call runs under
 // a deadline, a failing or slow app is isolated from the others, and entries are sanitized.
 
-import type { GatekeeperAppNavigation, GatekeeperInbox } from "@gadgets/workshop-shared/api";
+import type { GatekeeperAppNavigation, GatekeeperInbox, GatekeeperWork } from "@gadgets/workshop-shared/api";
 import type { AccountDescription, ActorContext, GatekeeperUser } from "@gadgets/workshop-shared/gatekeeper";
 import {
-  sanitizeAppNavigation, sanitizeAppInbox, sanitizeAppSearchHits, MAX_INBOX_ITEMS,
+  sanitizeAppNavigation, sanitizeAppInbox, sanitizeAppSearchHits, sanitizeAppWork, MAX_INBOX_ITEMS,
 } from "@gadgets/workshop-shared/app-host";
 import { createWorkshopLogger } from "./observability";
 
@@ -20,13 +20,16 @@ const APP_SEARCH_TIMEOUT_MS = 800;
 /** Deadline for the topbar inbox, which every open tab polls; a slow provider must not pile up calls. */
 const APP_INBOX_TIMEOUT_MS = 1500;
 
+/** Per-app deadline for work queues (one count query per module and organization in the app). */
+const APP_WORK_TIMEOUT_MS = 3000;
+
 /**
  * The app-host methods of a GatekeeperUser, which are optional on the interface. They are called
  * only on accounts whose description declares the matching capability (`providesUi`,
  * `providesInbox`), which is why they can be viewed as required.
  */
 export type AppHostStub =
-    Required<Pick<GatekeeperUser, "getAppNavigation" | "searchApp" | "selectAppWorkplace" | "getInbox" | "markInboxRead">>;
+    Required<Pick<GatekeeperUser, "getAppNavigation" | "searchApp" | "selectAppWorkplace" | "getInbox" | "markInboxRead" | "getWork">>;
 
 /** One provided account as the fan-out sees it. `appId` is the vendor id, which names the app. */
 export type AppHostAccount = { appId: string, description: AccountDescription, stub: AppHostStub };
@@ -138,4 +141,24 @@ export async function markInboxRead(accounts: AppHostAccount[], context: ActorCo
       event: "gatekeeper.app.inbox.mark.failed", vendorId: provider.appId, error: err,
     });
   }
+}
+
+/**
+ * Work queues of every management app (AuthenticatedApi.getWork): providesUi accounts are asked in
+ * parallel, each bounded by APP_WORK_TIMEOUT_MS. A missing method, an error or a timeout yields
+ * nothing for that app; apps without a queue are omitted.
+ */
+export async function getWork(accounts: AppHostAccount[], context: ActorContext): Promise<GatekeeperWork[]> {
+  let results = await Promise.all(accounts.filter(account => account.description.providesUi).map(async account => {
+    try {
+      let raw = await withDeadline(account.stub.getWork(context), APP_WORK_TIMEOUT_MS);
+      return { appId: account.appId, ...sanitizeAppWork(raw) };
+    } catch (err) {
+      logger.warn("app work queues unavailable", {
+        event: "gatekeeper.app.work.failed", vendorId: account.appId, error: err,
+      });
+      return { appId: account.appId, items: [] };
+    }
+  }));
+  return results.filter(work => work.items.length > 0);
 }

@@ -18,7 +18,7 @@ export { PendingLogin, LoginConnectCallbackImpl };
 import { GatekeeperUiFrame, GatekeeperUserSelection } from "@gadgets/workshop-shared/gatekeeper";
 import type { ActorContext } from "@gadgets/workshop-shared/gatekeeper";
 import { isAppId, isAppWorkplaceId, type AppSearchHit } from "@gadgets/workshop-shared/app-host";
-import type { GatekeeperAppNavigation, GatekeeperInbox } from "@gadgets/workshop-shared/api";
+import type { GatekeeperAppNavigation, GatekeeperInbox, GatekeeperWork } from "@gadgets/workshop-shared/api";
 import { DecisionModelGatekeeper, LanguageModelGatekeeper } from "./ai-models";
 import { getGatewayModels } from "./ai-gateway.js";
 import { AdminSettings, AdminApiImpl } from "./admin-settings.js";
@@ -702,6 +702,10 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
       throw new TypeError("Invalid inbox ids.");
     }
     await this.#user.markInboxRead(await this.#appUiContext(), ids);
+  }
+
+  async getWork(): Promise<GatekeeperWork[]> {
+    return this.#user.getWork(await this.#appUiContext());
   }
 
   async getGatekeeperApp(vendorId: string): Promise<GatekeeperUiFrame | null> {

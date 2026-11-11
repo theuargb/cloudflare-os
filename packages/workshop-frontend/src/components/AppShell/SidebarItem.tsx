@@ -1,5 +1,5 @@
 import { Link, type LinkProps } from '@tanstack/react-router'
-import { ArrowSquareOut, CaretDown } from '@phosphor-icons/react'
+import { ArrowSquareOut, CaretDown, CaretRight } from '@phosphor-icons/react'
 import type { ReactElement, ReactNode } from 'react'
 import { preloadIntent } from '../../features/app-preload/appPreload'
 import { isNavRowActive, useNavLocation } from './navRowActive'
@@ -9,11 +9,15 @@ import { isNavRowActive, useNavLocation } from './navRowActive'
  * (`pages`) — a toggle that lists them under it instead of opening the app's landing screen. Active
  * state is computed from the current router pathname so we can also tint the icon (TanStack's
  * activeProps only swaps top-level className, not child styles). When `collapsed` is true the label
- * is hidden but kept in the DOM for screen readers / hover-tooltips.
+ * is hidden but kept in the DOM for screen readers / hover-tooltips. A row under a group header
+ * (`grouped`) leaves its icon to the collapsed rail: expanded, its leading slot holds the caret of a
+ * row with pages, or stays empty so labels align.
  */
 export type SidebarItemProps = {
   icon: ReactNode
   label: string
+  /** The row sits under a group header that carries the icon (expanded rail only). */
+  grouped?: boolean
   /** In-app route; absent on an external row (`href`). */
   to?: LinkProps['to'];
   /** External page: the row is a plain anchor that opens in a new tab and is never active. */
@@ -46,6 +50,7 @@ export type SidebarItemProps = {
 export default function SidebarItem({
   icon,
   label,
+  grouped = false,
   to,
   href,
   params,
@@ -83,15 +88,22 @@ export default function SidebarItem({
     'flex h-5 w-5 shrink-0 items-center justify-center transition-colors',
     isActive ? 'text-kumo-brand' : 'text-kumo-subtle group-hover:text-kumo-default',
   ].join(' ')
+  const caretLead = grouped && !collapsed
   const content = (
     <>
-      <span className={iconClass}>{icon}</span>
+      <span className={iconClass}>
+        {!caretLead ? (
+          icon
+        ) : pages ? (
+          <CaretRight size={12} weight="bold" aria-hidden className={`transition-transform ${open ? 'rotate-90' : ''}`} />
+        ) : null}
+      </span>
       {!collapsed && (
         <>
           <span className="min-w-0 flex-1 truncate">{label}</span>
           {href && <ArrowSquareOut size={12} aria-hidden className="shrink-0 text-kumo-inactive" />}
           {trailing && <span className="shrink-0 text-kumo-inactive">{trailing}</span>}
-          {pages && (
+          {pages && !caretLead && (
             <CaretDown
               size={10}
               aria-hidden

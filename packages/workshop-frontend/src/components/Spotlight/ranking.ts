@@ -26,6 +26,8 @@ export type SpotlightEntry = {
   run: () => void
   /** Warms what `run` opens (an app action's route) while the user points at or highlights the entry. */
   preload?: () => void
+  /** Open items of a work queue ("My work" rows); shown instead of the kind tag. */
+  count?: number
 }
 
 /** An entry with the title indices the query matched (empty when unranked). */
@@ -70,11 +72,19 @@ export function rankMatches(entries: SpotlightEntry[], needle: string, recents: 
 }
 
 /**
- * Empty query: recent picks, then every action of `type` grouped by module (sidebar order) and
- * sub-heading; recent picks stay in their module block too. Otherwise one list ranked by
- * `rankMatches`. `type` narrows both modes; counts ignore it (the whole catalog, or every match).
+ * Empty query under All: the user's work queues (`work`), then recent picks; the full action list
+ * appears on typing, or right away when neither exists. Empty query under a type: recent picks, then
+ * every action of `type` grouped by module (sidebar order) and sub-heading; recent picks stay in their
+ * module block too. Otherwise one list ranked by `rankMatches`. `type` narrows both modes; counts
+ * ignore it (the whole catalog, or every match).
  */
-export function rankEntries(entries: SpotlightEntry[], query: string, type: SpotlightType, recents: RecentEntry[]): Ranking {
+export function rankEntries(
+  entries: SpotlightEntry[],
+  query: string,
+  type: SpotlightType,
+  recents: RecentEntry[],
+  work: SpotlightEntry[] = [],
+): Ranking {
   const needle = query.trim()
 
   if (!needle) {
@@ -82,14 +92,14 @@ export function rankEntries(entries: SpotlightEntry[], query: string, type: Spot
     const recent = recents
       .flatMap((pick) => byId[pick.id] && inType(byId[pick.id], type) ? [{ ...byId[pick.id], indices: [] }] : [])
       .slice(0, RECENT_LIMIT)
-    const sections: SpotlightSection[] = [
+    const start: SpotlightSection[] = [
+      ...(type === 'all' ? [{ id: 'work', heading: 'My work', groups: [{ title: '', items: work.map((entry) => ({ ...entry, indices: [] })) }] }] : []),
       { id: 'recent', heading: 'Recent', groups: [{ title: '', items: recent }] },
-      ...moduleSections(entries.filter((entry) => inType(entry, type))),
-    ]
-    return {
-      sections: sections.filter((section) => section.groups.some((group) => group.items.length > 0)),
-      counts: countTypes(entries),
-    }
+    ].filter((section) => section.groups.some((group) => group.items.length > 0))
+    const sections = type === 'all' && start.length > 0
+      ? start
+      : [...start, ...moduleSections(entries.filter((entry) => inType(entry, type)))]
+    return { sections, counts: countTypes(entries) }
   }
 
   const matched = rankMatches(entries, needle, recents)
