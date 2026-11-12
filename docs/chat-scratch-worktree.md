@@ -64,7 +64,9 @@ most `readFile` returns whole. Larger text is also identified by workspace path,
 read by window or grep: inlined, it would be resent on every turn, and a single upload can exceed
 the model's context window, which compaction cannot repair. A later upload into an existing
 scratch worktree also reaches the agent as a user change, whose diff is shown only within the same
-limit. Images with an edge above 8000 pixels or unrecognized dimension headers stay
+limit. An attachment the model cannot read inline gets a generic note naming its id, size and MIME
+type, and pointing the agent at `env.ATTACHMENTS.list()` for its handle. A large attachment (R2, below) is never in the worktree and always gets that note.
+Images with an edge above 8000 pixels or unrecognized dimension headers stay
 workspace-only on every model replay; no resize/transcode changes their original bytes.
 When the replay contains more than 20 candidate images/documents, image edges are conservatively
 limited to 2000 pixels, including images attached in earlier turns. Originals remain unchanged.
@@ -80,3 +82,26 @@ collision suffixes, so recorded Git paths round-trip and materialize on Linux.
 Projection commits with the validated user message; failed sends leave blobs available and
 do not consume names. Later uploads receive collision-free suffixes. The worktree remains
 available when a chat has already been seeded.
+
+## Large attachments
+
+A file over 4 MiB (up to 100 MiB, at most 300 MiB per message) cannot be a Git blob, which is
+bounded by the SQLite row limit. When the deployment binds the optional `CHAT_ATTACHMENT_CONTENT`
+R2 bucket, such a file is uploaded in parts (`beginLargeChatAttachmentUpload`,
+`uploadLargeChatAttachmentPart`, `completeLargeChatAttachmentUpload`) and attached by the returned
+`{id}` handle. Without the bucket, `beginLargeChatAttachmentUpload` fails.
+
+A large attachment is still a `ChatAttachmentRef` on its message, marked `large`, but it is not a
+workspace file: it has no `oid` or `workspacePath`, never creates the scratch worktree, and its
+bytes never enter model input. Replay shows the model a marker naming its id, MIME type and size.
+Every attachment, whatever its size, gets an opaque `handle` from `env.ATTACHMENTS.list()`;
+`get()` still returns bytes only for attachments up to 4 MiB and refuses a large one. A module
+passes the handle to the `ChatAttachmentContent` service entrypoint (`open({handle})`), which
+streams a large object from R2 and a small one from the chat's own storage. The handle names
+the Overseer and chat, and the Overseer re-checks that the attachment is still committed to
+that chat, so a handle for a deleted attachment opens nothing. Clients download a large
+attachment with `getChatAttachmentContentPart`.
+
+The record (`largeChatAttachments`) is staged until a sent message commits it. Uploads that no
+message claims are deleted a day after they started, when the next large upload begins, and the
+R2 object goes with its chat.
