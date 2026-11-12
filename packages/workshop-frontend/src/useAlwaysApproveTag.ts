@@ -1,50 +1,54 @@
-import { useCallback, useState, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useState } from 'react'
 import { useKumoToastManager } from '@cloudflare/kumo'
 import { RpcStub } from 'capnweb'
 import { Overseer } from '@gadgets/workshop-shared/api'
 import { ActionKind } from '@gadgets/workshop-shared/gatekeeper'
 
+const tagKey = (gatekeeperId: number, tag: string) => `${gatekeeperId}:${tag}`
+
 /**
- * Enables an auto-approval rule for the action's (gatekeeperId, actionKind.tag), and tracks
- * which tags were just enabled so callers can hide the affordance immediately on every same-tag
- * pending row, rather than waiting for the action-log subscription to catch up.
+ * Enables an auto-approval rule for an action's (gatekeeperId, actionKind.tag). Tracks the tags
+ * whose pending actions the server is applying now (the call resolves once they are decided), so
+ * every same-tag pending row shows the apply in progress, and the tags already enabled, so the
+ * affordance hides at once rather than waiting for the action-log subscription to catch up.
  */
 export function useAlwaysApproveTag(
     overseer: RpcStub<Overseer>,
-    setProcessingActions: Dispatch<SetStateAction<Set<number>>>,
     // Invoked after a rule is successfully enabled, so other views (e.g. the Connections rule list)
     // can refresh without waiting to be re-opened.
     onEnabled?: () => void) {
   const toasts = useKumoToastManager()
   const [enabledTags, setEnabledTags] = useState<Set<string>>(new Set())
+  const [applyingTags, setApplyingTags] = useState<Set<string>>(new Set())
 
-  // Enable auto-approval for the action's class. Returns true on success, false on failure (the
-  // error is surfaced via a toast) so the caller can decide whether to dismiss a confirm dialog.
+  // Enable auto-approval for the action's class; a failure is surfaced via a toast.
   const alwaysApproveTag = useCallback(
-      async (actionId: number, gatekeeperId: number,
-             actionKind: ActionKind): Promise<boolean> => {
-    setProcessingActions(prev => new Set(prev).add(actionId))
+      async (gatekeeperId: number, actionKind: ActionKind): Promise<void> => {
+    const key = tagKey(gatekeeperId, actionKind.tag)
+    setApplyingTags(prev => new Set(prev).add(key))
     try {
       await overseer.setAutoApprovedActionKind(gatekeeperId, actionKind)
-      setEnabledTags(prev => new Set(prev).add(`${gatekeeperId}:${actionKind.tag}`))
+      setEnabledTags(prev => new Set(prev).add(key))
       onEnabled?.()
-      return true
     } catch (err) {
       console.error('Failed to enable auto-approval:', err)
       toasts.add({ title: 'Failed to enable auto-approval', variant: 'error' })
-      return false
     } finally {
-      setProcessingActions(prev => {
+      setApplyingTags(prev => {
         const next = new Set(prev)
-        next.delete(actionId)
+        next.delete(key)
         return next
       })
     }
-  }, [overseer, setProcessingActions, toasts, onEnabled])
+  }, [overseer, toasts, onEnabled])
 
   const isTagAutoApproved = useCallback(
-      (gatekeeperId: number, tag: string) => enabledTags.has(`${gatekeeperId}:${tag}`),
+      (gatekeeperId: number, tag: string) => enabledTags.has(tagKey(gatekeeperId, tag)),
       [enabledTags])
 
-  return { alwaysApproveTag, isTagAutoApproved }
+  const isTagApplying = useCallback(
+      (gatekeeperId: number, tag: string) => applyingTags.has(tagKey(gatekeeperId, tag)),
+      [applyingTags])
+
+  return { alwaysApproveTag, isTagAutoApproved, isTagApplying }
 }

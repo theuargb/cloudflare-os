@@ -107,7 +107,7 @@ import { IncompleteDescriptionNotice, isDescriptionIncomplete } from "./componen
 import { ActionFields, entryFields } from "./components/ActionFields";
 import DeleteConfirmationDialog from "./components/DeleteConfirmationDialog";
 import AutoApproveConfirmDialog from "./components/AutoApproveConfirmDialog";
-import { AlwaysApproveButton, ResolveButton } from "./components/ResolveButton";
+import { AlwaysApproveButton, AutoApplyingStatus, ResolveButton } from "./components/ResolveButton";
 import { RestrictedApprovalNotice } from "./components/RestrictedApprovalNotice";
 import { WorkshopButton, WorkshopIconButton, WorkshopInput } from "./components/WorkshopControls";
 import { WebFetchRequestCard } from "./features/web-fetch/WebFetchRequestCard";
@@ -4658,15 +4658,16 @@ function ChatInterface({
 
   // Pending "always approve this type" confirmation, opened from a pending action card.
   const [autoApproveConfirm, setAutoApproveConfirm] = useState<
-    { actionId: number; gatekeeperId: number; resourceTitle: string;
+    { gatekeeperId: number; resourceTitle: string;
       actionKind: ActionKind; actionLabel: string } | null
   >(null);
 
   // Enable auto-approval of an action tag on its connection (gated by the confirm dialog). The
   // server applies the now-eligible pending action(s) via its drain, and the action state flips to
-  // "approved" through the actions subscription -- so we don't optimistically mutate it here.
-  const { alwaysApproveTag, isTagAutoApproved } =
-    useAlwaysApproveTag(overseer, setProcessingActions, onAutoApproveChange);
+  // "approved" through the actions subscription -- so we don't optimistically mutate it here; the
+  // same-tag pending cards show the apply in progress until the drain is done.
+  const { alwaysApproveTag, isTagAutoApproved, isTagApplying } =
+    useAlwaysApproveTag(overseer, onAutoApproveChange);
 
   const { resolveAction, creationAccountModal } =
     useResolveAction(overseer, setProcessingActions, (actionId, state) => {
@@ -5291,7 +5292,6 @@ function ChatInterface({
       log.gatekeeperId !== undefined && log.description.actionKind !== undefined &&
       log.description.autoApprovable === true
         ? {
-            actionId: msg.actionId,
             gatekeeperId: log.gatekeeperId,
             resourceTitle: log.resourceTitle,
             actionKind: log.description.actionKind,
@@ -5318,7 +5318,11 @@ function ChatInterface({
       ].join(" ")
       : undefined;
 
-    const actionControls = isPending ? (
+    const autoApplying = isPending && autoApproveTarget !== undefined &&
+      isTagApplying(autoApproveTarget.gatekeeperId, autoApproveTarget.actionKind.tag);
+    const actionControls = autoApplying ? (
+      <AutoApplyingStatus />
+    ) : isPending ? (
       <>
         {autoApproveTarget &&
           !isTagAutoApproved(autoApproveTarget.gatekeeperId, autoApproveTarget.actionKind.tag) && (
@@ -6970,15 +6974,13 @@ function ChatInterface({
           open
           actionLabel={autoApproveConfirm.actionLabel}
           resourceTitle={autoApproveConfirm.resourceTitle}
-          isProcessing={processingActions.has(autoApproveConfirm.actionId)}
           onOpenChange={(open) => {
             if (!open) setAutoApproveConfirm(null);
           }}
-          onConfirm={async () => {
-            const { actionId, gatekeeperId, actionKind } = autoApproveConfirm;
-            if (await alwaysApproveTag(actionId, gatekeeperId, actionKind)) {
-              setAutoApproveConfirm(null);
-            }
+          onConfirm={() => {
+            const { gatekeeperId, actionKind } = autoApproveConfirm;
+            setAutoApproveConfirm(null);
+            void alwaysApproveTag(gatekeeperId, actionKind);
           }}
         />
       )}

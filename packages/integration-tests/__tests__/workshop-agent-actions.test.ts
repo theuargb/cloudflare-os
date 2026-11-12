@@ -69,7 +69,7 @@ async function expectIdle(ws: RpcStub<Overseer>) {
 
 const SET_VALUE = { tag: "set-value", label: "Set value" };
 
-// Auto-approval applies after its RPC returns, so wait for the turn it resumes to finish.
+// Auto-approval resolves once the drain decides the actions; the turn it resumes runs after that.
 async function waitForResumedTurn(ws: RpcStub<Overseer>, model: RoutedScriptedModel) {
   await waitFor("the resumed turn to finish", async () =>
     model.remainingSteps() === 0 && !(await ws.listChats())[0]?.activeAgent || null);
