@@ -776,10 +776,12 @@ describe("decision handoff using the existing execution row", () => {
 // The model keeps the writes in submission order, the rule, and the writes the latest turn waits
 // on. Writes apply as auto-approval.ts documents: an approval applies its own write; after it, and
 // after a rejection, the rule being switched on, or an auto-approvable write being staged under
-// it, the pending writes the rule covers apply in order, up to the first that needs a person or
-// fails. A turn makes one more request once everything it staged is approved: within its step and
-// without a note if that all auto-applies, whether before the step ends or after; else as a resume,
-// when the last approval lands. A rejected write ends the wait for good, as does a newer prompt.
+// it, the pending writes the rule covers apply in order, up to the first that needs a person. An
+// apply the provider fails closes its write as failed, which the agent takes as the answer, and
+// the drain goes on past it. A turn makes one more request once everything it staged is decided
+// (approved or failed): within its step and without a note if that all auto-applies, whether
+// before the step ends or after; else as a resume, when the last decision lands. A rejected write
+// ends the wait for good, as does a newer prompt.
 //
 // Left out: concurrent decisions (pinned in integration-tests' workshop-agent-actions.test.ts),
 // and an apply that fails while the step that staged its write still runs, whose turn carries on
@@ -807,22 +809,23 @@ class ResumeModel {
   nudges = 0;
   fail = 0;
 
-  #apply(i: number): boolean {
-    if (--this.fail === 0) return false;
-    this.states[i] = "approved";
-    return true;
+  /** A failed apply closes the write as failed. */
+  #apply(i: number) {
+    this.states[i] = --this.fail === 0 ? "failed" : "approved";
   }
 
   #drain() {
     for (const [i, state] of this.states.entries()) {
-      if (state === "pending" && !(this.rule && this.auto[i] && this.#apply(i))) return;
+      if (state !== "pending") continue;
+      if (!(this.rule && this.auto[i])) return;
+      this.#apply(i);
     }
   }
 
   #carryOn(resumed: boolean) {
     if (this.waiting.some(i => this.states[i] === "rejected")) {
       this.waiting = [];
-    } else if (this.waiting.length && this.waiting.every(i => this.states[i] === "approved")) {
+    } else if (this.waiting.length && this.waiting.every(i => this.states[i] !== "pending")) {
       this.waiting = [];
       this.requests++;
       if (resumed) this.nudges++;
@@ -840,12 +843,12 @@ class ResumeModel {
     this.#carryOn(false);
   }
 
-  /** False when the provider failed the approval, which leaves the write pending. */
-  approve(i: number): boolean {
-    const applied = this.#apply(i);
-    if (applied) this.#drain();
+  /** What approving the write decided: it applied, or the provider's failure closed it. */
+  approve(i: number): "approved" | "failed" {
+    this.#apply(i);
+    this.#drain();
     this.#carryOn(true);
-    return applied;
+    return this.states[i] as "approved" | "failed";
   }
 
   reject(i: number) {
@@ -931,8 +934,7 @@ async function replayDecisions(sessions: Step[][]) {
         // The ledger lists the newest first, under ids of its own.
         const {id} = (await client.listActions({filter: "pending"})).entries.toReversed()[nth];
         if (step.kind === "approve") {
-          expect(await client.approveAction(id).then(() => true, () => false), `${label}: applied`)
-              .toBe(model.approve(write));
+          expect(await client.approveAction(id), `${label}: decided`).toBe(model.approve(write));
         } else {
           await client.rejectAction(id);
           model.reject(write);
@@ -966,8 +968,8 @@ describe("decisions on a turn's staged writes, for generated sessions", () => {
           [[...ruled ? [RULE_ON] : [], first, ...session], ...later]);
 
   const examples: [Step[][]][] = [
-    // "Always approve" applies the first of two held writes and fails on the second, which the
-    // user approves after a restart: one resume, at the second.
+    // "Always approve" applies the first of two held writes and fails on the second, which closes
+    // as failed: one resume, at the second, and nothing is left for the user to approve.
     [[
       [{kind: "prompt", writes: [true, true], late: false}, {kind: "rule", on: true, fail: 2}],
       [{kind: "approve", pick: 0, fail: 0}],
@@ -979,7 +981,7 @@ describe("decisions on a turn's staged writes, for generated sessions", () => {
       {kind: "prompt", writes: [true], late: true}, {kind: "reject", pick: 0, fail: 0},
     ]]],
     // A rejection ends the wait: after a restart, neither approving another of the turn's writes,
-    // at the second attempt, nor always-approving the last resumes it.
+    // at the first attempt, which fails, nor always-approving the last resumes it.
     [[
       [{kind: "prompt", writes: [false, true, true], late: false}, {kind: "reject", pick: 0, fail: 0}],
       [{kind: "approve", pick: 0, fail: 1}, {kind: "approve", pick: 0, fail: 0}, RULE_ON],

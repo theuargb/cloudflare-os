@@ -190,6 +190,33 @@ it.concurrent("always approving a held write's kind applies it and resumes the a
   expect(model.requests).toHaveLength(2);
 });
 
+it.concurrent("always approving held writes whose first apply fails applies the rest and resumes the agent with the error", async () => {
+  const model = models.script([
+    writeValues("7, { autoApprovable: true }", "8, { autoApprovable: true }"),
+    { text: "One write failed." },
+  ]);
+  await using session = await openSession(model, "agentalwaysfail");
+  const label = labelOf(session);
+
+  await session.runTurn("Set the test values to 7 and 8.");
+  const [first, second] = await waitForPendingActions(session, 2);
+  await failNextApply(label, "Test apply failed");
+
+  await withOwnerWorkspace(harness.url, session.username, async ws => {
+    await ws.setAutoApprovedActionKind(first.gatekeeperId!, SET_VALUE);
+    await waitForResumedTurn(ws, model);
+  });
+  const { entries } = await session.listActions({ filter: "action" });
+  expect(entries.find(entry => entry.id === first.id)).toMatchObject({
+    ...decidedBy(session, "failed"),
+    error: expect.stringContaining("Test apply failed"),
+  });
+  expect(await actionStatus(session, second.id)).toMatchObject(decidedBy(session, "approved"));
+  expect(await actionState(label)).toEqual({ pending: [], value: 8, applyCount: 1 });
+  expect(model.requests).toHaveLength(2);
+  expect(JSON.stringify(model.requests[1])).toContain("Test apply failed");
+});
+
 it.concurrent.each(["approve", "reject"] as const)(
     "an always-approved write queued behind a held one applies once the user chooses %s",
     async decision => {
@@ -253,40 +280,26 @@ it.concurrent("approving an older turn's held write leaves a newer finished turn
   expect(model.requests).toHaveLength(4);
 });
 
-it.concurrent.each(["retry", "reject"] as const)(
-    "a failed apply stays pending until the user chooses %s", async choice => {
-  const model = models.script([writeValues(9), { text: "The retried value is applied." }]);
-  await using session = await openSession(model, `agentfail${choice}`);
+it.concurrent("a failed apply closes the awaited write as failed and resumes the agent with the error", async () => {
+  const model = models.script([writeValues(9), { text: "The write failed." }]);
+  await using session = await openSession(model, "agentfail");
   const label = labelOf(session);
 
   await session.runTurn("Set the test value to 9.");
   const [action] = await waitForPendingActions(session, 1);
   await failNextApply(label, "Test apply failed");
   await withOwnerWorkspace(harness.url, session.username, async ws => {
-    await expect(ws.approveAction(action.id)).rejects.toThrow("Test apply failed");
-    await expectIdle(ws);
+    expect(await ws.approveAction(action.id)).toBe("failed");
+    await waitForResumedTurn(ws, model);
   });
-  expect(await actionStatus(session, action.id)).toEqual({ state: "pending" });
-  expect(await actionState(label)).toEqual({ pending: [{ id: 1, value: 9 }], applyCount: 0 });
-  expect(model.requests).toHaveLength(1);
-
-  if (choice === "retry") {
-    const resumed = await session.approveActionsAndWait([action.id]);
-    expect(resumed.outcome).toEqual({ status: "completed" });
-    expect(await actionState(label)).toEqual({ pending: [], value: 9, applyCount: 1 });
-    expect(await actionStatus(session, action.id)).toMatchObject(decidedBy(session, "approved"));
-    expect(model.requests).toHaveLength(2);
-    expect(agentSaid(resumed.history, "The retried value is applied.")).toBe(1);
-  } else {
-    await withOwnerWorkspace(harness.url, session.username, async ws => {
-      await ws.rejectAction(action.id);
-      await expectIdle(ws);
+  const { entries } = await session.listActions({ filter: "action" });
+  expect(entries.find((entry) => entry.id === action.id)).toMatchObject({
+    ...decidedBy(session, "failed"),
+    error: expect.stringContaining("Test apply failed"),
     });
     expect(await actionState(label)).toEqual({ pending: [], applyCount: 0 });
-    expect(await actionStatus(session, action.id)).toMatchObject(decidedBy(session, "rejected"));
-    expect(model.requests).toHaveLength(1);
-    expect(model.remainingSteps()).toBe(1);
-  }
+  expect(model.requests).toHaveLength(2);
+    expect(JSON.stringify(model.requests[1])).toContain("Test apply failed");
 });
 
 // Known bug, kept as a deterministic repro: Overseer.approveAction checks `pending`, then awaits

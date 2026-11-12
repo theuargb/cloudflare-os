@@ -628,8 +628,8 @@ class WorkshopAgentSessionImpl implements WorkshopAgentSession {
 
   // Approves each decision the paused turn waits on, in order, and observes the activation the
   // last one resumes.
-  async #approveAndWait<Id>(
-      ids: readonly Id[], approve: (id: Id) => RpcPromise<void>, options: AgentTurnOptions,
+  async #approveAndWait<Id, T>(
+      ids: readonly Id[], approve: (id: Id) => RpcPromise<T>, options: AgentTurnOptions,
       preflight?: () => Promise<void>): Promise<AgentTurnResult> {
     this.#assertOpen();
     if (this.#activeTurn !== undefined || this.#reserved) {
@@ -782,8 +782,7 @@ class WorkshopAgentSessionImpl implements WorkshopAgentSession {
     observer.attach(this.#chatId);
   }
 
-  async #awaitRpc(
-      operation: RpcPromise<void>, chatId: number, observer: TurnObserver): Promise<void> {
+  async #awaitRpc<T>(operation: RpcPromise<T>, chatId: number, observer: TurnObserver): Promise<void> {
     this.#pendingRpcs.add(operation);
     operation.then(() => {
       const status = observer.outcome?.status;
