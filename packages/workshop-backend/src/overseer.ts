@@ -7418,7 +7418,7 @@ class OverseerImpl implements AgentHooks {
       attachments: ChatAttachmentRef[] | undefined,
       formats: MessageFormatRef[] | undefined,
       scratchWorktree?: PreparedScratchWorktree,
-      attachmentSourceCommit?: string): number | undefined {
+      attachmentSourceCommit?: string, spoken?: boolean): number | undefined {
     this.#validateCapsules(chatId, capsules);
     // Format references describe the text the user wrote, which for a slash command is its
     // arguments, what the transcript shows, not the message the provider expanded them into.
@@ -7473,6 +7473,7 @@ class OverseerImpl implements AgentHooks {
       capsules,
       attachments,
       formats,
+      ...(spoken ? {spoken: true} : {}),
     });
     return messageSequence;
   }
@@ -7486,6 +7487,7 @@ class OverseerImpl implements AgentHooks {
     responseTargetRegistration?: ExternalMessageResponseTargetRegistration,
     externalChatKey?: string,
     formats?: MessageFormatRef[],
+    spoken?: boolean,
   ): Promise<number> {
     if (responseTargetRegistration) {
       let decision = this.#prepareExternalMessageResponseTargetRegistration(responseTargetRegistration);
@@ -7521,7 +7523,7 @@ class OverseerImpl implements AgentHooks {
 
       let promptSequence = this.#commitPreparedChatMessage(
           chatId, timestamp, userMeta.profile, prepared, capsules, canonicalAttachments, formats,
-          scratchWorktree, scratchWorktree?.commitId);
+          scratchWorktree, scratchWorktree?.commitId, spoken);
       if (responseTargetRegistration) {
         if (promptSequence === undefined) {
           throw new Error("External messages require a prompt.");
@@ -7567,14 +7569,17 @@ class OverseerImpl implements AgentHooks {
   // queue to whoever stopped it. Returns whether `message` was queued.
   steerRunningTurn(chatId: number, userId: string, author: AiChatAuthorInfo,
                    message: string | SlashCommandRequest, capsules?: CapsuleSpecifier[],
-                   attachments?: ChatAttachmentHandle[], formats?: MessageFormatRef[]): boolean {
+                   attachments?: ChatAttachmentHandle[], formats?: MessageFormatRef[],
+                   spoken?: boolean): boolean {
     const isPlainTextMessage = typeof message === "string" && message.trim() !== "" &&
         !capsules?.length && !attachments?.length && !formats?.length;
     const turnTakesSteers = this.#runningAgents.has(chatId) &&
         !this.#liveChats.get(chatId)?.cancelController.signal.aborted;
     if (!isPlainTextMessage || !turnTakesSteers) return false;
     let meta = this.getChatMetaOrThrow(chatId);
-    meta.queuedSteers = [...meta.queuedSteers ?? [], {text: message, author}];
+    meta.queuedSteers = [
+      ...meta.queuedSteers ?? [], {text: message, author, ...(spoken ? {spoken: true} : {})},
+    ];
     meta.lastActive = this.getChatTimestamp();
     this.storage.chatMeta.put(meta);
     this.recordGadgetAnalytics({
@@ -7595,6 +7600,7 @@ class OverseerImpl implements AgentHooks {
     attachments?: ChatAttachmentHandle[],
     responseTargetRegistration?: ExternalMessageResponseTargetRegistration,
     formats?: MessageFormatRef[],
+    spoken?: boolean,
   ): Promise<void> {
     if (responseTargetRegistration) {
       let decision = this.#prepareExternalMessageResponseTargetRegistration(responseTargetRegistration);
@@ -7647,7 +7653,7 @@ class OverseerImpl implements AgentHooks {
         this.storage.chatMeta.put(meta);
         let promptSequence = this.#commitPreparedChatMessage(
             chatId, meta.lastActive, userMeta.profile, prepared, capsules, canonicalAttachments,
-            formats, preparedScratchWorktree, attachmentSourceCommit);
+            formats, preparedScratchWorktree, attachmentSourceCommit, spoken);
         if (scratchWorktree && attachmentFiles.size) {
           this.#appendWorkspaceAttachments(chatId, scratchWorktree, attachmentChanges, userMeta.profile);
         }
@@ -7843,7 +7849,7 @@ class OverseerImpl implements AgentHooks {
 
   // AgentHooks.takeSteers: logs each queued steer at the step boundary where the agent reads it,
   // so the log keeps the order the model saw.
-  takeSteers(chatId: number): string[] {
+  takeSteers(chatId: number): {text: string, spoken: boolean}[] {
     let meta = this.storage.chatMeta.get(chatId);
     return meta?.queuedSteers ? this.#logQueuedSteers(meta, true) : [];
   }
@@ -7851,8 +7857,8 @@ class OverseerImpl implements AgentHooks {
   // Moves the chat's queued steers into its log as user messages, `steered` unless they prompt a
   // turn, then writes `meta` without them. Subscribers thus get the messages before the metadata,
   // as subscribeToChat's catch-up delivers them.
-  #logQueuedSteers(meta: StoredChatMetadata, steered: boolean): string[] {
-    let steers = (meta.queuedSteers ?? []).map(({text, author}) => {
+  #logQueuedSteers(meta: StoredChatMetadata, steered: boolean): {text: string, spoken: boolean}[] {
+    let steers = (meta.queuedSteers ?? []).map(({text, author, spoken}) => {
       this.storage.chats.put({
         chatId: meta.id,
         sequence: this.nextChatSequence(meta.id),
@@ -7861,8 +7867,9 @@ class OverseerImpl implements AgentHooks {
         type: "message",
         message: text,
         ...(steered ? {steered: true} : {}),
+        ...(spoken ? {spoken: true} : {}),
       });
-      return text;
+      return {text, spoken: spoken === true};
     });
     delete meta.queuedSteers;
     meta.lastActive = this.getChatTimestamp();
@@ -13347,29 +13354,30 @@ class OverseerClientInterface extends RpcTarget implements Overseer {
 
   async newChat(initialMessage: string | SlashCommandRequest, chosenModelId: string | null,
                 capsules?: CapsuleSpecifier[], attachments?: ChatAttachmentHandle[],
-                formats?: MessageFormatRef[]): Promise<number> {
+                formats?: MessageFormatRef[], spoken?: boolean): Promise<number> {
     let userMeta = await retryOnDoReset(
         () => this.#clientUser.getChatContext(chosenModelId), this.impl.logger);
     return this.impl.newChat(this.#clientUser, userMeta, initialMessage, capsules, attachments,
-                             undefined, undefined, formats);
+                             undefined, undefined, formats, spoken);
   }
 
   async sendChatMessage(
       chatId: number, message: string | SlashCommandRequest, chosenModelId: string | null,
       capsules?: CapsuleSpecifier[], attachments?: ChatAttachmentHandle[],
-      formats?: MessageFormatRef[]): Promise<void> {
+      formats?: MessageFormatRef[], spoken?: boolean): Promise<void> {
     using _starting = this.#startingTurn(chatId);
     // A steer runs on the running turn's model, so it is queued before the sender's model is
     // looked up: a collaborator need not have that model.
     let author = await this.#getClientProfile();
     if (this.impl.steerRunningTurn(
-        chatId, this.clientUserId, author, message, capsules, attachments, formats)) {
+        chatId, this.clientUserId, author, message, capsules, attachments, formats, spoken)) {
       return;
     }
     let userMeta = await retryOnDoReset(
         () => this.#clientUser.getChatContext(chosenModelId), this.impl.logger);
     return this.impl.sendChatMessage(
-        this.#clientUser, userMeta, chatId, message, capsules, attachments, undefined, formats);
+        this.#clientUser, userMeta, chatId, message, capsules, attachments, undefined, formats,
+        spoken);
   }
 
   async setChatTitle(chatId: number, title: string): Promise<void> {
