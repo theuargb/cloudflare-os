@@ -205,6 +205,11 @@ export type ActorContext = {
   actor: { displayName: string; avatar?: AvatarImage };
   /** Whether the actor is currently a deployment administrator under `ADMINS`. */
   isAdmin: boolean;
+  /**
+   * The user's chosen UI language (the `ui.locale` UI preference), unvalidated; absent when the user
+   * has not chosen one. The gatekeeper resolves it against the languages it offers.
+   */
+  locale?: string;
 }
 
 /**
