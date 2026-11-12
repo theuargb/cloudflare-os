@@ -161,10 +161,10 @@ export interface GatekeeperAppSectionNavReceiver extends RpcTarget {
 export type AppTopbarIcon = "calendar" | "organization";
 
 /**
- * A context control of the open screen shown in the Workshop topbar, before the inbox (the period,
- * the organization): the host draws a compact trigger (its label hides on narrow screens, leaving
- * the icon) and `stepper` arrows; the app draws the picker itself, in its frame right under the
- * trigger. `open` is the app's picker state (the host marks the trigger and closes it on outside clicks).
+ * A control of the open screen shown in the Workshop topbar, before the inbox (the period and the
+ * organization): the host draws a compact trigger (its label hides on narrow screens, leaving the
+ * icon) and `stepper` arrows; the app draws the picker itself, in its frame right under the trigger.
+ * `open` is the app's picker state (the host marks the trigger and closes it on outside clicks).
  */
 export type AppTopbarControl = {
   id: string;
@@ -190,6 +190,23 @@ export type AppTopbarAction = (typeof APP_TOPBAR_ACTION)[keyof typeof APP_TOPBAR
 /** Frame side of the topbar controls. */
 export interface GatekeeperAppTopbarReceiver extends RpcTarget {
   activateTopbarControl(id: string, action: AppTopbarAction, anchor: AppTopbarAnchor): void;
+}
+
+/** Spacing density of app screens: `compact` = proportionally tighter spacing and control heights. */
+export const APP_DENSITIES = ["comfortable", "compact"] as const;
+export type AppDensity = (typeof APP_DENSITIES)[number];
+
+/** UI text size in percent of the default, ascending (the Workshop's a−/A+ stepper walks it). */
+export const APP_TEXT_SIZES = ["85", "92.5", "100", "110", "125"] as const;
+export type AppTextSize = (typeof APP_TEXT_SIZES)[number];
+
+/** The view settings of the Workshop's «Appearance» menu that every app screen follows. */
+export type AppViewSettings = { density: AppDensity; textSize: AppTextSize };
+export const APP_DEFAULT_VIEW: AppViewSettings = { density: "comfortable", textSize: "100" };
+
+/** Frame side of the view settings: the user changed them in the Workshop. */
+export interface GatekeeperAppViewReceiver extends RpcTarget {
+  setView(view: AppViewSettings): void;
 }
 
 /** A gatekeeper app id: the lowercased suffix of its GATEKEEPER_<NAME> binding. */
@@ -271,6 +288,8 @@ export interface GatekeeperAppHost extends RpcTarget {
    * per user and tour version unless `replay`; it waits until the app is on screen. Invalid tours throw.
    */
   startTour(tour: Tour, locator: RpcStub<GatekeeperAppTourLocator>, replay?: boolean): void;
+  /** Learn the Workshop's view settings (its «Appearance» menu owns them) and register for later changes. */
+  subscribeView(receiver: RpcStub<GatekeeperAppViewReceiver>): AppViewSettings;
 }
 
 /**

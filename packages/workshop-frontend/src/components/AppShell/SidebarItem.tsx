@@ -2,6 +2,7 @@ import { Link, type LinkProps } from '@tanstack/react-router'
 import { ArrowSquareOut, CaretDown, CaretRight } from '@phosphor-icons/react'
 import type { ReactElement, ReactNode } from 'react'
 import { preloadIntent } from '../../features/app-preload/appPreload'
+import { newTabProps } from '../../features/view-settings/viewSettings'
 import { isNavRowActive, useNavLocation } from './navRowActive'
 
 /**
@@ -45,6 +46,8 @@ export type SidebarItemProps = {
    * `draggable`: the toggle is a drag source (a link is one natively, a button is not).
    */
   pages?: { open?: boolean; onToggle?: (open: boolean, row: HTMLElement) => void; draggable?: boolean }
+  /** An in-app link opens in a new browser tab («Open menu items in a new tab»). */
+  newTab?: boolean
 }
 
 export default function SidebarItem({
@@ -64,6 +67,7 @@ export default function SidebarItem({
   flyout,
   preload,
   pages,
+  newTab = false,
 }: SidebarItemProps) {
   // Resolved manually so we can style the icon as well as the row.
   const isActive = isNavRowActive({ to, params, entry, matchPrefix }, useNavLocation())
@@ -137,7 +141,7 @@ export default function SidebarItem({
       {content}
     </button>
   ) : (
-    <Link {...linkProps} {...(preload ? preloadIntent(preload) : {})} title={collapsed ? label : undefined} className={rowClass}>
+    <Link {...linkProps} {...newTabProps(newTab)} {...(preload ? preloadIntent(preload) : {})} title={collapsed ? label : undefined} className={rowClass}>
       {content}
     </Link>
   )

@@ -93,6 +93,15 @@ export const resolveSidebar = (defaults: SidebarStructure, layout: SidebarLayout
   }
 }
 
+/**
+ * The only group with two or more items: the navigation shows its rows in its place, without a header
+ * (a lone group groups nothing). Null when no group, or several, have two or more.
+ */
+export const soleGroupKey = (groups: readonly { key: string; items: readonly string[] }[]): string | null => {
+  const multi = groups.filter((group) => group.items.length >= 2)
+  return multi.length === 1 ? multi[0]!.key : null
+}
+
 const allKeys = (resolved: SidebarStructure): Set<string> =>
   new Set([...resolved.main, ...resolved.groups.flatMap((group) => group.items)])
 

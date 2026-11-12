@@ -15,6 +15,7 @@ export const HOST_TOUR_ANCHORS = [
   "type-menus",
   "menu",
   "inbox",
+  "app-view",
   "section-nav",
   "home-composer",
   "home-quick-actions",

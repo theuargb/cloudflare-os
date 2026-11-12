@@ -11,6 +11,7 @@ import Sidebar from './Sidebar'
 import CommandPalette from '../Spotlight/Spotlight'
 import ShellTopbarActions from './ShellTopbarActions'
 import AppTopbarControls from '../../features/app-topbar/AppTopbarControls'
+import ViewSettingsMenu from '../../features/view-settings/ViewSettingsMenu'
 import { OPEN_COMMAND_PALETTE_EVENT } from './commandPaletteBus'
 import { KeptGatekeeperApp, KeptGatekeeperAppProvider } from '../../KeptGatekeeperApp'
 import TourHost, { useTourActive } from "../../features/tour/TourHost";
@@ -178,6 +179,7 @@ function ShellFrame({ children }: { children: React.ReactNode }) {
             <WorkplaceSwitcher />
             <AppTypeMenus />
             <TopNav />
+            <ViewSettingsMenu />
           </div>
           <TopBarNotice inline />
           {/* `ml-auto` rather than the container's `justify-between`: on desktop the hamburger is

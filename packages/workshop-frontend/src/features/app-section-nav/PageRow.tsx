@@ -3,6 +3,7 @@ import { StarIcon } from '@phosphor-icons/react'
 import type { AppNavSection } from '@gadgets/workshop-shared/app-host'
 import { preloadAppRoute, preloadIntent } from '../app-preload/appPreload'
 import { KIND_ICONS } from './kindIcons'
+import { newTabProps, useNavNewTab } from '../view-settings/viewSettings'
 import { selectAppSection } from './sectionNavStore'
 
 /**
@@ -21,6 +22,7 @@ export function PageRow({ appId, section, current, live, detail, onOpen, favorit
   /** Shows the star that adds the page to (or removes it from) the favorite pages. */
   favorite?: { starred: boolean; toggle: () => void }
 }) {
+  const newTab = useNavNewTab()
   const route = section.route
   if (!live && route === undefined) return null
   const KindIcon = section.kind ? KIND_ICONS[section.kind] : undefined
@@ -63,7 +65,8 @@ export function PageRow({ appId, section, current, live, detail, onOpen, favorit
   }
   // Kept loose: the generated route-tree union is stricter than is convenient here (as in SidebarItem).
   const linkProps = { to: '/gatekeepers/$appId', params: { appId }, search: { at: route } } as unknown as LinkProps
-  const row = live ? (
+  // With «Open menu items in a new tab» every page with a route is a link, the open app's ones too.
+  const row = live && !(newTab && route !== undefined) ? (
     <button
       type="button"
       aria-current={current ? 'page' : undefined}
@@ -79,6 +82,7 @@ export function PageRow({ appId, section, current, live, detail, onOpen, favorit
   ) : (
     <Link
       {...linkProps}
+      {...newTabProps(newTab)}
       {...preloadIntent(() => preloadAppRoute(appId, route!))}
       aria-current={current ? 'page' : undefined}
       onClick={onOpen}

@@ -82,7 +82,7 @@ export default function TopNavBar({ onMoveToSidebar }: { onMoveToSidebar: () => 
     item.kind === 'group' ? (
       <TopNavMenu key={item.key} face={itemFace(item)} active={itemActive(item)} menu={menu(item.key)} anchor={barRef}>
         <Popover.Title className={PANEL_TITLE}>{item.title}</Popover.Title>
-        <TopNavColumns rows={item.rows} location={location} onNavigate={closeAll} />
+        <TopNavColumns rows={item.rows} location={location} onNavigate={closeAll} hideHeader={item.rows.length === 1} />
       </TopNavMenu>
     ) : (
       <TopNavRowItem key={item.key} row={item} location={location} menu={menu(item.key)} onNavigate={closeAll} />
@@ -147,7 +147,12 @@ export default function TopNavBar({ onMoveToSidebar }: { onMoveToSidebar: () => 
                 {overflow.map((item) => (
                   <section key={item.key} className="flex flex-col">
                     {item.kind === 'group' && <h3 className={PANEL_TITLE}>{item.title}</h3>}
-                    <TopNavColumns rows={item.kind === 'group' ? item.rows : [item]} location={location} onNavigate={closeAll} />
+                    <TopNavColumns
+                      rows={item.kind === 'group' ? item.rows : [item]}
+                      location={location}
+                      onNavigate={closeAll}
+                      hideHeader={item.kind === 'group' && item.rows.length === 1}
+                    />
                   </section>
                 ))}
               </div>

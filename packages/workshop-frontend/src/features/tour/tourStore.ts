@@ -25,6 +25,8 @@ export type TourState = { pending: readonly TourRequest[]; active: TourRequest |
 // context wrapping all of them.
 let state: TourState = { pending: [], active: null }
 const listeners = new Set<() => void>()
+// The last tour each app asked for, so the «Appearance» menu can replay the tour of the screen on view.
+const appTours = new Map<string, TourRequest>()
 
 const update = (next: TourState) => {
   state = next
@@ -40,6 +42,7 @@ const subscribe = (listener: () => void) => {
 
 /** Queue a tour; a newer request replaces a pending one with the same key. */
 export const requestTour = (request: TourRequest): void => {
+  if (request.route.kind === 'app') appTours.set(request.route.appId, request)
   if (state.active?.key === request.key) return
   update({ ...state, pending: [...state.pending.filter((item) => item.key !== request.key), request] })
 }
@@ -60,10 +63,19 @@ export const finishTour = (): void => {
 
 /** Forget the tours of an app whose frame session ended: they can no longer find their anchors. */
 export const dropAppTours = (appId: string): void => {
+  appTours.delete(appId)
   const ofApp = (request: TourRequest) => request.route.kind === 'app' && request.route.appId === appId
   const active = state.active && ofApp(state.active) ? null : state.active
   const pending = state.pending.filter((item) => !ofApp(item))
   if (active !== state.active || pending.length !== state.pending.length) update({ pending, active })
+}
+
+/** Replays the tour the app `appId` asked for; false when it has none (or no app is open). */
+export const replayAppTour = (appId: string | null): boolean => {
+  const request = appId === null ? undefined : appTours.get(appId)
+  if (!request) return false
+  requestTour({ ...request, replay: true })
+  return true
 }
 
 export const useTourState = (): TourState => useSyncExternalStore(subscribe, () => state)

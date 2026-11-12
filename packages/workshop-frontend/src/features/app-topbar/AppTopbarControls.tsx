@@ -4,12 +4,15 @@ import { APP_TOPBAR_ACTION, type AppTopbarAction, type AppTopbarControl, type Ap
 import { useOpenAppId } from '../app-section-nav/sectionNavHooks'
 import { activateAppTopbar, useAppTopbar } from './topbarStore'
 
-const ICONS: Record<AppTopbarIcon, typeof CalendarBlankIcon> = { calendar: CalendarBlankIcon, organization: BuildingsIcon }
+const ICONS: Record<AppTopbarIcon, typeof CalendarBlankIcon> = {
+  calendar: CalendarBlankIcon,
+  organization: BuildingsIcon,
+}
 
 const STEP = 'hidden cursor-pointer items-center px-1.5 text-kumo-subtle transition-colors hover:bg-kumo-tint md:flex'
 
 /**
- * The open app's context controls (period, organization) before the inbox: compact triggers sized to
+ * The open app's topbar controls (period, organization) before the inbox. Compact triggers sized to
  * their label; below `md` only the icon. The app draws each picker in its frame under the trigger.
  */
 export default function AppTopbarControls() {
@@ -54,7 +57,7 @@ function TopbarControl({ appId, control }: { appId: string, control: AppTopbarCo
   })
 
   return (
-    <div ref={ref} className="flex h-8 shrink-0 items-stretch overflow-hidden rounded-lg border border-kumo-line bg-kumo-base">
+    <div ref={ref} data-tour={`app-${control.id}`} className="flex h-8 shrink-0 items-stretch overflow-hidden rounded-lg border border-kumo-line bg-kumo-base">
       {control.stepper ? (
         <button type="button" aria-label={`Step back: ${control.title}`} onClick={() => activate(APP_TOPBAR_ACTION.previous)} className={STEP}>
           <CaretLeftIcon size={12} aria-hidden />

@@ -12,7 +12,7 @@ import type {
   GatekeeperAppThemeReceiver,
 } from '@gadgets/workshop-shared/theme'
 import { isAppId, isAppRoute, type AppRouteMode, type GatekeeperAppRouteReceiver } from '@gadgets/workshop-shared/app-host'
-import type { GatekeeperAppHost, GatekeeperAppTourLocator } from '@gadgets/workshop-shared/app-host'
+import type { AppViewSettings, GatekeeperAppHost, GatekeeperAppTourLocator, GatekeeperAppViewReceiver } from '@gadgets/workshop-shared/app-host'
 import { sanitizeTour, type Tour } from "@gadgets/workshop-shared/tour";
 import { locateInFrame } from "./features/tour/frameTarget";
 import { appHistoryBack } from './features/app-history/appHistory'
@@ -44,6 +44,7 @@ import {
 import { attachAppPreload, detachAppPreload } from './features/app-preload/appPreload'
 import { attachAppTopbar, detachAppTopbar, publishAppTopbar } from './features/app-topbar/topbarStore'
 import { attachAppTitle, detachAppTitle, followAppTitle, publishAppTitle } from './features/app-title/titleStore'
+import { readViewSettings, useViewSettings } from './features/view-settings/viewSettings'
 
 // The content-pane rect, in viewport coordinates, that the app pins its page to while the iframe
 // is full-viewport.
@@ -168,6 +169,7 @@ class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
   #presenting = false
   #theme: GatekeeperAppTheme
   #themeReceiver: RpcStub<GatekeeperAppThemeReceiver> | null = null
+  #viewReceiver: RpcStub<GatekeeperAppViewReceiver> | null = null
   #routeReceiver: RpcStub<GatekeeperAppRouteReceiver> | null = null
   // The app's current route as far as the host knows (reported by the app or pushed to it).
   #route = ''
@@ -313,6 +315,31 @@ class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
       Promise.resolve(receiver.setTheme(theme)).catch(() => this.#dropThemeReceiver(receiver))
     } catch {
       this.#dropThemeReceiver(receiver)
+    }
+  }
+
+  // The app calls this once to learn the «Appearance» view settings and register for later changes.
+  subscribeView(receiver: RpcStub<GatekeeperAppViewReceiver>): AppViewSettings {
+    this.#viewReceiver?.[Symbol.dispose]?.()
+    // The argument stub is disposed when this call returns, so keep our own dup (released in dispose).
+    this.#viewReceiver = receiver.dup()
+    return readViewSettings()
+  }
+
+  #dropViewReceiver(receiver: RpcStub<GatekeeperAppViewReceiver>) {
+    if (this.#viewReceiver !== receiver) return
+    receiver[Symbol.dispose]?.()
+    this.#viewReceiver = null
+  }
+
+  // Push changed view settings to a subscribed app; a no-op until (and unless) the app subscribes.
+  updateView(view: AppViewSettings) {
+    const receiver = this.#viewReceiver
+    if (!receiver) return
+    try {
+      Promise.resolve(receiver.setView(view)).catch(() => this.#dropViewReceiver(receiver))
+    } catch {
+      this.#dropViewReceiver(receiver)
     }
   }
 
@@ -504,6 +531,8 @@ class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
     this.#cancelUserPicker()
     this.#themeReceiver?.[Symbol.dispose]?.()
     this.#themeReceiver = null
+    this.#viewReceiver?.[Symbol.dispose]?.()
+    this.#viewReceiver = null
     this.#tourLocator?.[Symbol.dispose]?.();
     this.#tourLocator = null;
     this.#routeReceiver?.[Symbol.dispose]?.()
@@ -562,6 +591,11 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, rout
   useEffect(() => {
     hostRef.current?.updateTheme({ mode: resolvedThemeMode, accentColor })
   }, [resolvedThemeMode, accentColor])
+  // Push the «Appearance» density and text size whenever either changes.
+  const { density, textSize } = useViewSettings()
+  useEffect(() => {
+    hostRef.current?.updateView({ density, textSize })
+  }, [density, textSize])
   // The URL route is read when the app subscribes; later changes reach the open app through
   // pushRoute, which filters out the app's own reports. Coming back on screen re-syncs once.
   const routeRef = useRef(route)

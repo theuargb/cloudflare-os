@@ -8,6 +8,7 @@ import { useRowPages } from '../app-section-nav/sectionPages'
 import type { SidebarItemDef } from '../sidebar-customization/sidebarNavDefs'
 import type { TopNavRow } from './topNavItems'
 import { TopNavMenu, TriggerFace, triggerClass, type TopNavMenuState } from './TopNavMenu'
+import { newTabProps, useNavNewTab } from '../view-settings/viewSettings'
 
 // Kept loose: the generated route-tree union is stricter than is convenient for a generic row (as in SidebarItem).
 const linkProps = (def: SidebarItemDef) => ({ to: def.to, params: def.params, search: def.search }) as unknown as LinkProps
@@ -15,17 +16,18 @@ const linkProps = (def: SidebarItemDef) => ({ to: def.to, params: def.params, se
 const preloadOf = (def: SidebarItemDef) =>
   def.appId ? preloadIntent(() => preloadAppRoute(def.appId!, def.search?.at ?? '')) : undefined
 
-/** Megamenu columns: one per row (module), each with its pages. */
-export function TopNavColumns({ rows, location, onNavigate }: {
+/** Megamenu columns: one per row (module), each with its pages; `hideHeader` keeps the header slot empty (a one-module group already names the module). */
+export function TopNavColumns({ rows, location, onNavigate, hideHeader = false }: {
   rows: TopNavRow[]
   location: NavLocation
   /** Runs after a pick (closes the menu). */
   onNavigate: () => void
+  hideHeader?: boolean
 }) {
   return (
     <div className="grid grid-cols-[repeat(auto-fill,minmax(220px,1fr))] gap-x-4 gap-y-3">
       {rows.map((row) => (
-        <TopNavColumn key={row.def.key} row={row} location={location} onNavigate={onNavigate} />
+        <TopNavColumn key={row.def.key} row={row} location={location} onNavigate={onNavigate} hideHeader={hideHeader} />
       ))}
     </div>
   )
@@ -35,10 +37,11 @@ export function TopNavColumns({ rows, location, onNavigate }: {
  * One module in a megamenu: its header (a link, or a plain title when the row lists pages: a row with
  * pages never opens the module landing, as in the sidebar), then its pages with favorite stars.
  */
-function TopNavColumn({ row: { def, label }, location, onNavigate }: { row: TopNavRow; location: NavLocation; onNavigate: () => void }) {
+function TopNavColumn({ row: { def, label }, location, onNavigate, hideHeader }: { row: TopNavRow; location: NavLocation; onNavigate: () => void; hideHeader: boolean }) {
   const active = isNavRowActive(def, location)
   const rowPages = useRowPages(def.appId ?? '', def.entry, active, def.pages)
   const favorites = useFavoritePages()
+  const newTab = useNavNewTab()
   // Same box as a PageRow (px-2): the header carries no icon (the group on the bar has it), so its text
   // starts where the pages' kind icons do.
   const headerClass = 'flex h-8 items-center gap-2 rounded-md px-2 text-(length:--app-fs-13) font-semibold'
@@ -55,14 +58,15 @@ function TopNavColumn({ row: { def, label }, location, onNavigate }: { row: TopN
       <span className="min-w-0 flex-1 truncate">{label}</span>
     </div>
   ) : (
-    <Link {...linkProps(def)} {...preloadOf(def)} onClick={onNavigate} className={`${headerClass} text-kumo-strong hover:bg-kumo-tint`}>
+    <Link {...linkProps(def)} {...newTabProps(newTab)} {...preloadOf(def)} onClick={onNavigate} className={`${headerClass} text-kumo-strong hover:bg-kumo-tint`}>
       <span className="min-w-0 flex-1 truncate">{label}</span>
     </Link>
   )
   const appId = def.appId
   return (
     <div className="flex min-w-0 flex-col">
-      {header}
+      {/* The slot stays, so pages line up with the other megamenus' columns while hovering between them. */}
+      {hideHeader ? <div aria-hidden className="h-8" /> : header}
       {appId && rowPages && rowPages.sections.length > 0 && (
         <ul aria-label={label} className="mt-1 flex flex-col gap-0.5">
           {rowPages.sections.map((section) => {
@@ -94,8 +98,8 @@ function TopNavColumn({ row: { def, label }, location, onNavigate }: { row: TopN
 }
 
 /**
- * A main row (or a one-row group) on the bar: an external link, a menu of the row's pages, or a link
- * to the row's screen.
+ * A main row, a one-row group without pages, or a row of the unwrapped sole group on the bar: an
+ * external link, a menu of the row's pages, or a link to the row's screen.
  */
 export function TopNavRowItem({ row, location, menu, onNavigate }: {
   row: TopNavRow
@@ -106,6 +110,7 @@ export function TopNavRowItem({ row, location, menu, onNavigate }: {
   const { def, label } = row
   const active = isNavRowActive(def, location)
   const rowPages = useRowPages(def.appId ?? '', def.entry, active, def.pages)
+  const newTab = useNavNewTab()
   if (def.href) {
     return (
       <a href={def.href} target="_blank" rel="noopener noreferrer" title="Opens in a new tab" className={triggerClass(false)}>
@@ -124,6 +129,7 @@ export function TopNavRowItem({ row, location, menu, onNavigate }: {
   return (
     <Link
       {...linkProps(def)}
+      {...newTabProps(newTab)}
       {...preload}
       onPointerEnter={() => {
         menu.onHoverSwitch()

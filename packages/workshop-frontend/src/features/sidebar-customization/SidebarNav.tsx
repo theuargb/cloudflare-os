@@ -10,6 +10,7 @@ import FavoritePages from '../app-section-nav/FavoritePages'
 import { preloadAppRoute } from '../app-preload/appPreload'
 import { useOptionalAuthenticatedApi } from '../../AuthContext'
 import { useUserPreference, writeUserPreference } from '../user-preferences/userPreferences'
+import { useNavNewTab } from '../view-settings/viewSettings'
 import { SidebarLabelEditor } from './SidebarLabelEditor'
 import { DropLine, RenameButton } from './SidebarNavControls'
 import { revealBelow } from './revealInSidebar'
@@ -21,6 +22,7 @@ import {
   parseSidebarLayout,
   resolveSidebar,
   setSidebarLabel,
+  soleGroupKey,
   type SidebarLayout,
 } from './sidebarLayout'
 import { GroupIcon, buildSidebarDefaults, type SidebarItemDef } from './sidebarNavDefs'
@@ -73,10 +75,13 @@ export const SidebarNav = ({
   const [expanded, setExpanded] = useState<{ href: string; rows: Record<string, boolean> }>({ href, rows: {} })
   const openRows = expanded.href === href ? expanded.rows : {}
   const warmApp = useWarmGatekeeperApp()
+  const newTab = useNavNewTab()
 
   const defaults = buildSidebarDefaults(apps, navigation)
   const resolved = resolveSidebar(defaults.structure, layout)
   const customizable = signedIn && !collapsed
+  // The only real group shows its rows without a header (a lone group groups nothing).
+  const sole = soleGroupKey(resolved.groups.map((group) => ({ key: group.key, items: group.items.filter((key) => defaults.items.has(key)) })))
 
   const commit = (next: SidebarLayout) => writeUserPreference(SIDEBAR_LAYOUT_PREFERENCE, JSON.stringify(next))
   const commitClosed = (next: string[]) => writeUserPreference(CLOSED_GROUPS_PREFERENCE, JSON.stringify(next))
@@ -145,6 +150,7 @@ export const SidebarNav = ({
         flyout={def.appId && collapsed ? (link, active) => <AppSectionFlyout appId={def.appId!} entry={def.entry} label={label} active={active} pages={def.pages}>{link}</AppSectionFlyout> : undefined}
         preload={def.appId ? () => preloadAppRoute(def.appId!, def.search?.at ?? '') : undefined}
         pages={def.pages ? { open: openRows[def.key], onToggle: (open) => toggleRow(def, open), draggable: customizable } : undefined}
+        newTab={newTab}
       />
     )
     if (!customizable) return <div key={def.key}>{item}</div>
@@ -212,9 +218,9 @@ export const SidebarNav = ({
         className={resolved.groups.length > 0 ? 'flex flex-col' : 'hidden'}
         {...dragProps(drag.groupListProps())}
       >
-        {plainRuns(resolved.groups, customizable).map((run) => {
+        {plainRuns(resolved.groups, customizable, sole).map((run) => {
           // Outside customization a one-item group is just its row: adjacent ones stack as one plain list.
-          if (run.plain) {
+          if (run.kind === 'plain') {
             return (
               <div key={run.groups[0]!.key} className="mt-2 flex flex-col gap-0.5 px-2">
                 {run.groups.flatMap((group) => rows(group.items))}
@@ -223,6 +229,22 @@ export const SidebarNav = ({
           }
           const group = run.groups[0]!;
           const title = defaults.groupTitles.get(group.key) ?? group.key
+          // The sole group: always open, no header to fold or drag, still a drop zone for rows.
+          if (run.kind === 'headerless') {
+            return (
+              <section
+                key={group.key}
+                {...{ [GROUP_ATTRIBUTE]: group.key }}
+                data-tour="sidebar-group"
+                data-tour-group={title}
+                className="relative mt-2 flex flex-col gap-0.5 px-2"
+                {...dragProps(drag.itemZoneProps(group.key))}
+              >
+                <DropLine indicator={drag.dropIndicator} id={group.key} inset="inset-x-2" />
+                {rows(group.items)}
+              </section>
+            )
+          }
           const icon = defaults.groupIcons.get(group.key)
           const label = layout.labels[group.key] ?? title
           const open = !closed.includes(group.key) && !groupDrag
@@ -312,19 +334,27 @@ export const SidebarNav = ({
   )
 };
 
-type GroupRun<G> = { plain: boolean; groups: G[] };
+type GroupRun<G> = { kind: 'plain' | 'group' | 'headerless'; groups: G[] };
 
-/** Groups in order; outside customization, consecutive one-item groups merge into one plain run. */
+/**
+ * Groups in order: the `sole` group alone without a header; outside customization, consecutive
+ * one-item groups merge into one plain run.
+ */
 function plainRuns<G extends { key: string; items: string[] }>(
   groups: readonly G[],
   customizable: boolean,
+  sole: string | null,
 ): GroupRun<G>[] {
   const runs: GroupRun<G>[] = [];
   for (const group of groups) {
+    if (group.key === sole) {
+      runs.push({ kind: 'headerless', groups: [group] });
+      continue;
+    }
     const plain = !customizable && group.items.length === 1;
     const last = runs.at(-1);
-    if (plain && last?.plain) last.groups.push(group);
-    else runs.push({ plain, groups: [group] });
+    if (plain && last?.kind === 'plain') last.groups.push(group);
+    else runs.push({ kind: plain ? 'plain' : 'group', groups: [group] });
   }
   return runs;
 }
