@@ -24,6 +24,7 @@ import { createRateLimitedCapability } from './rateLimitedCapability'
 import { useTheme } from './ThemeContext'
 import { useServerConfig } from './ServerConfigContext'
 import { forwardTrustedFrameError } from './errorReporting'
+import { classifyRpcError } from './rpcErrors'
 import { useAuthenticatedApi } from './AuthContext'
 import {
   normalizeGatekeeperAppPrompt,
@@ -554,7 +555,7 @@ class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
  * talks to the gatekeeper only through the `ui` capability carried over the MessagePort RPC session.
  * The iframe fills its parent container; a hidden app stays loaded (kept mounted by the shell).
  */
-export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, route = '', visible = true, onRouteChange }: {
+export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, route = '', visible = true, onRouteChange, onCapabilityLost }: {
   frame: GatekeeperUiFrame,
   gatekeeperVendorId: string,
   /** The app route held in the Workshop URL; changes the app did not report are pushed into it. */
@@ -563,6 +564,11 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, rout
   visible?: boolean,
   /** Called with each route the app navigates to, to mirror it into the Workshop URL. */
   onRouteChange?: (route: string, mode: AppRouteMode) => void,
+  /**
+   * Called when a call relayed to the frame failed because the frame's server-side capability died
+   * (do-reset class); the owner re-acquires the frame.
+   */
+  onCapabilityLost: (frame: GatekeeperUiFrame, error: unknown) => void,
 }) {
   const navigate = useNavigate()
   const router = useRouter()
@@ -602,6 +608,8 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, rout
   routeRef.current = route
   const onRouteChangeRef = useRef(onRouteChange)
   onRouteChangeRef.current = onRouteChange
+  const onCapabilityLostRef = useRef(onCapabilityLost)
+  onCapabilityLostRef.current = onCapabilityLost
   useEffect(() => {
     if (visible) hostRef.current?.pushRoute(route)
     else hostRef.current?.suspendPresentation()
@@ -752,7 +760,15 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, rout
         () => iframeRef.current,
       )
       hostRef.current = host
-      sessionRef.current = newMessagePortRpcSession(port, host)
+      sessionRef.current = newMessagePortRpcSession(port, host, {
+        // Every failure relayed to the frame — `ui`, module stubs it handed out, host methods — is
+        // serialized here. A do-reset-class one means the capability behind the frame is gone (its
+        // proxying Durable Object was evicted or reset) while the Workshop socket stays healthy, so
+        // the reconnect path never fires; the owner must fetch a fresh frame.
+        onSendError: (error) => {
+          if (classifyRpcError(error) === 'do-reset') onCapabilityLostRef.current(frame, error)
+        },
+      })
       connectedRef.current = true
     }
 
