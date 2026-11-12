@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { GatekeeperUiFrame } from '@gadgets/workshop-shared/gatekeeper'
+import { isAppFrameUrl, type AppRouteMode } from '@gadgets/workshop-shared/app-host'
 import { useAuthenticatedApi } from './AuthContext'
 import SandboxedGatekeeperApp from './SandboxedGatekeeperApp'
 import { reportIssue } from './errorReporting'
@@ -9,11 +10,20 @@ function disposeFrame(frame: GatekeeperUiFrame | null) {
   (frame?.ui as { [Symbol.dispose]?(): void } | undefined)?.[Symbol.dispose]?.()
 }
 
+const UNAVAILABLE = 'This app is not available on this deployment.'
+
 /**
  * Renders a gatekeeper's full-page management app (a sandboxed SPA the gatekeeper serves).
- * Fetches the app frame (iframe HTML + `ui` capability) from the backend and hosts it.
+ * Fetches the app frame (iframe HTML or URL + `ui` capability) from the backend and hosts it.
  */
-export default function GatekeeperAppPage({ appId }: { appId: string }) {
+export default function GatekeeperAppPage({ appId, route, visible, onRouteChange }: {
+  appId: string,
+  /** The app's own route from the Workshop URL ('' = start screen). */
+  route: string,
+  /** Whether the app is on screen (the shell keeps the last app mounted while hidden). */
+  visible: boolean,
+  onRouteChange: (route: string, mode: AppRouteMode) => void,
+}) {
   const { authenticatedApi } = useAuthenticatedApi()
   // Wrap the frame in an object: it holds a `ui` RPC stub, and we never want useState's setter to
   // treat a stored value as an updater function.
@@ -27,13 +37,22 @@ export default function GatekeeperAppPage({ appId }: { appId: string }) {
       .getGatekeeperApp(appId)
       .then((frame) => {
         if (!frame) {
-          if (!cancelled) setError('This app is not available on this deployment.')
+          if (!cancelled) setError(UNAVAILABLE)
+          return
+        }
+        if (frame.iframeUrl !== undefined && !isAppFrameUrl(frame.iframeUrl, appId)) {
+          disposeFrame(frame)
+          reportIssue('gatekeeper-app.frame-url', new Error('App frame URL outside its gatekeeper path'), {
+            gatekeeperVendorId: appId,
+          })
+          if (!cancelled) setError(UNAVAILABLE)
           return
         }
         if (cancelled) {
           disposeFrame(frame)
           return
         }
+        setError(null);
         acquired = frame
         setState({ frame })
       })
@@ -62,7 +81,7 @@ export default function GatekeeperAppPage({ appId }: { appId: string }) {
   // Fill the routed area below the header so the embedded app can manage its own internal layout.
   return (
     <div className="h-full">
-      <SandboxedGatekeeperApp frame={state.frame} gatekeeperVendorId={appId} />
+      <SandboxedGatekeeperApp frame={state.frame} gatekeeperVendorId={appId} route={route} visible={visible} onRouteChange={onRouteChange} />
     </div>
   )
 }

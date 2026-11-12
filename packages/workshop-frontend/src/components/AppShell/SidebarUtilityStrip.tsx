@@ -4,6 +4,7 @@ import { Tooltip } from '@cloudflare/kumo'
 import UserMenu from '../UserMenu'
 import { useTheme } from '../../ThemeContext'
 import type { ThemeMode } from '../../theme'
+import type { NavLayout } from '../../features/top-nav/navLayout'
 
 const THEME_SEQUENCE: ThemeMode[] = ['system', 'light', 'dark']
 
@@ -73,20 +74,26 @@ function StripLink({
   )
 }
 
-export default function SidebarUtilityStrip({ collapsed = false }: { collapsed?: boolean }) {
+/** Gatekeepers, theme, language and the user menu: the rail's bottom strip, or a cluster at the end of the top bar. */
+export default function SidebarUtilityStrip({ layout }: { layout: NavLayout }) {
+  const outer = {
+    // shrink-0 + solid base so the strip is visually pinned above the scrolling rail body
+    // and content can't bleed through it. Flat treatment — no top shadow.
+    sidebar: 'shrink-0 flex items-center gap-1 border-t border-kumo-line bg-kumo-elevated px-3 py-2',
+    rail: 'shrink-0 flex flex-col items-center justify-center gap-2 border-t border-kumo-line bg-kumo-elevated px-1.5 py-2',
+    top: 'flex shrink-0 items-center gap-1',
+  }[layout]
+  const inner = {
+    sidebar: 'ml-auto flex items-center gap-1',
+    rail: 'flex flex-col items-center gap-2',
+    top: 'flex items-center gap-1',
+  }[layout]
   return (
-    <div
-      className={[
-        // shrink-0 + solid base so the strip is visually pinned above the scrolling rail body
-        // and content can't bleed through it. Flat treatment — no top shadow.
-        'shrink-0 flex items-center gap-1 border-t border-kumo-line bg-kumo-elevated px-3 py-2',
-        collapsed ? 'flex-col justify-center gap-2 px-1.5' : '',
-      ].join(' ')}
-    >
+    <div data-tour="sidebar-utilities" className={outer}>
       <StripLink to="/gatekeepers" label="Gatekeepers">
         <Plug size={15} />
       </StripLink>
-      <div className={collapsed ? 'flex flex-col items-center gap-2' : 'ml-auto flex items-center gap-1'}>
+      <div className={inner}>
         <ThemeModeButton />
         <UserMenu />
       </div>

@@ -3,6 +3,8 @@ import { DropdownMenu } from '@cloudflare/kumo'
 import { useAuthenticatedApi } from '../AuthContext'
 import { useAvatar } from '../useAvatar'
 import { MENU_CONTENT, MENU_ITEM, MENU_ITEM_DANGER, MENU_POSITIONER_STYLE } from './menuStyles'
+import { homeTourRequest } from '../features/tour/homeTour'
+import { requestTour } from '../features/tour/tourStore'
 
 export default function UserMenu() {
   const { authenticatedApi, logout, currentUser, isAdmin } = useAuthenticatedApi()
@@ -52,6 +54,15 @@ export default function UserMenu() {
             Admin
           </DropdownMenu.Item>
         )}
+        <DropdownMenu.Item
+          onClick={() => {
+            requestTour(homeTourRequest(true))
+            navigate({ to: '/' })
+          }}
+          className={MENU_ITEM}
+        >
+          Interface tour
+        </DropdownMenu.Item>
         <DropdownMenu.Separator />
         <DropdownMenu.Item
           variant="danger"

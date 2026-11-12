@@ -35,9 +35,17 @@
       "types": "./src/inline-html-blocks.ts",
       "import": "./src/inline-html-blocks.ts"
     },
+    "./app-host": {
+      "types": "./src/app-host.ts",
+      "import": "./src/app-host.ts"
+    },
     "./theme": {
       "types": "./src/theme.ts",
       "import": "./src/theme.ts"
+    },
+    "./tour": {
+      "types": "./src/tour.ts",
+      "import": "./src/tour.ts"
     }
   },
   "scripts": {

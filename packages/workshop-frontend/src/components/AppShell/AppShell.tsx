@@ -2,46 +2,54 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouterState } from '@tanstack/react-router'
 import { List, X } from '@phosphor-icons/react'
 import TopBarNotice from '../../TopBarNotice'
+import TopNav from '../AppNavigation/TopNav'
+import WorkplaceSwitcher from '../AppNavigation/WorkplaceSwitcher'
+import AppTypeMenus from '../../features/app-type-menus/AppTypeMenus'
 import ReconnectingChip from '../ReconnectingChip'
 import { useConnectionLost } from '../../RpcContext'
 import Sidebar from './Sidebar'
-import CommandPalette from './CommandPalette'
+import CommandPalette from '../Spotlight/Spotlight'
+import ShellTopbarActions from './ShellTopbarActions'
+import AppTopbarControls from '../../features/app-topbar/AppTopbarControls'
+import ViewSettingsMenu from '../../features/view-settings/ViewSettingsMenu'
 import { OPEN_COMMAND_PALETTE_EVENT } from './commandPaletteBus'
-
-const STORAGE_KEY_COLLAPSED = 'gadgets:sidebar-collapsed'
-
-// Read synchronously for the initial state so the rail doesn't flash open then collapse.
-function readCollapsed(): boolean {
-  try {
-    return localStorage.getItem(STORAGE_KEY_COLLAPSED) === '1'
-  } catch {
-    return false
-  }
-}
+import { KeptGatekeeperApp, KeptGatekeeperAppProvider } from '../../KeptGatekeeperApp'
+import TourHost, { useTourActive } from "../../features/tour/TourHost";
+import { useAppTextSize } from '../../features/app-text-size/useAppTextSize'
+import TopNavBar from '../../features/top-nav/TopNavBar'
+import { readNavLayout, saveNavLayout, type NavLayout } from '../../features/top-nav/navLayout'
 
 /**
  * The authenticated, non-fullscreen application chrome: a persistent left rail + a thin top notice
  * strip + the routed content. Replaces the old <Header /> on these routes. Chat and Gadget editor
- * pages are still rendered fullscreen by __root.tsx without this shell.
+ * pages are still rendered fullscreen by __root.tsx without this shell. On desktop the rail can be
+ * collapsed or moved into a top bar with megamenus (`NavLayout`, kept per browser).
  *
  * Mobile: below `md` the rail collapses to an overlay drawer triggered by a hamburger button in a
  * minimal top bar. We don't try to gracefully shrink the rail at narrow widths; the overlay model
  * is simpler and matches how the rest of the app handles small screens.
  */
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const [collapsed, setCollapsed] = useState<boolean>(readCollapsed)
+  return (
+    <KeptGatekeeperAppProvider>
+      <ShellFrame>{children}</ShellFrame>
+    </KeptGatekeeperAppProvider>
+  )
+}
+
+function ShellFrame({ children }: { children: React.ReactNode }) {
+  // Read synchronously for the initial state so the rail doesn't flash open then collapse.
+  const [layout, setLayout] = useState<NavLayout>(readNavLayout)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const drawerRef = useRef<HTMLDivElement>(null)
   const menuButtonRef = useRef<HTMLButtonElement>(null)
   const connectionLost = useConnectionLost()
+  useAppTextSize()
 
-  const toggleCollapsed = useCallback(() => {
-    setCollapsed((prev) => {
-      const next = !prev
-      try { localStorage.setItem(STORAGE_KEY_COLLAPSED, next ? '1' : '0') } catch {}
-      return next
-    })
+  const changeLayout = useCallback((next: NavLayout) => {
+    setLayout(next)
+    saveNavLayout(next)
   }, [])
 
   // Close mobile drawer when escape is pressed.
@@ -88,6 +96,12 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
     setMobileOpen(false)
   }, [pathname])
 
+  // A tour highlights the page, not the drawer: close it so the tour is not trapped under its modal.
+  const tourActive = useTourActive();
+  useEffect(() => {
+    if (tourActive) setMobileOpen(false);
+  }, [tourActive]);
+
   // Global ⌘K / Ctrl+K opens the command palette; the rail's search button opens it via a custom
   // event so it doesn't have to prop-drill into the palette.
   useEffect(() => {
@@ -108,10 +122,16 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-full min-h-0 w-full overflow-hidden bg-kumo-base">
-      {/* Desktop sidebar — hidden on mobile in favor of the drawer. */}
-      <div className="hidden h-full md:flex">
-        <Sidebar collapsed={collapsed} onToggleCollapsed={toggleCollapsed} />
-      </div>
+      {/* Desktop sidebar — hidden on mobile in favor of the drawer, and in the top-bar layout. */}
+      {layout !== 'top' && (
+        <div className="hidden h-full md:flex">
+          <Sidebar
+            collapsed={layout === 'rail'}
+            onToggleCollapsed={() => changeLayout(layout === 'rail' ? 'sidebar' : 'rail')}
+            onMoveToTop={() => changeLayout('top')}
+          />
+        </div>
+      )}
 
       {/* Mobile drawer */}
       {mobileOpen && (
@@ -129,7 +149,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             tabIndex={-1}
             className="fixed inset-y-0 left-0 z-50 outline-none md:hidden"
           >
-            <Sidebar collapsed={false} onToggleCollapsed={() => setMobileOpen(false)} />
+            <Sidebar drawer collapsed={false} onToggleCollapsed={() => setMobileOpen(false)} />
           </div>
         </>
       )}
@@ -140,12 +160,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         inert={mobileOpen ? true : undefined}
         aria-hidden={mobileOpen ? true : undefined}
       >
+        {layout === 'top' && <TopNavBar onMoveToSidebar={() => changeLayout('sidebar')} />}
         {/* Top bar. Same height as the sidebar's brand row (h-14) so they read as one continuous
             chrome strip across the top. Mostly empty — carries the mobile hamburger on the left,
             any admin TopBarNotice centered, and the reconnecting chip on the right. */}
         <div className="relative flex h-14 shrink-0 items-center justify-between border-b border-kumo-line bg-kumo-base px-3">
           <button
             type="button"
+            data-tour="menu-button"
             ref={menuButtonRef}
             onClick={() => setMobileOpen((o) => !o)}
             aria-label={mobileOpen ? 'Close menu' : 'Open menu'}
@@ -153,21 +175,33 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           >
             {mobileOpen ? <X size={16} /> : <List size={16} />}
           </button>
-          <TopBarNotice />
+          <div className="flex min-w-0 items-center gap-2">
+            <WorkplaceSwitcher />
+            <AppTypeMenus />
+            <TopNav />
+            <ViewSettingsMenu />
+          </div>
+          <TopBarNotice inline />
           {/* `ml-auto` rather than the container's `justify-between`: on desktop the hamburger is
               hidden, leaving this the only in-flow child, which `justify-between` would park on the
               left. */}
           <div className="ml-auto flex items-center gap-2">
             {connectionLost && <ReconnectingChip />}
-            <span aria-hidden="true" className="h-11 w-11 md:hidden" />
+            <AppTopbarControls />
+            <ShellTopbarActions />
           </div>
         </div>
 
-        {/* Routed content. Flat enterprise canvas — no texture. */}
-        <main className="min-h-0 flex-1 overflow-y-auto">{children}</main>
+        {/* Routed content. Flat enterprise canvas — no texture. The last gatekeeper app stays
+            mounted above it (hidden off its route), so returning to it is instant. */}
+        <main className="relative min-h-0 flex-1 overflow-y-auto">
+          {children}
+          <KeptGatekeeperApp />
+        </main>
       </div>
 
       <CommandPalette open={paletteOpen} onClose={() => setPaletteOpen(false)} />
+      <TourHost />
     </div>
   )
 }

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /* eslint-disable react/react-in-jsx-scope */
 
-import { act } from "react";
+import { act, useState } from "react";
 import type { ComponentProps, ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import {
@@ -90,9 +90,19 @@ interface TestHost extends RpcTarget {
   resolveWorkspaceTitles(ids: string[]): Promise<(string | null)[]>;
   openPrompt(prompt: string): Promise<void>;
   selectUsers(receiver: GatekeeperUserSelectionReceiver | string): Promise<void>;
+  ui: { hello(): Promise<string> };
 }
 
 class EmptyUi extends RpcTarget {}
+
+class NamedUi extends RpcTarget {
+  constructor(readonly name: string) {
+    super();
+  }
+  hello() {
+    return this.name;
+  }
+}
 
 class TestThemeReceiver extends RpcTarget implements GatekeeperAppThemeReceiver {
   setTheme(_theme: GatekeeperAppTheme): void {}
@@ -421,5 +431,57 @@ describe("SandboxedGatekeeperApp navigation", () => {
       await vi.waitFor(() => expect(router.state.location.pathname).toBe("/"));
     });
     expect(router.state.location.search).toEqual({ prompt: "Create a daily brief." });
+  });
+
+  it("hands a replaced frame to a freshly loaded iframe", async () => {
+    const html = "<!doctype html><title>Scheduler</title>";
+    const frameA = { iframeHtml: html, ui: new RpcStub(new NamedUi("a")) } as unknown as GatekeeperUiFrame;
+    const frameB = { iframeHtml: html, ui: new RpcStub(new NamedUi("b")) } as unknown as GatekeeperUiFrame;
+    let setFrame!: (frame: GatekeeperUiFrame) => void;
+    function Harness() {
+      const [frame, set] = useState(frameA);
+      setFrame = set;
+      return <SandboxedGatekeeperApp frame={frame} gatekeeperVendorId="scheduler" />;
+    }
+    const rootRoute = createRootRoute({ component: Harness });
+    const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: "/" });
+    const router = createRouter({
+      history: createMemoryHistory({ initialEntries: ["/"] }),
+      routeTree: rootRoute.addChildren([indexRoute]),
+    });
+
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => root!.render(<RouterProvider router={router} />));
+
+    const handshake = (iframe: HTMLIFrameElement) => {
+      const { port1, port2 } = new MessageChannel();
+      const stub = newMessagePortRpcSession<TestHost>(port1);
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "handshake" },
+          origin: "null",
+          source: iframe.contentWindow,
+          ports: [port2],
+        }),
+      );
+      return stub;
+    };
+
+    const iframeA = container.querySelector("iframe")!;
+    host = handshake(iframeA);
+    await expect(host.ui.hello()).resolves.toBe("a");
+
+    await act(async () => setFrame(frameB));
+    const iframeB = container.querySelector("iframe")!;
+    expect(iframeB).not.toBe(iframeA);
+
+    const hostB = handshake(iframeB);
+    try {
+      await expect(hostB.ui.hello()).resolves.toBe("b");
+    } finally {
+      hostB[Symbol.dispose]();
+    }
   });
 });
