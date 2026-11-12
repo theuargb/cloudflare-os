@@ -38,6 +38,7 @@ interface OverseerInternals {
   };
   nextChatSequence(chatId: number): number;
   commitAgentStep(...args: unknown[]): Promise<boolean>;
+  getActionContextForUser: (userId: string) => Promise<unknown>;
   startAgent(chatId: number, aiModel: AiModel, initiator: AiChatAuthorInfo,
              initiatorUserId: string): void;
   deliverAgentCallback(chatId: number, methodName: string, args: unknown[],
@@ -507,6 +508,11 @@ describe("turn notifications", () => {
           type: "gatekeeper", vendorId: "testvendor",
           resourceUrl: "https://example.com/repo", typeUrlPattern: "https://*",
         },
+      });
+      // The action is attributed to the turn's collaborator; resolving that identity needs the
+      // sharing machinery, which these notification tests do not stand up.
+      impl.getActionContextForUser = async () => ({
+        actorId: "collaborator@example.com", actor: { displayName: "Collaborator" }, isAdmin: false,
       });
       await impl.submitAction(7, 1, {
         title: "Send", description: "", implementsRevert: false, awaitDecision: true,

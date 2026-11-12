@@ -16,6 +16,7 @@ import { deploymentOutputForBlueprint, listFormatOffers, readAdminConfig } from 
 // Re-export the optional-feature Durable Objects + entrypoints so they can be bound in wrangler.
 export { PendingLogin, LoginConnectCallbackImpl };
 import { GatekeeperUiFrame, GatekeeperUserSelection } from "@gadgets/workshop-shared/gatekeeper";
+import type { ActorContext } from "@gadgets/workshop-shared/gatekeeper";
 import { DecisionModelGatekeeper, LanguageModelGatekeeper } from "./ai-models";
 import { getGatewayModels } from "./ai-gateway.js";
 import { AdminSettings, AdminApiImpl } from "./admin-settings.js";
@@ -684,8 +685,20 @@ class AuthenticatedApiImpl extends RpcTarget implements AuthenticatedApi {
     let accounts = await user.listProvidedAccounts();
     let app = accounts.find(account => account.vendorId === vendorId && account.description.providesUi);
     if (!app) return null;
-    // isAdmin is supplied fresh per open so admin-gated features reflect the user's current status.
-    return user.startAccountAppUi(app.accountId, { isAdmin: this.#isAdmin() });
+    return user.startAccountAppUi(app.accountId, await this.#appUiContext());
+  }
+
+  // The actor and current authority are supplied fresh on every open. The actor id is the canonical
+  // login identity (username or Access email), the same id agent sessions carry.
+  async #appUiContext(): Promise<ActorContext> {
+    let actorId = this.#userId.name;
+    if (!actorId) throw new Error("The authenticated user has no canonical identity.");
+    let profile = await retryOnDoReset(() => this.#user.whoamiIfExists());
+    return {
+      actorId,
+      actor: {displayName: profile?.name || actorId},
+      isAdmin: this.#isAdmin(),
+    };
   }
 
   async createGatekeeperUserSelection(
