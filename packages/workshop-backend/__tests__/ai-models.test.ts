@@ -1147,6 +1147,7 @@ describe("gateway model reasoning levels", () => {
     ["cloudflare", "@cf/cloudflare/clef", null],
     ["cloudflare", "@cf/cloudflare/clef-flash", null],
     ["cloudflare-auto-router", "cloudflare/auto", null],
+    ["cloudflare", "@cf/cloudflare/clairic", null],
   ];
   it.each(BUILT_IN)("says what %s model %s is asked for while no level is set",
       (provider, model, builtIn) => {

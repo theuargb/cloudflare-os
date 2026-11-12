@@ -10,6 +10,7 @@ import type { AiChatAuthorInfo, AiGatewayInfo, ModelKind, ServerConfig } from '@
 const api = vi.hoisted(() => ({
   listModels: vi.fn<(kind?: ModelKind) => Promise<AiChatAuthorInfo[]>>(async (kind) => kind === 'decision'
     ? [{ type: 'agent', id: 'decision-model', name: 'Decision model' }]
+    : kind === 'extraction' ? []
     : [{ type: 'agent', id: 'chat-model', name: 'Chat model' }]),
   getQuickModel: async () => null,
   getAiConfig: vi.fn<() => Promise<Partial<AiGatewayInfo>>>(async () => ({ enabled: false })),
