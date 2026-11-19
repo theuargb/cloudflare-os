@@ -37,10 +37,15 @@ export function seedUserPreferences(authenticatedApi: RpcStub<AuthenticatedApi>,
   notify()
 }
 
-/** Loads the signed-in user's preferences; never rejects (a failed load keeps the seeded values or defaults, writes still go to the server). */
-export async function hydrateUserPreferences(authenticatedApi: RpcStub<AuthenticatedApi>): Promise<void> {
+/**
+ * Loads the signed-in user's preferences; never rejects (a failed load keeps the seeded values or defaults,
+ * writes still go to the server). Resolves whether the load succeeded: after a failure the values may not be
+ * the user's current choices.
+ */
+export async function hydrateUserPreferences(authenticatedApi: RpcStub<AuthenticatedApi>): Promise<boolean> {
   api = authenticatedApi
   hydrating = true
+  let loaded = true
   try {
     const next = new Map(Object.entries(await authenticatedApi.getUiPreferences()))
     for (const [key, value] of pendingWrites) {
@@ -52,10 +57,12 @@ export async function hydrateUserPreferences(authenticatedApi: RpcStub<Authentic
   } catch (err) {
     logRpcFailure('Failed to load UI preferences:', err)
     if (seededApi !== authenticatedApi) values = new Map()
+    loaded = false
   }
   hydrating = false
   pendingWrites.clear()
   notify()
+  return loaded
 }
 
 /** Current value of a preference, or null. */

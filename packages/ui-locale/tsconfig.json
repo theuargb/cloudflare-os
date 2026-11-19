@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2023"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "types": ["node"],
+    // `report.ts` runs directly under Node's type stripping, which needs the `.ts` extension.
+    "allowImportingTsExtensions": true
+  },
+  "include": ["src"],
+  "exclude": ["dist", "node_modules"]
+}
