@@ -87,6 +87,7 @@ async function scenario(kind: Kind | null = "connection", active = false, initia
   const user = env.TEST_USER.getByName(crypto.randomUUID());
   await runInDurableObject(user, instance => {
     instance["storage"].profile.put(USER);
+    instance["storage"].created.put(true);  // `whoamiIfExists()` answers only for a created user.
     instance["storage"].aiModels.put(MODEL);
   });
   await user.newWorkspace(stub.id.toString(), "Resume");
