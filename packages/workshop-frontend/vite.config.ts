@@ -106,6 +106,8 @@ export default defineConfig(({ mode }) => {
     build: {
       // Production reporting uploads these separately; hidden maps never reveal a map URL to users.
       sourcemap: frontendErrorReporting ? 'hidden' : false,
+      // Every emitted file (`/asset-manifest.json`), so a client can fetch the whole app ahead of use.
+      manifest: 'asset-manifest.json',
     },
   }
 })
