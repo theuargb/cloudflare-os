@@ -1,11 +1,13 @@
 import { classifyRpcError, logRpcFailure, rpcFailureDescription } from "../rpcErrors";
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useDeferredValue } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useKumoToastManager } from "@cloudflare/kumo";
 import { ChatComposer } from "../features/chat/composer/ChatComposer";
 import MeshBackground from "../components/MeshBackground";
 import HomeTaskSuggestions from "../components/AppShell/HomeTaskSuggestions";
 import { UpdateAvailableNotice } from "../features/deployment-updates/UpdateAvailableNotice";
+import QuickActions from "../components/Spotlight/QuickActions";
+import MyWork from "../features/app-work/MyWork";
 import { useAuthenticatedApi } from "../AuthContext";
 import { RpcStub } from "capnweb";
 import {
@@ -68,6 +70,9 @@ export function HomePageContent({ prompt }: HomeSearch) {
   const [modelsLoading, setModelsLoading] = useState(models.length === 0);
   // Bumped each time a task suggestion is picked; the composer re-seeds its text off the nonce.
   const [seed, setSeed] = useState<{ text: string; nonce: number } | null>(null);
+  // Live composer text: Home's quick actions filter by it (deferred so typing never waits on ranking).
+  const [draft, setDraft] = useState("");
+  const actionQuery = useDeferredValue(draft);
 
   useEffect(() => {
     if (!prompt) return;
@@ -207,25 +212,34 @@ export function HomePageContent({ prompt }: HomeSearch) {
         </header>
 
         {/* Composer */}
-        <ChatComposer
-          createCapsuleGatekeeper={createCapsuleGatekeeper}
-          getOverseer={getOverseer}
-          onSend={handleSend}
-          isAgentActive={false}
-          models={models}
-          selectedModel={selectedModel === null ? null : { id: selectedModel }}
-          modelsLoading={modelsLoading}
-          onModelChange={handleModelChange}
-          newChat
-          offerFormats
-          autoFocus
-          minRows={3}
-          seedText={seed?.text}
-          seedNonce={seed?.nonce}
-          draftStorageKey={currentUser
-            ? composerDraftStorageKey(currentUser.id, "home")
-            : undefined}
-        />
+        <div data-tour="home-composer">
+          <ChatComposer
+            createCapsuleGatekeeper={createCapsuleGatekeeper}
+            getOverseer={getOverseer}
+            onSend={handleSend}
+            isAgentActive={false}
+            models={models}
+            selectedModel={selectedModel === null ? null : { id: selectedModel }}
+            modelsLoading={modelsLoading}
+            onModelChange={handleModelChange}
+            newChat
+            offerFormats
+            autoFocus
+            minRows={3}
+            seedText={seed?.text}
+            seedNonce={seed?.nonce}
+            onTextChange={setDraft}
+            draftStorageKey={currentUser
+              ? composerDraftStorageKey(currentUser.id, "home")
+              : undefined}
+          />
+        </div>
+
+        {/* My work: what waits for the user in the management apps, with open counts. */}
+        <MyWork />
+
+        {/* Quick actions: recent and featured module actions; the full catalog is ⌘K. */}
+        <QuickActions query={actionQuery} />
 
         {/* A few example work tasks to spark ideas. Picking one seeds the composer above. */}
         <HomeTaskSuggestions
