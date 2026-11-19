@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import type { RpcStub } from 'capnweb'
-import type { ActionLogEntry, Overseer } from '@gadgets/workshop-shared/api'
+import type { ActionLogEntry, ActionState, Overseer } from '@gadgets/workshop-shared/api'
 import { rpcFailureDescription } from '../../rpcErrors'
 import { couldBeAutoApproved, isAutoApproved, type AutoApprovalRules } from './autoApprovalRules'
 import type { PendingChange } from './pendingChangeGroups'
@@ -223,8 +223,9 @@ export function useBulkResolve(
           return
         }
 
+        let outcome: ActionState | undefined
         try {
-          if (decision === 'approve') await overseer.approveAction(entry.id)
+          if (decision === 'approve') outcome = await overseer.approveAction(entry.id)
           else await overseer.rejectAction(entry.id)
         } catch (error) {
           // Refused, most likely, because another decision got there first or holds the request
@@ -242,6 +243,11 @@ export function useBulkResolve(
             title: entry.description.title,
             reason: rpcFailureDescription(error),
           })
+          return
+        }
+        if (outcome === 'failed') {
+          setFailure({ decision, applied, total, title: entry.description.title,
+            reason: 'it could not be applied, and the agent was told why' })
           return
         }
         applied++

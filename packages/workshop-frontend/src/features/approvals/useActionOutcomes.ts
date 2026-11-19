@@ -1,10 +1,10 @@
 import { useCallback, useRef } from 'react'
 import type { RpcStub } from 'capnweb'
-import type { Overseer } from '@gadgets/workshop-shared/api'
+import type { ActionState, Overseer } from '@gadgets/workshop-shared/api'
 import { useActionEntries } from '../../useActions'
 
 /** How a request someone resolved ended. */
-export type ActionOutcome = 'approved' | 'rejected'
+export type ActionOutcome = Exclude<ActionState, 'pending'>
 
 /**
  * How each request this view has watched get resolved ended, as soon as the workspace says so.

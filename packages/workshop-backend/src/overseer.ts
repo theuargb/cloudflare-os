@@ -800,6 +800,7 @@ function actionRecordToLog(record: ActionRecord): ActionLogEntry {
         resolvedBy: record.resolvedBy,
         requestedBy: record.requestedBy,
         autoApproved: record.autoApproved,
+        error: record.error,
         creation: record.action === "create" || undefined,
       };
     case "bindHook":
@@ -5876,7 +5877,7 @@ class OverseerImpl implements AgentHooks {
   async applyPendingAction(record: ActionRecord & {type: "action"},
                            resolvedBy: AiChatAuthorInfo, autoApproved: boolean,
                            creation?: {creator: Fetcher<GatekeeperUserVerifier>,
-                                       configuration: string | null}): Promise<void> {
+                                       configuration: string | null}): Promise<"approved" | "failed"> {
     using _decision = this.claimDecision(record.id);
     let id = record.gatekeeperId;
     // A created resource exists only once its creation applies, and that stays pending until then.
@@ -5902,8 +5903,34 @@ class OverseerImpl implements AgentHooks {
       // The apply-time cache stub is scoped to the gatekeeper AND to this action (approval can
       // happen long after the session that queued it, so the queue-time stub is gone) -- the
       // binding that makes buildPack() serve exactly this action's pending-push closure.
-      await gatekeeper.applyAction(record.action,
-          new GitCacheImpl(this.gitCache, record.gatekeeperId, record.id), actorContext);
+      try {
+        await gatekeeper.applyAction(record.action,
+            new GitCacheImpl(this.gitCache, record.gatekeeperId, record.id), actorContext);
+      } catch (error) {
+        // An agent's awaited action goes back to the agent: the gatekeeper releases it as on a
+        // rejection, the record keeps the error and the turn resumes with it. Anything else, or a
+        // failed release, stays pending for a retry.
+        if (record.caller.from !== "agent" || !record.description.awaitDecision) throw error;
+        try {
+          await gatekeeper.rejectAction(record.action);
+        } catch (releaseError) {
+          this.logger.error("failed to close an action whose apply failed",
+              {event: "action.fail.close.failed", actionId: record.id, error: releaseError});
+          throw error;
+        }
+        record.state = "failed";
+        record.appliedAt = new Date();
+        record.resolvedBy = resolvedBy;
+        record.autoApproved = autoApproved;
+        record.error = stringifyError(error);
+        this.storage.transaction(() => {
+          this.gitCache.clearPushMarks(record.id);
+          this.storage.actions.put(record);
+        });
+        this.resumeAgentAfterDecision(record.caller.chatId, record.id);
+        this.traceAgentActionApproval(record, "approved");
+        return "failed";
+      }
     }
     record.state = "approved";
     record.appliedAt = new Date();
@@ -5947,6 +5974,7 @@ class OverseerImpl implements AgentHooks {
     }
     // Also when a rule applies it: a user's "always approve" answers a pending request that way.
     this.traceAgentActionApproval(record, "approved");
+    return "approved";
   }
 
   // Traces an approval step for an action an agent turn submitted.
@@ -10655,6 +10683,7 @@ class OverseerImpl implements AgentHooks {
     let requestIds: string[] = [];
     let connections = false;
     let titles: string[] = [];
+    let failures: {title: string, error: string}[] = [];
     let pending = false;
     let denied = false;
     let steered = false;
@@ -10685,14 +10714,19 @@ class OverseerImpl implements AgentHooks {
         if (record?.type === "action" && record.caller.from === "agent" &&
             record.description.awaitDecision) {
           actionIds.push(record.id);
-          titles.push(record.description.title);
+          if (record.state === "failed") {
+            failures.push({title: record.description.title, error: record.error ?? ""});
+          } else {
+            titles.push(record.description.title);
+          }
           pending ||= record.state === "pending";
           denied ||= record.state === "rejected";
         }
       }
     }
     return agent && (actionIds.length || requestIds.length)
-        ? {agent, actionIds, requestIds, connections, titles: titles.toReversed(), pending, denied}
+        ? {agent, actionIds, requestIds, connections, titles: titles.toReversed(),
+           failures: failures.toReversed(), pending, denied}
         : undefined;
   }
 
@@ -10736,8 +10770,18 @@ class OverseerImpl implements AgentHooks {
       staysStopped();
       return;
     }
-    let text = wait.titles.length
-        ? `The changes you submitted have been approved and applied: ${wait.titles.map(t => `"${t}"`).join(", ")}. Reads now reflect them.`
+    let notes: string[] = [];
+    if (wait.titles.length) {
+      notes.push(`The changes you submitted have been approved and applied: ${wait.titles.map(t => `"${t}"`).join(", ")}. Reads now reflect them.`);
+    }
+    for (let {title, error} of wait.failures) {
+      notes.push(`"${title}" was approved, but applying it failed, so nothing changed. The error: ${error}`);
+    }
+    if (wait.failures.length) {
+      notes.push("Tell the user what failed and why. If the cause can be fixed, submit a corrected change.");
+    }
+    let text = notes.length
+        ? notes.join("\n\n")
         : wait.connections
             ? "The requested connections have been accepted. Continue using the connected resources."
             : "The web fetches you requested have been approved. Fetch those URLs now.";
@@ -13434,7 +13478,7 @@ class OverseerClientInterface extends RpcTarget implements Overseer {
     return actionHistoryPage(this.impl.storage, options);
   }
 
-  async approveAction(id: number, creation?: CreationApproval): Promise<void> {
+  async approveAction(id: number, creation?: CreationApproval): Promise<"approved" | "failed"> {
     let action = this.impl.storage.actions.get(id);
     if (!action) {
       throw new Error(`No such action: ${id}`);
@@ -13460,12 +13504,13 @@ class OverseerClientInterface extends RpcTarget implements Overseer {
     let vendorId = gatekeeperVendorId(this.impl.storage.gatekeepers.get(action.gatekeeperId));
     let creator = action.action === "create" && creation && vendorId
         ? await this.#clientUser.getVerifier(creation.accountId, vendorId) : null;
-    await this.impl.applyPendingAction(action, profile, false,
+    let outcome = await this.impl.applyPendingAction(action, profile, false,
         creator ? {creator, configuration: creation?.configuration ?? null} : undefined);
 
     // Clearing this manual gate may unblock later auto-eligible pending actions on the same
     // gatekeeper, so cascade a drain (in-order) once this one is applied.
     this.impl.ctx.waitUntil(this.#drainAutoApprovalsAndResume(action.gatekeeperId));
+    return outcome;
   }
 
   // A drain can decide an agent turn's last awaited action, which must resume that turn just as a
@@ -13491,7 +13536,8 @@ class OverseerClientInterface extends RpcTarget implements Overseer {
     await this.impl.drainAutoApprovals(gatekeeperId);
     // The shared apply path claims new turns; this also covers legacy rows adopted above.
     for (let [id, chatId] of awaited) {
-      if (this.impl.storage.actions.get(id)?.state !== "approved") continue;
+      let state = this.impl.storage.actions.get(id)?.state;
+      if (state !== "approved" && state !== "failed") continue;
       this.impl.resumeAgentAfterDecision(chatId, id);
     }
   }
@@ -14668,7 +14714,7 @@ class UseOverseerInterface extends RpcTarget implements Overseer {
       : Promise<ActionHistoryPage> {
     return {entries: []};
   }
-  async approveAction(_id: number): Promise<void> { this.#deny(); }
+  async approveAction(_id: number): Promise<"approved" | "failed"> { this.#deny(); }
   async rejectAction(_id: number): Promise<void> { this.#deny(); }
   async listHooks(): Promise<BoundHookInfo[]> { this.#deny(); }
   async enableHook(_id: number): Promise<void> { this.#deny(); }

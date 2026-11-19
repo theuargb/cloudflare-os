@@ -94,6 +94,7 @@ import {
   BlueprintMerge,
   BlueprintOutput,
   MessageFormatRef,
+  ActionState,
 } from "@gadgets/workshop-shared/api";
 import { composeEpochChanges, type CodeChange } from "@gadgets/workshop-shared/code-change";
 import type { ChatChangeRow, ChatContentReader } from "./features/code/otClient";
@@ -4518,7 +4519,7 @@ function ChatInterface({
     return changed;
   };
 
-  const applyOptimisticActionState = (actionId: number, state: "approved" | "rejected"): boolean => {
+  const applyOptimisticActionState = (actionId: number, state: Exclude<ActionState, "pending">): boolean => {
     let changed = false;
     const locations = cacheRef.current.actionMessages.get(actionId);
     if (!locations) return false;
@@ -5361,6 +5362,7 @@ function ChatInterface({
     const isPending = state === "pending";
     const isApproved = state === "approved";
     const isRejected = state === "rejected";
+    const isFailed = state === "failed";
     // A blocking (awaitDecision) pending action suspends the agent turn and blocks the composer, so
     // present it as a prominent callout with its details expanded by default.
     const isBlocking = isPending && log.description.awaitDecision === true;
@@ -5385,10 +5387,12 @@ function ChatInterface({
       ? "Approved"
       : isRejected
         ? "Denied"
-        : decidedInTray
-          ? "Waiting for review"
-          : null;
-    const stateLabelCls = isRejected
+        : isFailed
+          ? "Failed"
+          : decidedInTray
+            ? "Waiting for review"
+            : null;
+    const stateLabelCls = isRejected || isFailed
       ? "text-kumo-danger"
       : "text-kumo-inactive";
     // Auto-approval target: offer "Always approve this type" only when enabling a rule would
@@ -5560,6 +5564,9 @@ function ChatInterface({
             <div className="flex flex-shrink-0 items-center gap-1">{actionControls}</div>
           )}
         </div>
+        {isFailed && log.type === "action" && log.error && (
+          <p className="ml-8 mt-0.5 whitespace-pre-wrap break-words text-[12px] leading-4 text-kumo-danger">{log.error}</p>
+        )}
         {showDescription && (
           <div className="themed-surface-inset ml-8 mt-1 space-y-1.5 rounded-2xl border border-kumo-line/70 bg-kumo-elevated/45 p-3 text-[13px] leading-[19px] tracking-[-0.25px] text-kumo-subtle">
             {restrictedReview && <RestrictedApprovalNotice id={noticeId} />}
