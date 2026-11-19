@@ -1,7 +1,7 @@
 import { useState, FormEvent } from 'react'
 import { Link } from '@tanstack/react-router'
 import { RpcStub } from 'capnweb'
-import { PublicApi } from '@gadgets/workshop-shared/api'
+import { PublicApi, normalizeUsername } from '@gadgets/workshop-shared/api'
 import { Hexagon } from '@phosphor-icons/react'
 import { Input, Button, Banner, Loader } from '@cloudflare/kumo'
 import { hashPassword } from './passwordHash'
@@ -36,8 +36,9 @@ export default function LoginPage({ rpcStub, onLoginSuccess }: LoginPageProps) {
     setError(null)
 
     try {
+      const loginName = normalizeUsername(username)
       const passwordHash = await hashPassword(username, password)
-      const token = await rpcStub.login(username, passwordHash)
+      const token = await rpcStub.login(loginName, passwordHash)
       if (token) {
         localStorage.setItem('authToken', token)
         if (onLoginSuccess) {
