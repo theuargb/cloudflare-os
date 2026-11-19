@@ -26,9 +26,13 @@ function useKeptApp(): KeptAppState {
   return context
 }
 
+// The app the user last opened; the shell boots it hidden at start so opening it is instant.
+const LAST_APP_KEY = 'gadgets:last-app'
+
 /**
  * Holds the last opened gatekeeper app across Workshop routes, so returning to it from chat or any
- * other page shows it at once, at the screen it was left on, without reloading the frame.
+ * other page shows it at once, at the screen it was left on, without reloading the frame. At start
+ * the app last opened on the previous visit boots hidden, unless a route already shows an app.
  */
 export function KeptGatekeeperAppProvider({ children }: { children: ReactNode }) {
   const router = useRouter()
@@ -39,9 +43,16 @@ export function KeptGatekeeperAppProvider({ children }: { children: ReactNode })
   const show = useCallback((next: ShownApp) => {
     setApp((current) => (current?.appId === next.appId && current.route === next.route ? current : next))
     setActive(true)
+    try { localStorage.setItem(LAST_APP_KEY, next.appId) } catch { /* storage unavailable */ }
   }, [])
   const hide = useCallback(() => setActive(false), [])
   const warm = useCallback((next: ShownApp) => setApp((current) => current ?? next), [])
+  // Runs after the routes' effects (children first), so an app route's `show` wins over this.
+  useEffect(() => {
+    let last: string | null = null
+    try { last = localStorage.getItem(LAST_APP_KEY) } catch { /* storage unavailable */ }
+    if (last) warm({ appId: last, route: '' })
+  }, [warm])
   return <KeptAppContext.Provider value={{ app, active, show, hide, warm }}>{children}</KeptAppContext.Provider>
 }
 

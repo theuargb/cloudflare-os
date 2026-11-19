@@ -107,19 +107,12 @@ const WORKSPACE_TITLES_TTL_MS = 10_000
 // Near the max int, so the full-viewport iframe sits above all Workshop chrome.
 const overlayZIndex = 2147483000
 
-// Each acquired frame gets its own iframe document: an already-loaded app handshakes once, so a
-// fresh `ui` capability (e.g. after the Workshop socket reconnected) is reachable only through a
-// reloaded document. Identity-keyed, so re-renders with the same frame never reload the app.
-const frameKeys = new WeakMap<GatekeeperUiFrame, number>();
-let nextFrameKey = 0;
-function frameKey(frame: GatekeeperUiFrame): number {
-  let key = frameKeys.get(frame);
-  if (key === undefined) {
-    key = ++nextFrameKey;
-    frameKeys.set(frame, key);
-  }
-  return key;
-}
+/**
+ * The document an app frame loads. A fresh `ui` capability (e.g. after the Workshop socket
+ * reconnected) is reachable only through a reloaded document, because a loaded app handshakes once;
+ * the owner gives every such document its own `documentKey`.
+ */
+export type AppFrameDocument = { iframeUrl: string } | { iframeHtml: string }
 
 const baseIframeStyle: CSSProperties = {
   border: 0,
@@ -555,8 +548,15 @@ class GatekeeperAppHostImpl extends RpcTarget implements GatekeeperAppHost {
  * talks to the gatekeeper only through the `ui` capability carried over the MessagePort RPC session.
  * The iframe fills its parent container; a hidden app stays loaded (kept mounted by the shell).
  */
-export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, route = '', visible = true, onRouteChange, onCapabilityLost }: {
-  frame: GatekeeperUiFrame,
+export default function SandboxedGatekeeperApp({ frame, frameDocument, documentKey, gatekeeperVendorId, route = '', visible = true, onRouteChange, onCapabilityLost }: {
+  /**
+   * The acquired frame, or null while it is being acquired: the document already loads, and its
+   * handshake is held until the frame's `ui` capability arrives.
+   */
+  frame: GatekeeperUiFrame | null,
+  frameDocument: AppFrameDocument,
+  /** Identity of the loaded document: a new key reloads the iframe (and so handshakes again). */
+  documentKey: string,
   gatekeeperVendorId: string,
   /** The app route held in the Workshop URL; changes the app did not report are pushed into it. */
   route?: string,
@@ -578,6 +578,12 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, rout
   const hostRef = useRef<GatekeeperAppHostImpl | null>(null)
   const connectedRef = useRef(false)
   const invalidatedRef = useRef(false)
+  // A handshake that arrived before the frame was acquired; the session starts once it is.
+  const pendingPortRef = useRef<MessagePort | null>(null)
+  useEffect(() => () => {
+    pendingPortRef.current?.close()
+    pendingPortRef.current = null
+  }, [documentKey])
   const [overlay, setOverlay] = useState<OverlayState>(null)
   // The open picker owns the receiver dup and settles `selectUsers()` on close or cancellation.
   // State drives rendering; the ref lets callbacks check identity before settling, so late
@@ -723,7 +729,7 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, rout
         setOverlayPhase(null)
         return
       }
-      if (invalidatedRef.current || !frame.ui) {
+      if (invalidatedRef.current || !frame?.ui) {
         port.close()
         return
       }
@@ -783,11 +789,22 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, rout
         event, frameWindow, { surface: 'gatekeeper-app', gatekeeperVendorId },
       )) return
       if (event.data?.type === 'handshake' && event.ports?.[0]) {
-        connect(event.ports[0])
+        if (frame) {
+          connect(event.ports[0])
+        } else {
+          pendingPortRef.current?.close()
+          pendingPortRef.current = event.ports[0]
+        }
       }
     }
 
     window.addEventListener('message', handleMessage)
+    // The document handshook while the frame was being acquired: start its session now.
+    if (frame && pendingPortRef.current) {
+      const port = pendingPortRef.current
+      pendingPortRef.current = null
+      connect(port)
+    }
     return () => {
       window.removeEventListener('message', handleMessage)
       sessionRef.current?.[Symbol.dispose]?.()
@@ -797,17 +814,17 @@ export default function SandboxedGatekeeperApp({ frame, gatekeeperVendorId, rout
       dropAppTours(gatekeeperVendorId);
       setOverlayPhase(null)
     }
-    // One session per acquired frame (the iframe is keyed by it, so a new frame always handshakes
-    // again); handler changes reach the live session through handlersRef instead of tearing it down.
+    // One session per acquired frame (a new frame comes with a new document key, so it always
+    // handshakes again); handler changes reach the live session through handlersRef instead of tearing it down.
   }, [frame, gatekeeperVendorId, present, setOverlayPhase, openUserPicker, cancelUserPicker])
 
   return (
     <>
       <iframe
-        key={frameKey(frame)}
+        key={documentKey}
         ref={iframeRef}
         // A frame URL is validated by the page (isAppFrameUrl); it loads inside the same sandbox.
-        {...(frame.iframeUrl !== undefined ? { src: frame.iframeUrl } : { srcDoc: frame.iframeHtml })}
+        {...('iframeUrl' in frameDocument ? { src: frameDocument.iframeUrl } : { srcDoc: frameDocument.iframeHtml })}
         // allow-scripts: run the app's JS. allow-modals: its beforeunload unsaved-changes guard.
         // allow-downloads: save files the app already holds (exports, print forms) — browsers block every
         // download from a sandboxed frame without it, even from a user-clicked <a download>. Not

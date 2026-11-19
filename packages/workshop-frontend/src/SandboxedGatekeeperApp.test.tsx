@@ -160,7 +160,7 @@ describe("SandboxedGatekeeperApp navigation", () => {
       ui: new RpcStub(new EmptyUi()),
     } as unknown as GatekeeperUiFrame;
     const rootRoute = createRootRoute({
-      component: () => <SandboxedGatekeeperApp frame={frame} gatekeeperVendorId="scheduler" onCapabilityLost={() => {}} />,
+      component: () => <SandboxedGatekeeperApp frame={frame} frameDocument={{ iframeHtml: frame.iframeHtml! }} documentKey="1" gatekeeperVendorId="scheduler" onCapabilityLost={() => {}} />,
     });
     const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: "/" });
     const gadgetRoute = createRoute({
@@ -441,7 +441,7 @@ describe("SandboxedGatekeeperApp navigation", () => {
     function Harness() {
       const [frame, set] = useState(frameA);
       setFrame = set;
-      return <SandboxedGatekeeperApp frame={frame} gatekeeperVendorId="scheduler" onCapabilityLost={() => {}} />;
+      return <SandboxedGatekeeperApp frame={frame} frameDocument={{ iframeHtml: html }} documentKey={frame === frameA ? "a" : "b"} gatekeeperVendorId="scheduler" onCapabilityLost={() => {}} />;
     }
     const rootRoute = createRootRoute({ component: Harness });
     const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: "/" });
@@ -485,6 +485,39 @@ describe("SandboxedGatekeeperApp navigation", () => {
     }
   });
 
+  it("holds the handshake of a document loaded before its frame, and connects it once the frame arrives", async () => {
+    const html = "<!doctype html><title>Scheduler</title>";
+    const frame = { iframeHtml: html, ui: new RpcStub(new NamedUi("late")) } as unknown as GatekeeperUiFrame;
+    let setFrame!: (frame: GatekeeperUiFrame | null) => void;
+    function Harness() {
+      const [current, set] = useState<GatekeeperUiFrame | null>(null);
+      setFrame = set;
+      return <SandboxedGatekeeperApp frame={current} frameDocument={{ iframeHtml: html }} documentKey="speculative" gatekeeperVendorId="scheduler" onCapabilityLost={() => {}} />;
+    }
+    const rootRoute = createRootRoute({ component: Harness });
+    const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: "/" });
+    const router = createRouter({
+      history: createMemoryHistory({ initialEntries: ["/"] }),
+      routeTree: rootRoute.addChildren([indexRoute]),
+    });
+
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => root!.render(<RouterProvider router={router} />));
+
+    const iframe = container.querySelector("iframe")!;
+    const { port1, port2 } = new MessageChannel();
+    host = newMessagePortRpcSession<TestHost>(port1);
+    window.dispatchEvent(
+      new MessageEvent("message", { data: { type: "handshake" }, origin: "null", source: iframe.contentWindow, ports: [port2] }),
+    );
+
+    await act(async () => setFrame(frame));
+    expect(container.querySelector("iframe")).toBe(iframe);
+    await expect(host.ui.hello()).resolves.toBe("late");
+  });
+
   it("tells the owner when a relayed call fails with a do-reset error, not for ordinary errors", async () => {
     class FlakyUi extends RpcTarget {
       reset(): never {
@@ -503,6 +536,8 @@ describe("SandboxedGatekeeperApp navigation", () => {
       component: () => (
         <SandboxedGatekeeperApp
           frame={frame}
+          frameDocument={{ iframeHtml: frame.iframeHtml! }}
+          documentKey="1"
           gatekeeperVendorId="scheduler"
           onCapabilityLost={onCapabilityLost}
         />
