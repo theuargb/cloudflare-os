@@ -14,6 +14,7 @@ export const PROVIDER_LABELS: Record<AiModelProvider, string> = {
   cloudflare: 'Cloudflare Workers AI',
   ollama: 'Ollama',
   'cloudflare-auto-router': 'AI Gateway Auto Router',
+  semantyka: 'Семантика',
 }
 
 /** Each reasoning level's name as the Models tab shows it. */
