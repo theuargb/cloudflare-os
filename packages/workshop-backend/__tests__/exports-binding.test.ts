@@ -66,6 +66,7 @@ describe("gadget bindings in the agent's env", () => {
     }, "exec-1");
     expect(agentEnv).toEqual({
       GIT: { type: "git" },
+      CHAT_FILES: { type: "attachments" },
       APP: { rpc: { type: "gadget", id: 100 }, exports: { type: "exports", id: 100 } },
       DB: { type: "gatekeeper", id: 5, executionId: "exec-1" },
     });
