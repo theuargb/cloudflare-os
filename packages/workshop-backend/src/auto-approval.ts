@@ -38,14 +38,14 @@ export function autoApprovalRule(
 }
 
 /**
- * Applies a single eligible pending action: invoke the gatekeeper, mark it approved, persist.
- * Refuses an action that is no longer pending or whose decision is in flight; the drain checks
+ * Decides a single eligible pending action: applies it, or closes an agent's awaited action as
+ * failed (its agent takes the error). Throws when it stays pending. Refuses an action that is no longer pending or whose decision is in flight; the drain checks
  * both first, so neither reaches it as a failure.
  */
 export type ApplyPendingActionFn = (
     record: ActionRecord & {type: "action"},
     resolvedBy: AiChatAuthorInfo,
-    autoApproved: boolean) => Promise<void>;
+    autoApproved: boolean) => Promise<"approved" | "failed">;
 
 export class AutoApprovalDrainer {
   // Per-gatekeeper single-flight state: the running drain, and whether another was requested while
@@ -90,7 +90,8 @@ export class AutoApprovalDrainer {
   // invariant that nothing is silently applied past a human gate.
   //
   // Eligibility is `autoApprovalRule()`: the author's `autoApprovable` verdict, a user-enabled
-  // rule for the action's kind, and no restricted-data latch.
+  // rule for the action's kind, and no restricted-data latch. An action closed as failed is
+  // decided, so the drain goes on past it.
   async #drainOnce(gatekeeperId: number): Promise<void> {
     // Materialize before applying: the index yields lazily in ascending id order, and applying
     // mutates it mid-iteration. Actions created after this snapshot trigger their own drain(),

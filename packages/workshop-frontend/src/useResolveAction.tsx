@@ -16,7 +16,7 @@ type ActionDecision = 'approve' | 'deny'
 export function useResolveAction(
   overseer: RpcStub<Overseer>,
   setProcessing: Dispatch<SetStateAction<Set<number>>>,
-  onResolved?: (actionId: number, state: Extract<ActionState, 'approved' | 'rejected'>) => void,
+  onResolved?: (actionId: number, state: Exclude<ActionState, 'pending'>) => void,
 ) {
   const toasts = useKumoToastManager()
   const onResolvedRef = useRef(onResolved)
@@ -28,9 +28,10 @@ export function useResolveAction(
   ) => {
     setProcessing(previous => new Set(previous).add(actionId))
     try {
-      if (decision === 'approve') await overseer.approveAction(actionId, approval)
+      let state: Exclude<ActionState, 'pending'> = 'rejected'
+      if (decision === 'approve') state = await overseer.approveAction(actionId, approval)
       else await overseer.rejectAction(actionId)
-      onResolvedRef.current?.(actionId, decision === 'approve' ? 'approved' : 'rejected')
+      onResolvedRef.current?.(actionId, state)
     } catch (error) {
       console.error(`Failed to ${decision} action:`, error)
       toasts.add({

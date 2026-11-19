@@ -4284,8 +4284,10 @@ export const READ_FILES_RESPONSE_BUDGET = 8 * 1024 * 1024;
  * * pending: Action has not been applied yet. It is waiting for approval.
  * * approved: Action was approved and applied.
  * * rejected: Action was rejected by the user.
+ * * failed: The user approved an agent's awaited action, but its gatekeeper failed to apply it;
+ *   nothing was applied (see ActionLogEntry.error). Any other failed apply stays pending.
  */
-export type ActionState = "pending" | "approved" | "rejected";
+export type ActionState = "pending" | "approved" | "rejected" | "failed";
 
 /**
  * One entry in a workspace's action log, discriminated by `type`: an action a gadget asked a
@@ -4333,6 +4335,9 @@ export type ActionLogEntry = {
    * clicking Approve. Only ever set alongside state "approved" (there is no automatic rejection).
    */
   autoApproved?: boolean;
+
+  /** The gatekeeper's error, verbatim. Set only with state "failed". */
+  error?: string;
 
   /**
    * True for the creation queued by createExternalResource. Approving it requires one of the
@@ -4717,9 +4722,11 @@ export interface Overseer extends RpcTarget {
   /**
    * Approve an action that is currently in the "pending" state. The action will be performed on
    * approval. Approving a creation (see ActionLogEntry.creation) requires `creation`: how the
-   * approver chose to make it.
+   * approver chose to make it. Resolves "failed" when an agent's awaited action fails at its
+   * gatekeeper: the action is closed with the error and the agent's turn resumes with it. Any
+   * other failure throws and leaves the action pending.
    */
-  approveAction(id: number, creation?: CreationApproval): Promise<void>;
+  approveAction(id: number, creation?: CreationApproval): Promise<"approved" | "failed">;
 
   /**
    * Reject an action that is in the "pending" state. This notifies the gatekeeper that it will not
