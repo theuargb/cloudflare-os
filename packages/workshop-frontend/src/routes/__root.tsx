@@ -23,6 +23,7 @@ import {
 } from '../features/native-app/DeviceSessionHandoff'
 import { NativeAppBridge } from '../features/native-app/NativeAppBridge'
 import { PageUpdateNotice } from '../features/stale-session/PageUpdateNotice'
+import { VoiceCallProvider } from '../features/voice/VoiceCallProvider'
 import { hydrateUserPreferences, readUserPreference, seedUserPreferences } from '../features/user-preferences/userPreferences'
 import { readBootSnapshot, writeBootSnapshot } from '../features/boot-snapshot/bootSnapshot'
 import { UI_LOCALE_PREFERENCE } from '@gadgets/workshop-shared/api'
@@ -144,10 +145,12 @@ function RootComponent() {
               <BrowserPushBridge />
               <NativeAppBridge />
               <PageUpdateNotice />
+              <VoiceCallProvider>
               <AuthenticatedShell
                 authenticatedApi={authenticatedApi}
                 isWorkspaceEditor={isWorkspaceEditor}
               />
+              </VoiceCallProvider>
             </UnreadStateBridge>
           </Toasty>
         </TooltipProvider>
