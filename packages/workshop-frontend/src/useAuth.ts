@@ -7,6 +7,7 @@ import { NativeConnectSession } from './features/native-app/connectSession'
 import { browserPushSupport, disableBrowserPush } from './features/notifications/browserPush'
 import { forgetModelSelection } from './modelSelection'
 import { disconnectNativeNotificationEnrollment } from './features/notifications/nativeNotificationEnrollment'
+import { clearBootSnapshot } from './features/boot-snapshot/bootSnapshot'
 
 const CF_ACCESS_MODE = import.meta.env.VITE_CF_ACCESS_MODE === 'true'
 
@@ -154,6 +155,7 @@ export function useAuth(publicApi: RpcStub<PublicApi>) {
       }
     })
     localStorage.removeItem('authToken')
+    clearBootSnapshot()
     forgetModelSelection()
 
     if (CF_ACCESS_MODE) {

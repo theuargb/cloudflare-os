@@ -23,7 +23,8 @@ import {
 } from '../features/native-app/DeviceSessionHandoff'
 import { NativeAppBridge } from '../features/native-app/NativeAppBridge'
 import { PageUpdateNotice } from '../features/stale-session/PageUpdateNotice'
-import { hydrateUserPreferences } from '../features/user-preferences/userPreferences'
+import { hydrateUserPreferences, seedUserPreferences } from '../features/user-preferences/userPreferences'
+import { readBootSnapshot, writeBootSnapshot } from '../features/boot-snapshot/bootSnapshot'
 
 export const Route = createRootRoute({
   component: RootComponent,
@@ -165,13 +166,22 @@ function AuthenticatedShell({
   authenticatedApi: RpcStub<AuthenticatedApi>
   isWorkspaceEditor: boolean
 }) {
+  // The previous visit's snapshot of this session paints the shell at once; the server answers refresh it.
+  const [snapshot] = useState(() => {
+    const stored = readBootSnapshot()
+    if (stored) seedUserPreferences(authenticatedApi, stored.preferences)
+    return stored
+  })
   // null = still checking, true = needs onboarding, false = onboarding done
-  const [onboardingNeeded, setOnboardingNeeded] = useState<boolean | null>(null)
+  const [onboardingNeeded, setOnboardingNeeded] = useState<boolean | null>(snapshot?.onboardingDone ? false : null)
 
   useEffect(() => {
     let cancelled = false
     const onboarding = authenticatedApi.isOnboardingCompleted().then(
-      (completed) => !completed,
+      (completed) => {
+        if (completed) writeBootSnapshot({ onboardingDone: true })
+        return !completed
+      },
       (err: unknown) => {
         logRpcFailure('Failed to check onboarding status:', err)
         // If the check fails, skip onboarding to avoid blocking the user
