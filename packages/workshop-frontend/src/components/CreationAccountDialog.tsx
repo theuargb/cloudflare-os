@@ -4,7 +4,7 @@ import { Dialog, Loader, useKumoToastManager } from '@cloudflare/kumo'
 import type {
   ConnectFlowStart, CreationApproval, GatekeeperVendorInfo,
 } from '@gadgets/workshop-shared/api'
-import type { GatekeeperUiFrame, SupportedResource } from '@gadgets/workshop-shared/gatekeeper'
+import type { ResourceConfiguratorFrame, SupportedResource } from '@gadgets/workshop-shared/gatekeeper'
 import { useAuthenticatedApi } from '../AuthContext'
 import { AccountsSubscriberAdapter, type AccountEvent } from '../accountsSubscriber'
 import { openConnectWindow } from '../connectHandoff'
@@ -26,7 +26,7 @@ export type CreationTarget = {
 type StartingFlow = { kind: 'connect' } | { kind: 'reconnect' | 'grant'; accountId: number }
 
 // The creation configurator started for an account, or why it could not start.
-type Configurator = { accountId: number } & ({ frame: GatekeeperUiFrame } | { error: string })
+type Configurator = { accountId: number } & ({ frame: ResourceConfiguratorFrame } | { error: string })
 
 /**
  * Asks which of the user's own accounts for `target`'s vendor to make a resource in, and offers
@@ -125,7 +125,7 @@ export const CreationAccountDialog = ({
   useEffect(() => {
     if (configuratorAccountId === null || configuratorTypeId === null) return
     let cancelled = false
-    let started: GatekeeperUiFrame | undefined
+    let started: ResourceConfiguratorFrame | undefined
     authenticatedApi.startCreationConfigurator(configuratorAccountId, configuratorTypeId, purpose)
       .then(frame => {
         if (cancelled) return disposeConfiguratorFrame(frame)

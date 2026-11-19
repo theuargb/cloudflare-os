@@ -1,21 +1,10 @@
 import { Link } from '@tanstack/react-router'
-import {
-  ArrowLeft,
-  Blueprint,
-  BookOpen,
-  Compass,
-  Hexagon,
-  House,
-  MagnifyingGlass,
-  SidebarSimple,
-  SquaresFour,
-  Stack,
-} from '@phosphor-icons/react'
+import { ArrowLeft, BrowserIcon, Hexagon, MagnifyingGlass, SidebarSimple } from '@phosphor-icons/react'
 import { useSiteName } from '../../ServerConfigContext'
 import SiteLogo from '../SiteLogo'
 import { useGatekeeperApps } from '../../useGatekeeperApps'
+import { useAppNavigation } from '../AppNavigation/useAppNavigation'
 import { openCommandPalette } from './commandPaletteBus'
-import SidebarItem from './SidebarItem'
 import {
   SidebarWorkspacesProvider,
   SidebarWorkspacesTools,
@@ -24,31 +13,38 @@ import {
 import SidebarUtilityStrip from './SidebarUtilityStrip'
 import { UnreadSummary } from '../../features/notifications/UnreadSummary'
 import { inNativeApp, returnToInstalls } from '../../features/native-app/nativeApp'
+import { SidebarNav } from '../../features/sidebar-customization/SidebarNav'
 
 /**
- * The persistent left rail. Three pinned regions sandwich a single scrolling region of lists, so
- * the user can always reach Search, primary nav, and the bottom utility strip no matter how many
- * workspaces they have.
+ * The persistent left rail. Brand/search and the bottom utility strip stay pinned; primary
+ * navigation and workspace lists share the bounded scrolling region so dynamic lists remain
+ * reachable at any viewport height.
  *
  * Layout (top → bottom):
  *   • brand row                            pinned
- *   • primary nav (Home, Workspaces, …)    pinned
- *   • workspace tools (⌘K search)          pinned
- *   • Favorites / Recent workspaces        SCROLLS
+ *   • primary nav + Favorites / Recent workspaces SCROLLS together
  *   • utility strip (plug, avatar)         pinned
  */
 export default function Sidebar({
   collapsed,
   onToggleCollapsed,
+  onMoveToTop,
+  drawer = false,
 }: {
   collapsed: boolean
   onToggleCollapsed: () => void
+  /** Moves the navigation into the top bar; absent in the mobile drawer. */
+  onMoveToTop?: () => void
+  /** The mobile drawer instance rather than the desktop rail. */
+  drawer?: boolean
 }) {
   const siteName = useSiteName()
   // Gatekeeper-served management apps the user can reach now (one per gatekeeper that provides a UI
   // and is connected / enabled for everyone). Disabled or not-yet-connected ones aren't returned, so
   // they simply don't appear. The set is fully dynamic — no gatekeeper is hardcoded.
   const gatekeeperApps = useGatekeeperApps()
+  // An app's navigation may carry its own sidebar tree, which replaces its row (sidebarNavDefs).
+  const appNavigation = useAppNavigation()
 
   return (
     <aside
@@ -73,7 +69,7 @@ export default function Sidebar({
             <Hexagon size={20} weight="bold" className="text-kumo-brand shrink-0" />
           </SiteLogo>
           {!collapsed && (
-            <span className="truncate text-[14px] leading-5 font-semibold tracking-[-0.25px] text-kumo-default">
+            <span className="truncate text-(length:--app-fs-14) leading-(--app-lh-20) font-semibold tracking-[-0.25px] text-kumo-default">
               {siteName}
             </span>
           )}
@@ -89,8 +85,20 @@ export default function Sidebar({
             >
               <MagnifyingGlass size={15} />
             </button>
+            {onMoveToTop && (
+              <button
+                type="button"
+                onClick={onMoveToTop}
+                aria-label="Move navigation to the top bar"
+                title="Move navigation to the top bar"
+                className="flex h-7 w-7 cursor-pointer items-center justify-center rounded-md text-kumo-inactive transition-colors hover:bg-kumo-tint hover:text-kumo-default"
+              >
+                <BrowserIcon size={15} />
+              </button>
+            )}
             <button
               type="button"
+              data-tour="sidebar-toggle"
               onClick={onToggleCollapsed}
               aria-label="Collapse sidebar"
               title="Collapse sidebar"
@@ -106,6 +114,7 @@ export default function Sidebar({
       {collapsed && (
         <button
           type="button"
+          data-tour="sidebar-toggle"
           onClick={onToggleCollapsed}
           aria-label="Expand sidebar"
           title="Expand sidebar"
@@ -114,103 +123,49 @@ export default function Sidebar({
           <SidebarSimple size={15} className="rotate-180" />
         </button>
       )}
+      {collapsed && onMoveToTop && (
+        <button
+          type="button"
+          onClick={onMoveToTop}
+          aria-label="Move navigation to the top bar"
+          title="Move navigation to the top bar"
+          className="mx-auto mt-1 flex h-7 w-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-kumo-inactive transition-colors hover:bg-kumo-tint hover:text-kumo-default"
+        >
+          <BrowserIcon size={15} />
+        </button>
+      )}
 
       <SidebarWorkspacesProvider>
-        {/* Pinned top stack. shrink-0 keeps it from squishing when the lists below grow. */}
-        <div className="flex shrink-0 flex-col gap-3 pt-3">
-          {/* Primary nav */}
-          <nav className="flex flex-col gap-0.5 px-2">
-            <SidebarItem
-              to="/"
-              label="Home"
-              icon={<House size={14} weight="regular" />}
-              collapsed={collapsed}
-            />
-            <SidebarItem
-              to="/workspaces"
-              label="Workspaces"
-              icon={<SquaresFour size={14} weight="regular" />}
-              collapsed={collapsed}
-            />
-            <SidebarItem
-              to="/blueprints"
-              label="Blueprints"
-              icon={<Blueprint size={14} weight="regular" />}
-              collapsed={collapsed}
-            />
-            <SidebarItem
-              to="/outputs"
-              label="Outputs"
-              icon={<Stack size={14} weight="regular" />}
-              collapsed={collapsed}
-            />
-            {/* Gatekeeper management apps (e.g. the Context Library), listed dynamically. */}
-            {gatekeeperApps.map((app) => {
-              // Escape the icon URL for safe interpolation into a CSS url("…") string.
-              const maskUrl = app.icon
-                ? `url("${app.icon.url.replace(/[\\"]/g, '\\$&')}")`
-                : undefined
-              return (
-              <SidebarItem
-                key={app.id}
-                to="/gatekeepers/$appId"
-                params={{ appId: app.id }}
-                label={app.title}
-                icon={
-                  maskUrl ? (
-                    // Render the (monochrome) app icon as a CSS mask filled with the row's current
-                    // text color, so it tints like the Phosphor icons — subtle by default, accent
-                    // when active, darker on hover.
-                    <span
-                      aria-hidden
-                      className="h-3.5 w-3.5 bg-current"
-                      style={{
-                        maskImage: maskUrl,
-                        WebkitMaskImage: maskUrl,
-                        maskRepeat: 'no-repeat',
-                        WebkitMaskRepeat: 'no-repeat',
-                        maskPosition: 'center',
-                        WebkitMaskPosition: 'center',
-                        maskSize: 'contain',
-                        WebkitMaskSize: 'contain',
-                      }}
-                    />
-                  ) : (
-                    <BookOpen size={14} weight="regular" />
-                  )
-                }
-                collapsed={collapsed}
-              />
-              )
-            })}
-            <SidebarItem
-              to="/explore"
-              label="Explore"
-              icon={<Compass size={14} weight="regular" />}
-              collapsed={collapsed}
-            />
-            <UnreadSummary collapsed={collapsed} />
-          </nav>
-
-          {/* Workspace tools: search. Pinned so it's always reachable. */}
+        {/* Keep essential controls outside the scrolling content. */}
+        <div className="shrink-0 pt-2">
           <SidebarWorkspacesTools collapsed={collapsed} />
         </div>
 
-        {/* Scrolling middle: only the Favorites / Recent workspaces / Recent blueprints lists.
-            min-h-0 lets flex children compute scroll height correctly. */}
-        <div className="sidebar-scroll mt-1 min-h-0 flex-1 overflow-y-auto">
-          <SidebarWorkspacesLists collapsed={collapsed} />
+        {/* min-h-0 gives this region a bounded height between the pinned brand and profile rows.
+            Collapsed: symmetric scrollbar gutters keep the icon tiles centred under the pinned search button. */}
+        <div
+          className={[
+            'sidebar-scroll min-h-0 flex-1 overflow-y-auto overscroll-y-contain',
+            collapsed ? '[scrollbar-gutter:stable_both-edges]' : '',
+          ].join(' ')}
+        >
+          <SidebarNav apps={gatekeeperApps} navigation={appNavigation} collapsed={collapsed} drawer={drawer} />
+
+          <div className="mt-1" data-tour="sidebar-workspaces">
+            <UnreadSummary collapsed={collapsed} />
+            <SidebarWorkspacesLists collapsed={collapsed} />
+          </div>
         </div>
       </SidebarWorkspacesProvider>
 
-      <SidebarUtilityStrip collapsed={collapsed} />
+      <SidebarUtilityStrip layout={collapsed ? 'rail' : 'sidebar'} />
       {inNativeApp() && (
         <button
           type="button"
           onClick={returnToInstalls}
           aria-label="Back to installs"
           className={[
-            'flex min-h-11 shrink-0 items-center border-t border-kumo-line py-2 text-sm text-kumo-default hover:bg-kumo-tint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kumo-ring',
+            'flex min-h-11 shrink-0 items-center border-t border-kumo-line py-2 text-(length:--app-fs-14) leading-(--app-lh-20) text-kumo-default hover:bg-kumo-tint focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-kumo-ring',
             collapsed ? 'justify-center px-2' : 'gap-2 px-4',
           ].join(' ')}
         >

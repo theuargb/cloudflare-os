@@ -66,14 +66,14 @@ export default function SidebarGadgetRow({
     <Link
       to="/workspace/$id"
       params={{ id: gadget.id }}
-      className="group flex h-8 min-w-0 items-center gap-2 rounded-lg pl-1.5 pr-2.5 text-[13px] leading-[18px] tracking-[-0.25px] text-kumo-default transition-colors hover:bg-kumo-tint"
-      activeProps={{ className: 'flex h-8 min-w-0 items-center gap-2 rounded-lg pl-1.5 pr-2.5 text-[13px] leading-[18px] tracking-[-0.25px] bg-kumo-fill text-kumo-strong font-medium' }}
+      className="group flex h-8 min-w-0 items-center gap-2 rounded-lg pl-1.5 pr-2.5 text-(length:--app-fs-13) leading-(--app-lh-18) tracking-[-0.25px] text-kumo-default transition-colors hover:bg-kumo-tint"
+      activeProps={{ className: 'flex h-8 min-w-0 items-center gap-2 rounded-lg pl-1.5 pr-2.5 text-(length:--app-fs-13) leading-(--app-lh-18) tracking-[-0.25px] bg-kumo-fill text-kumo-strong font-medium' }}
       onClick={(e) => {
         if (renaming) e.preventDefault()
       }}
       title={collapsed ? gadget.title || 'Untitled workspace' : undefined}
     >
-      <div className="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-kumo-fill text-[10px] font-medium text-kumo-subtle">
+      <div className="relative flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-kumo-fill text-(length:--app-fs-10) font-medium text-kumo-subtle">
         <span aria-hidden="true">{initials(gadget.title)}</span>
         {collapsed && unreadMessages > 0 && <span
           role="img"
@@ -93,7 +93,7 @@ export default function SidebarGadgetRow({
                 if (e.key === 'Enter') commit()
                 if (e.key === 'Escape') setRenaming(false)
               }}
-              className="min-w-0 flex-1 bg-transparent text-[13px] leading-[18px] tracking-[-0.25px] outline-none border-b border-kumo-brand text-kumo-default"
+              className="min-w-0 flex-1 bg-transparent text-(length:--app-fs-13) leading-(--app-lh-18) tracking-[-0.25px] outline-none border-b border-kumo-brand text-kumo-default"
               onClick={(e) => e.preventDefault()}
             />
           ) : (
