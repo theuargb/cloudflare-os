@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 /* eslint-disable react/react-in-jsx-scope */
 
-import { act } from "react";
+import { act, useState } from "react";
 import type { ComponentProps, ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import {
@@ -90,9 +90,19 @@ interface TestHost extends RpcTarget {
   resolveWorkspaceTitles(ids: string[]): Promise<(string | null)[]>;
   openPrompt(prompt: string): Promise<void>;
   selectUsers(receiver: GatekeeperUserSelectionReceiver | string): Promise<void>;
+  ui: { hello(): Promise<string> };
 }
 
 class EmptyUi extends RpcTarget {}
+
+class NamedUi extends RpcTarget {
+  constructor(readonly name: string) {
+    super();
+  }
+  hello() {
+    return this.name;
+  }
+}
 
 class TestThemeReceiver extends RpcTarget implements GatekeeperAppThemeReceiver {
   setTheme(_theme: GatekeeperAppTheme): void {}
@@ -150,7 +160,7 @@ describe("SandboxedGatekeeperApp navigation", () => {
       ui: new RpcStub(new EmptyUi()),
     } as unknown as GatekeeperUiFrame;
     const rootRoute = createRootRoute({
-      component: () => <SandboxedGatekeeperApp frame={frame} gatekeeperVendorId="scheduler" />,
+      component: () => <SandboxedGatekeeperApp frame={frame} frameDocument={{ iframeHtml: frame.iframeHtml! }} documentKey="1" gatekeeperVendorId="scheduler" onCapabilityLost={() => {}} />,
     });
     const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: "/" });
     const gadgetRoute = createRoute({
@@ -421,5 +431,148 @@ describe("SandboxedGatekeeperApp navigation", () => {
       await vi.waitFor(() => expect(router.state.location.pathname).toBe("/"));
     });
     expect(router.state.location.search).toEqual({ prompt: "Create a daily brief." });
+  });
+
+  it("hands a replaced frame to a freshly loaded iframe", async () => {
+    const html = "<!doctype html><title>Scheduler</title>";
+    const frameA = { iframeHtml: html, ui: new RpcStub(new NamedUi("a")) } as unknown as GatekeeperUiFrame;
+    const frameB = { iframeHtml: html, ui: new RpcStub(new NamedUi("b")) } as unknown as GatekeeperUiFrame;
+    let setFrame!: (frame: GatekeeperUiFrame) => void;
+    function Harness() {
+      const [frame, set] = useState(frameA);
+      setFrame = set;
+      return <SandboxedGatekeeperApp frame={frame} frameDocument={{ iframeHtml: html }} documentKey={frame === frameA ? "a" : "b"} gatekeeperVendorId="scheduler" onCapabilityLost={() => {}} />;
+    }
+    const rootRoute = createRootRoute({ component: Harness });
+    const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: "/" });
+    const router = createRouter({
+      history: createMemoryHistory({ initialEntries: ["/"] }),
+      routeTree: rootRoute.addChildren([indexRoute]),
+    });
+
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => root!.render(<RouterProvider router={router} />));
+
+    const handshake = (iframe: HTMLIFrameElement) => {
+      const { port1, port2 } = new MessageChannel();
+      const stub = newMessagePortRpcSession<TestHost>(port1);
+      window.dispatchEvent(
+        new MessageEvent("message", {
+          data: { type: "handshake" },
+          origin: "null",
+          source: iframe.contentWindow,
+          ports: [port2],
+        }),
+      );
+      return stub;
+    };
+
+    const iframeA = container.querySelector("iframe")!;
+    host = handshake(iframeA);
+    await expect(host.ui.hello()).resolves.toBe("a");
+
+    await act(async () => setFrame(frameB));
+    const iframeB = container.querySelector("iframe")!;
+    expect(iframeB).not.toBe(iframeA);
+
+    const hostB = handshake(iframeB);
+    try {
+      await expect(hostB.ui.hello()).resolves.toBe("b");
+    } finally {
+      hostB[Symbol.dispose]();
+    }
+  });
+
+  it("holds the handshake of a document loaded before its frame, and connects it once the frame arrives", async () => {
+    const html = "<!doctype html><title>Scheduler</title>";
+    const frame = { iframeHtml: html, ui: new RpcStub(new NamedUi("late")) } as unknown as GatekeeperUiFrame;
+    let setFrame!: (frame: GatekeeperUiFrame | null) => void;
+    function Harness() {
+      const [current, set] = useState<GatekeeperUiFrame | null>(null);
+      setFrame = set;
+      return <SandboxedGatekeeperApp frame={current} frameDocument={{ iframeHtml: html }} documentKey="speculative" gatekeeperVendorId="scheduler" onCapabilityLost={() => {}} />;
+    }
+    const rootRoute = createRootRoute({ component: Harness });
+    const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: "/" });
+    const router = createRouter({
+      history: createMemoryHistory({ initialEntries: ["/"] }),
+      routeTree: rootRoute.addChildren([indexRoute]),
+    });
+
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => root!.render(<RouterProvider router={router} />));
+
+    const iframe = container.querySelector("iframe")!;
+    const { port1, port2 } = new MessageChannel();
+    host = newMessagePortRpcSession<TestHost>(port1);
+    window.dispatchEvent(
+      new MessageEvent("message", { data: { type: "handshake" }, origin: "null", source: iframe.contentWindow, ports: [port2] }),
+    );
+
+    await act(async () => setFrame(frame));
+    expect(container.querySelector("iframe")).toBe(iframe);
+    await expect(host.ui.hello()).resolves.toBe("late");
+  });
+
+  it("tells the owner when a relayed call fails with a do-reset error, not for ordinary errors", async () => {
+    class FlakyUi extends RpcTarget {
+      reset(): never {
+        throw Object.assign(new Error("Durable Object reset"), { durableObjectReset: true });
+      }
+      ordinary(): never {
+        throw new Error("Invalid input");
+      }
+    }
+    const frame = {
+      iframeHtml: "<!doctype html><title>Scheduler</title>",
+      ui: new RpcStub(new FlakyUi()),
+    } as unknown as GatekeeperUiFrame;
+    const onCapabilityLost = vi.fn<(frame: GatekeeperUiFrame, error: unknown) => void>();
+    const rootRoute = createRootRoute({
+      component: () => (
+        <SandboxedGatekeeperApp
+          frame={frame}
+          frameDocument={{ iframeHtml: frame.iframeHtml! }}
+          documentKey="1"
+          gatekeeperVendorId="scheduler"
+          onCapabilityLost={onCapabilityLost}
+        />
+      ),
+    });
+    const router = createRouter({
+      history: createMemoryHistory({ initialEntries: ["/"] }),
+      routeTree: rootRoute.addChildren([createRoute({ getParentRoute: () => rootRoute, path: "/" })]),
+    });
+    container = document.createElement("div");
+    document.body.append(container);
+    root = createRoot(container);
+    await act(async () => root!.render(<RouterProvider router={router} />));
+
+    const iframe = container.querySelector("iframe");
+    if (!iframe) throw new Error("Missing gatekeeper iframe");
+    const { port1, port2 } = new MessageChannel();
+    const session = newMessagePortRpcSession<{
+      ui: { reset(): Promise<void>; ordinary(): Promise<void> };
+    }>(port1);
+    window.dispatchEvent(
+      new MessageEvent("message", {
+        data: { type: "handshake" },
+        origin: "null",
+        source: iframe.contentWindow,
+        ports: [port2],
+      }),
+    );
+
+    await expect(session.ui.ordinary()).rejects.toThrow("Invalid input");
+    expect(onCapabilityLost).not.toHaveBeenCalled();
+
+    await expect(session.ui.reset()).rejects.toThrow("Durable Object reset");
+    await vi.waitFor(() => expect(onCapabilityLost).toHaveBeenCalledTimes(1));
+    expect(onCapabilityLost.mock.calls[0]![0]).toBe(frame);
+    session[Symbol.dispose]();
   });
 });

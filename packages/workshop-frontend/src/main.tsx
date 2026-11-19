@@ -1,4 +1,4 @@
-import { StrictMode, useState, useEffect } from 'react'
+import { StrictMode, useState, useEffect, useRef } from 'react'
 import { createRoot } from 'react-dom/client'
 import { RouterProvider } from '@tanstack/react-router'
 import { RpcPromise, RpcStub, newWebSocketRpcSession } from 'capnweb'
@@ -15,6 +15,7 @@ import { installWorkshopErrorReporting, reportIssue } from './errorReporting'
 import { applySiteFavicon, cacheBustSiteLogoUrl } from './siteLogoUtils'
 import { getBackendHost } from './connectHandoff';
 import { useStaleBackendReconnect } from './features/stale-session/useStaleBackendReconnect'
+import { readStoredServerConfig, writeStoredServerConfig } from './features/boot-snapshot/bootSnapshot'
 
 // ---------------------------------------------------------------------------
 // Dev auto-login: if VITE_DEV_AUTO_LOGIN=true, automatically create/login
@@ -183,13 +184,32 @@ let currentStub = startConnection();
 
 const router = createRouter()
 applyStoredThemeMode()
+// The previous visit's accent paints with the first frame instead of after the config arrives.
+applyAccentColor(readStoredServerConfig()?.accentColor ?? '')
+
+/** The config with its logo URL cache-busted, or `reuse`'s URL when it busts the same logo source. */
+function withLogoUrl(config: ServerConfig, reuse: { source: string; url: string } | null): ServerConfig {
+  if (!config.siteLogo) return config
+  const url = reuse?.source === config.siteLogo.url ? reuse.url : cacheBustSiteLogoUrl(config.siteLogo.url)
+  return { ...config, siteLogo: { url } }
+}
 
 function AppWithConnection() {
   const [rpcState, setRpcState] = useState<{stub: RpcStub<PublicApi>; connectionLost: boolean}>({
     stub: currentStub,
     connectionLost: isConnectionLost,
   });
-  const [serverConfig, setServerConfig] = useState<ServerConfig | null>(null);
+  // Seeded from the previous visit (site name, logo, accent) so the chrome paints at once; refreshed below.
+  const [seed] = useState(() => {
+    const stored = readStoredServerConfig();
+    if (!stored) return null;
+    const config = withLogoUrl(stored, null);
+    const logo = stored.siteLogo && config.siteLogo ? { source: stored.siteLogo.url, url: config.siteLogo.url } : null;
+    return { config, logo };
+  });
+  const [serverConfig, setServerConfig] = useState<ServerConfig | null>(seed?.config ?? null);
+  // The seeded logo, fetched fresh on this load: the first answer keeps its URL instead of downloading it again.
+  const seededLogo = useRef(seed?.logo ?? null);
   const [serverConfigError, setServerConfigError] = useState(false);
   // The backend version, kept with the connection that reported it: `serverConfig` still holds the
   // previous connection's until the new one answers.
@@ -232,11 +252,10 @@ function AppWithConnection() {
     setServerConfigError(false);
     rpcState.stub.getServerConfig()
       .then((cfg) => {
+        writeStoredServerConfig(cfg);
         if (!cancelled) {
-          setServerConfig(cfg.siteLogo ? {
-            ...cfg,
-            siteLogo: { url: cacheBustSiteLogoUrl(cfg.siteLogo.url) },
-          } : cfg);
+          setServerConfig(withLogoUrl(cfg, seededLogo.current));
+          seededLogo.current = null;
           setSocketVersion({ stub: rpcState.stub, version: cfg.backendVersion });
         }
       })
