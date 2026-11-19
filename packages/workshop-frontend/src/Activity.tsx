@@ -95,6 +95,7 @@ function activityStatus(
   if (record.state === 'rejected') {
     return { label: 'Denied', dotClass: 'bg-kumo-danger', textClass: 'text-kumo-danger' }
   }
+  if (record.state === 'failed') return { label: 'Failed', dotClass: 'bg-kumo-danger', textClass: 'text-kumo-danger' }
   return { label: 'Approved', dotClass: 'bg-kumo-success', textClass: 'text-kumo-subtle' }
 }
 
@@ -685,6 +686,11 @@ function HistoryRow({
           {record.description.description && (
             <p className="m-0 whitespace-pre-wrap text-[13px] leading-[18px] tracking-[-0.25px] text-kumo-subtle">
               {record.description.description}
+            </p>
+          )}
+          {record.type === 'action' && record.error && (
+            <p className="m-0 mt-1 whitespace-pre-wrap text-[13px] leading-[18px] tracking-[-0.25px] text-kumo-danger">
+              {record.error}
             </p>
           )}
           <ActionFields fields={entryFields(record)} className="mt-2 max-w-2xl" />
