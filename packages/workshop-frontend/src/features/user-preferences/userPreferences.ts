@@ -22,16 +22,22 @@ const subscribe = (onChange: () => void) => {
   }
 }
 
-/** Loads the signed-in user's preferences; never rejects (a failed load keeps defaults, writes still go to the server). */
-export async function hydrateUserPreferences(authenticatedApi: RpcStub<AuthenticatedApi>): Promise<void> {
+/**
+ * Loads the signed-in user's preferences; never rejects (a failed load keeps defaults, writes still go to the
+ * server). Resolves whether the load succeeded: after a failure the defaults are not the user's choices.
+ */
+export async function hydrateUserPreferences(authenticatedApi: RpcStub<AuthenticatedApi>): Promise<boolean> {
   api = authenticatedApi
+  let loaded = true
   try {
     values = new Map(Object.entries(await authenticatedApi.getUiPreferences()))
   } catch (err) {
     logRpcFailure('Failed to load UI preferences:', err)
     values = new Map()
+    loaded = false
   }
   notify()
+  return loaded
 }
 
 /** Current value of a preference, or null. */
