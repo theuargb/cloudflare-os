@@ -408,6 +408,9 @@ export function normalizeAdminConfig(p: Partial<AdminConfig>): AdminConfig {
     snapshotSharingEnabled: typeof p.snapshotSharingEnabled === "boolean"
       ? p.snapshotSharingEnabled
       : DEFAULT_ADMIN_CONFIG.snapshotSharingEnabled,
+    voiceModeEnabled: typeof p.voiceModeEnabled === "boolean"
+      ? p.voiceModeEnabled
+      : DEFAULT_ADMIN_CONFIG.voiceModeEnabled,
     siteName: typeof p.siteName === "string" ? p.siteName : "",
     siteLogoConfigured: typeof p.siteLogoConfigured === "boolean" ? p.siteLogoConfigured : false,
     instanceInstructions: typeof p.instanceInstructions === "string" ? p.instanceInstructions : "",

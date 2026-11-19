@@ -24,6 +24,7 @@ import { isDeploymentAdmin } from './auth/config.js';
 import { bundledBlueprintsManifestVersion, installBundledBlueprints } from './bundled-blueprints.js';
 import { BUNDLED_BLUEPRINTS } from './generated/bundled-blueprints.js';
 import { type DeployServiceInstall, NO_ANSWER, type VersionAnswer, deployServiceInstall, deploymentUpdateStatus, fetchLatestRelease, updateCheckDue } from './deployment-updates.js';
+import { voiceModeReady } from './voice-mode.js';
 
 const logger = createWorkshopLogger("workshop.admin.settings");
 
@@ -560,6 +561,8 @@ export class AdminSettings extends DurableObject<Cloudflare.Env> {
       signupsEnabled: config.signupsEnabled,
       userSearchEnabled: config.userSearchEnabled,
       snapshotSharingEnabled: config.snapshotSharingEnabled,
+      voiceModeEnabled: config.voiceModeEnabled,
+      voiceModeReady: voiceModeReady(this.env, config),
       siteName: config.siteName,
       siteLogo: siteLogoImage(config.siteLogoConfigured),
       instanceInstructions: config.instanceInstructions,
@@ -1346,6 +1349,11 @@ export class AdminApiImpl extends RpcTarget implements AdminApi {
   async setSnapshotSharingEnabled(enabled: boolean): Promise<void> {
     await this.admin.updateAdminConfig(
         { snapshotSharingEnabled: enabled }, this.#actor("setSnapshotSharingEnabled"));
+  }
+
+  async setVoiceModeEnabled(enabled: boolean): Promise<void> {
+    await this.admin.updateAdminConfig(
+        { voiceModeEnabled: enabled }, this.#actor("setVoiceModeEnabled"));
   }
 
   async setSiteName(name: string): Promise<void> {
