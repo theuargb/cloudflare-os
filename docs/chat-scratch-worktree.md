@@ -127,8 +127,10 @@ Every attachment, whatever its size, gets an opaque `handle` from `env.CHAT_FILE
 passes the handle to the `ChatAttachmentContent` service entrypoint (`open({handle})`), which
 streams a large object from R2 and a small one from the chat's own storage. The handle names
 the Overseer and chat, and the Overseer re-checks that the attachment is still committed to
-that chat, so a handle for a deleted attachment opens nothing. Clients download a large
-attachment with `getChatAttachmentContentPart`.
+that chat, so a handle for a deleted attachment opens nothing. Clients read a large
+attachment part by part with `getChatAttachmentContentPart` (frontend
+`readLargeChatAttachment.ts`): the attachment viewer previews and downloads it, while its card
+shows only its kind, so no card near the viewport pulls up to 100 MiB.
 
 The record (`largeChatAttachments`) is staged until a sent message commits it. Uploads that no
 message claims are deleted a day after they started, when the next large upload begins, and the

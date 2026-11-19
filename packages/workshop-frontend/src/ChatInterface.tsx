@@ -145,6 +145,7 @@ import { formatFullTimestamp } from "./utils/formatTimestamp";
 import { copyToClipboard } from "./clipboard";
 import { isImeComposing } from "./keyboardEvent";
 import { ChatAttachmentGrid } from "./features/chat/attachments/ChatAttachmentGrid";
+import { readLargeChatAttachment } from "./features/chat/attachments/readLargeChatAttachment";
 import { ChatComposer } from "./features/chat/composer/ChatComposer";
 import { composerDraftStorageKey } from "./features/chat/composer/draft/composerDraft";
 import {
@@ -6348,8 +6349,9 @@ function ChatInterface({
                               {msg.attachments && msg.attachments.length > 0 && (
                                 <ChatAttachmentGrid
                                   attachments={msg.attachments}
-                                  loadContent={(attachment) =>
-                                    overseer.getChatAttachmentContent(msg.chatId, attachment.id)}
+                                  loadContent={(attachment) => attachment.large
+                                    ? readLargeChatAttachment(overseer, msg.chatId, attachment.id)
+                                    : overseer.getChatAttachmentContent(msg.chatId, attachment.id)}
                                 />
                               )}
                               {/* A message that is only attachments has no bubble. */}
