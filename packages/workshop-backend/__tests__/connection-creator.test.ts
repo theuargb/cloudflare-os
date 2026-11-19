@@ -55,6 +55,7 @@ function fakeUser(userId: string) {
   return {
     id: userId,
     whoami: async () => profile,
+    whoamiIfExists: async () => profile,
     getGatekeeperClassFor: async () => ({
       class: {}, vendorId: VENDOR_ID, typeUrlPattern: URL_PATTERN,
     }),
