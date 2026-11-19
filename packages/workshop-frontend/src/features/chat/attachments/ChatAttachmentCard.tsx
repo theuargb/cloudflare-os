@@ -43,8 +43,9 @@ export const ChatAttachmentCard = ({
     kind === "image" ? attachment.content : undefined, attachment.mimeType);
   const [imageFailed, setImageFailed] = useState(false);
   const showsImage = imageUrl !== null && !imageFailed;
+  // A large (R2) file shows its kind: a card near the viewport must never pull up to 100 MiB.
   const { ref, thumbnail, loading } = useAttachmentThumbnail<HTMLDivElement>(
-    previewFormat(attachment.mimeType, attachment.name), loadContent);
+    attachment.large ? undefined : previewFormat(attachment.mimeType, attachment.name), loadContent);
 
   return (
     <Tooltip content={name} side="top" asChild>
