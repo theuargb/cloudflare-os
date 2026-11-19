@@ -23,8 +23,10 @@ import {
 } from '../features/native-app/DeviceSessionHandoff'
 import { NativeAppBridge } from '../features/native-app/NativeAppBridge'
 import { PageUpdateNotice } from '../features/stale-session/PageUpdateNotice'
-import { hydrateUserPreferences, seedUserPreferences } from '../features/user-preferences/userPreferences'
+import { hydrateUserPreferences, readUserPreference, seedUserPreferences } from '../features/user-preferences/userPreferences'
 import { readBootSnapshot, writeBootSnapshot } from '../features/boot-snapshot/bootSnapshot'
+import { UI_LOCALE_PREFERENCE } from '@gadgets/workshop-shared/api'
+import { followPreferredUiLocale } from '../uiLocale'
 
 export const Route = createRootRoute({
   component: RootComponent,
@@ -169,7 +171,10 @@ function AuthenticatedShell({
   // The previous visit's snapshot of this session paints the shell at once; the server answers refresh it.
   const [snapshot] = useState(() => {
     const stored = readBootSnapshot()
-    if (stored) seedUserPreferences(authenticatedApi, stored.preferences)
+    if (stored) {
+      seedUserPreferences(authenticatedApi, stored.preferences)
+      followPreferredUiLocale(readUserPreference(UI_LOCALE_PREFERENCE))
+    }
     return stored
   })
   // null = still checking, true = needs onboarding, false = onboarding done
@@ -189,7 +194,9 @@ function AuthenticatedShell({
       },
     )
     // The user's UI preferences load with it, so the shell's first paint already shows them.
-    void Promise.all([onboarding, hydrateUserPreferences(authenticatedApi)]).then(([needed]) => {
+    void Promise.all([onboarding, hydrateUserPreferences(authenticatedApi)]).then(([needed, loaded]) => {
+      // A user who chose another language gets this page again in it.
+      if (loaded) followPreferredUiLocale(readUserPreference(UI_LOCALE_PREFERENCE))
       if (!cancelled) setOnboardingNeeded(needed)
     })
     return () => { cancelled = true }
